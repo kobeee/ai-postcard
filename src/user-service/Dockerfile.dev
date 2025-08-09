@@ -1,0 +1,4 @@
+FROM alpine:3.19
+WORKDIR /app
+# 占位开发镜像：后续根据选定技术栈替换
+CMD ["sh", "-c", "echo 'user-service dev placeholder'; while true; do sleep 3600; done"]

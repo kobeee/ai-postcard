@@ -1,0 +1,36 @@
+# =============================================================================
+# User Service - Python 依赖清单 (占位)
+# =============================================================================
+# 注意：此服务的技术栈尚未确定，这是 Python 版本的占位依赖
+
+# Web 框架 (FastAPI 示例)
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# 数据库
+sqlalchemy==2.0.23
+alembic==1.12.1
+psycopg2-binary==2.9.9
+
+# Redis
+redis==5.0.1
+
+# 认证和安全
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6
+
+# 数据验证
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# 工具库
+python-dotenv==1.0.0
+httpx==0.25.2
+
+# 开发工具
+pytest==7.4.3
+pytest-asyncio==0.21.1
+black==23.11.0
+isort==5.12.0
+flake8==6.1.0

@@ -1,0 +1,5 @@
+FROM node:18-alpine
+WORKDIR /app
+# 开发镜像：源码与依赖通过卷挂载提供
+# 运行命令在 docker-compose.yml 中设置（npm run dev / nodemon）
+CMD ["npm", "run", "dev"]

@@ -1,0 +1,48 @@
+---
+alwaysApply: true
+---
+# 项目目录结构规范
+
+- 所有服务源码必须位于 `src/`
+- 项目级测试位于 `tests/`，各模块可在其目录内维护独立 `tests/`
+- 每个服务模块应包含：`app/`（源码）、`tests/`（模块内测试）、`scripts/`（服务级脚本）、`README.md`
+- 目录结构发生变化时，需同步更新本文件中的"当前快照"
+
+## 当前快照
+
+```
+ai-postcard/
+  src/
+    gateway-service/
+      app/
+      tests/
+      scripts/
+      README.md
+    user-service/
+      app/
+      tests/
+      scripts/
+      README.md
+    postcard-service/
+      app/
+      tests/
+      scripts/
+      README.md
+    ai-agent-service/
+      app/
+      tests/
+      scripts/
+      README.md
+  tests/
+    integration/
+    e2e/
+  scripts/
+  configs/
+  docs/
+    design/
+    ideas/
+    prd/
+  README.md
+```
+
+> 注：当目录结构发生变化时，需同步更新本文件。
