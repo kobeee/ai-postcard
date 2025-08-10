@@ -389,3 +389,8 @@ docs/build/
 # 本地配置
 local_settings.py
 local_config.json
+
+# 临时项目文件
+PROJECT_SETUP_REPORT.md
+SETUP_*.md
+*_REPORT.md

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # =============================================================================
   # 基础设施服务 (无 profile，默认启动)
@@ -169,8 +167,6 @@ services:
         condition: service_healthy
       redis-cache:
         condition: service_healthy
-      postcard-service:
-        condition: service_started
 
   ai-agent-service:
     <<: *ai-agent-base
@@ -178,7 +174,7 @@ services:
     container_name: ai-postcard-agent
     ports:
       - "8001:8000"
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: sh -c ". .venv/bin/activate && pip install --timeout=30 fastapi uvicorn pydantic python-dotenv && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
   ai-agent-service-tests:
     <<: *ai-agent-base

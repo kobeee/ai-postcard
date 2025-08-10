@@ -1,7 +1,12 @@
-FROM python:3.10-slim
+FROM python:3.11-slim
 WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH"
-# 开发镜像：源码与 .venv 通过卷挂载提供
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# 开发镜像：只安装系统依赖，Python依赖通过卷挂载或运行时安装
+RUN apt-get update && apt-get install -y \
+    gcc \
+    && rm -rf /var/lib/apt/lists/* \
+    && python -m venv .venv
+# 启动时检查并安装基础依赖
+CMD ["sh", "-c", ". .venv/bin/activate && pip install --timeout=30 fastapi uvicorn pydantic python-dotenv && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]
