@@ -43,6 +43,9 @@ ai-postcard/
     ideas/
     prd/
   README.md
+  env.example
+  .env
 ```
 
 > 注：当目录结构发生变化时，需同步更新本文件。
+> `.env` 文件是本地安全配置文件，已被`.gitignore`忽略，因此不会出现在版本控制中。
