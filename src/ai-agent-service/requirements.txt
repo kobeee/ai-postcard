@@ -22,3 +22,12 @@ uvicorn==0.35.0
 uvloop==0.21.0
 watchfiles==1.1.0
 websockets==15.0.1
+
+# AI编码服务依赖
+# PyPI当前可用最新稳定版为0.0.20（容器内构建失败即由版本约束导致）
+claude-code-sdk==0.0.20
+pydantic-settings>=2.0.0
+
+# 额外的日志和调试工具
+colorlog>=6.0.0
+psutil>=5.9.0  # 用于监控资源使用情况

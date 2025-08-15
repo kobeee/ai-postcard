@@ -107,6 +107,70 @@ validate_env() {
     fi
 }
 
+# 检查是否需要重建
+check_need_rebuild() {
+    local need_rebuild=false
+    
+    # 如果设置了强制重建环境变量，优先处理
+    if [ "${FORCE_REBUILD:-false}" = "true" ]; then
+        need_rebuild=true
+        log_info "检测到 FORCE_REBUILD=true，强制重建" >&2
+        echo $need_rebuild
+        return
+    fi
+    
+    # 检查关键文件是否有变化
+    local key_files=(
+        "docker-compose.yml"
+        "src/ai-agent-service/Dockerfile.dev"
+        "src/ai-agent-service/requirements.txt"
+        "src/gateway-service/Dockerfile.dev"
+        "src/gateway-service/package.json"
+        "src/user-service/Dockerfile.dev"
+        "src/user-service/requirements.txt"
+        "src/postcard-service/Dockerfile.dev"
+        "src/postcard-service/requirements.txt"
+    )
+    
+    # 检查镜像是否存在
+    for profile in "$@"; do
+        case $profile in
+            "agent"|"agent-tests"|"agent-script")
+                if ! docker images -q ai-postcard-ai-agent-service &> /dev/null; then
+                    need_rebuild=true
+                    log_info "AI Agent 服务镜像不存在，需要构建"
+                    break
+                fi
+                ;;
+            "gateway")
+                if ! docker images -q ai-postcard-gateway-service &> /dev/null; then
+                    need_rebuild=true
+                    log_info "Gateway 服务镜像不存在，需要构建"
+                    break
+                fi
+                ;;
+            "user"|"user-tests")
+                if ! docker images -q ai-postcard-user-service &> /dev/null; then
+                    need_rebuild=true
+                    log_info "User 服务镜像不存在，需要构建"
+                    break
+                fi
+                ;;
+            "postcard"|"postcard-tests")
+                if ! docker images -q ai-postcard-postcard-service &> /dev/null; then
+                    need_rebuild=true
+                    log_info "Postcard 服务镜像不存在，需要构建"
+                    break
+                fi
+                ;;
+        esac
+    done
+    
+
+    
+    echo $need_rebuild
+}
+
 # 启动服务
 start_services() {
     if [ $# -eq 0 ]; then
@@ -124,14 +188,23 @@ start_services() {
         echo "示例："
         echo "  sh scripts/dev.sh up gateway user    # 启动网关和用户服务"
         echo "  sh scripts/dev.sh up agent-tests     # 运行 AI Agent 测试"
+        echo "  FORCE_REBUILD=true sh scripts/dev.sh up agent  # 强制重建"
         exit 1
     fi
     
     profiles="$*"
     log_info "启动服务 profiles: $profiles"
     
-    # 构建并启动服务
-    docker-compose --profile $(echo $profiles | tr ' ' ' --profile ') up --build -d
+    # 检查是否需要重建
+    need_rebuild=$(check_need_rebuild "$@")
+    
+    if [ "$need_rebuild" = "true" ]; then
+        log_info "检测到需要重建，正在构建镜像..."
+        docker-compose --profile $(echo $profiles | tr ' ' ' --profile ') up --build -d
+    else
+        log_info "使用现有镜像启动服务..."
+        docker-compose --profile $(echo $profiles | tr ' ' ' --profile ') up -d
+    fi
     
     log_success "服务启动完成"
     
@@ -143,7 +216,16 @@ start_services() {
 # 停止服务
 stop_services() {
     log_info "停止所有服务..."
+    
+    # 首先尝试停止所有可能的 profiles
+    docker-compose --profile gateway --profile user --profile postcard --profile agent down 2>/dev/null || true
+    
+    # 然后执行标准的 down 命令
     docker-compose down
+    
+    # 强制停止任何剩余的项目相关容器
+    docker ps --format "table {{.Names}}\t{{.Image}}" | grep "ai-postcard" | cut -f1 | xargs -r docker stop 2>/dev/null || true
+    
     log_success "所有服务已停止"
 }
 

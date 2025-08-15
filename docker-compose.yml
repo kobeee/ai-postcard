@@ -153,15 +153,25 @@ services:
       # 挂载整个服务目录，包括源代码和 .venv
       - ./src/ai-agent-service:/app
     environment:
-      # 确保容器内的 Python 知道使用虚拟环境
+      # Python环境配置
       - PATH=/app/.venv/bin:$PATH
       - PYTHONPATH=/app
       - PYTHONDONTWRITEBYTECODE=1
       - PYTHONUNBUFFERED=1
+      # 数据库和缓存配置
       - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres-db:5432/${DB_NAME:-ai_postcard}
       - REDIS_URL=redis://:${REDIS_PASSWORD:-redis}@redis-cache:6379/0
-      - AI_API_KEY=${AI_API_KEY:-}
-      - AI_BASE_URL=${AI_BASE_URL:-}
+      # AI Provider配置
+      - AI_PROVIDER_TYPE=${AI_PROVIDER_TYPE:-claude}
+      # 同时传递两种命名，兼容 Claude Code SDK 与标准Anthropic SDK
+      - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-}
+      - CLAUDE_DEFAULT_MODEL=${CLAUDE_DEFAULT_MODEL:-claude-sonnet-4-20250514}
+      - CLAUDE_FALLBACK_MODEL=${CLAUDE_FALLBACK_MODEL:-}
+      # 未来扩展的Provider
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - QWEN_API_KEY=${QWEN_API_KEY:-}
     depends_on:
       postgres-db:
         condition: service_healthy
@@ -174,7 +184,7 @@ services:
     container_name: ai-postcard-agent
     ports:
       - "8001:8000"
-    command: sh -c ". .venv/bin/activate && pip install --timeout=30 fastapi uvicorn pydantic python-dotenv && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    # 使用Dockerfile.dev中定义的CMD，它会安装requirements.txt中的所有依赖
 
   ai-agent-service-tests:
     <<: *ai-agent-base

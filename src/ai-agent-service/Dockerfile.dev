@@ -3,10 +3,22 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH"
-# 开发镜像：只安装系统依赖，Python依赖通过卷挂载或运行时安装
+
+# 安装基础系统依赖
 RUN apt-get update && apt-get install -y \
     gcc \
+    curl \
     && rm -rf /var/lib/apt/lists/* \
     && python -m venv .venv
-# 启动时检查并安装基础依赖
-CMD ["sh", "-c", ". .venv/bin/activate && pip install --timeout=30 fastapi uvicorn pydantic python-dotenv && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]
+
+# 安装Node.js 18 (分步进行，避免网络问题)
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get update \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装Claude Code CLI
+RUN npm install -g @anthropic-ai/claude-code
+
+# 启动时安装Python依赖并运行服务
+CMD ["sh", "-c", ". .venv/bin/activate && pip install --timeout=120 -r requirements.txt && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]

@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Code Generator - Lovart.ai 模拟器</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            gap: 20px;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .chat-panel {
+            width: 400px;
+            background: #f8f9fa;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .preview-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .preview-tabs {
+            display: flex;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .preview-tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border: none;
+            background: transparent;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .preview-tab.active {
+            background: #28a745;
+            color: white;
+        }
+
+        .preview-tab:not(.active):hover {
+            background: #e9ecef;
+        }
+
+        .chat-header {
+            padding: 20px;
+            background: #343a40;
+            color: white;
+        }
+
+        .chat-header h2 {
+            margin-bottom: 5px;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            max-height: 500px;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 12px;
+            border-radius: 8px;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        .message.user {
+            background: #007bff;
+            color: white;
+            margin-left: 20px;
+        }
+
+        .message.ai {
+            background: #e9ecef;
+            color: #333;
+            margin-right: 20px;
+        }
+
+        .message.ai.thinking {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+        }
+
+        .message.ai.status {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            font-weight: 500;
+        }
+
+        .message.ai.phase_change {
+            background: #cce5ff;
+            border-left: 4px solid #007bff;
+            font-weight: 600;
+        }
+
+        .message.ai.analysis {
+            background: #f8f9fa;
+            border-left: 4px solid #6c757d;
+        }
+
+        .message.ai.code_generation {
+            background: #e7f3ff;
+            border-left: 4px solid #007bff;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        }
+
+        .message.ai.tool_use {
+            background: #e8f5e8;
+            border-left: 4px solid #28a745;
+            font-style: italic;
+        }
+
+        .message.ai.thinking_step {
+            background: #fff5f5;
+            border-left: 4px solid #dc3545;
+            padding-left: 16px;
+        }
+
+        .chat-input {
+            padding: 20px;
+            border-top: 1px solid #dee2e6;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .input-group input {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .input-group input:focus {
+            border-color: #007bff;
+        }
+
+        .input-group button {
+            padding: 12px 24px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+
+        .input-group button:hover:not(:disabled) {
+            background: #0056b3;
+        }
+
+        .input-group button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+
+        .preview-header {
+            padding: 20px;
+            background: #28a745;
+            color: white;
+        }
+
+        .preview-content {
+            flex: 1;
+            position: relative;
+        }
+
+        .preview-frame {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: white;
+        }
+
+        .code-preview {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            background: #f8f9fa;
+            overflow: hidden;
+        }
+
+        .file-explorer {
+            width: 200px;
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 10px;
+            border-right: 1px solid #4a5568;
+            overflow-y: auto;
+        }
+
+        .file-explorer h4 {
+            color: #a0aec0;
+            font-size: 12px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .file-item {
+            padding: 4px 8px;
+            margin: 2px 0;
+            border-radius: 4px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background 0.2s;
+            position: relative;
+        }
+
+        .file-item:hover {
+            background: #4a5568;
+        }
+
+        .file-item.active {
+            background: #3182ce;
+            color: white;
+        }
+
+        .file-item.editing {
+            background: #38a169;
+            color: white;
+        }
+
+        .file-item.editing::after {
+            content: "●";
+            position: absolute;
+            right: 8px;
+            color: #68d391;
+        }
+
+        .code-editor {
+            flex: 1;
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 0;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .editor-header {
+            background: #1a202c;
+            padding: 8px 16px;
+            border-bottom: 1px solid #4a5568;
+            font-size: 13px;
+            color: #a0aec0;
+        }
+
+        .editor-content {
+            height: calc(100% - 40px);
+            overflow-y: auto;
+            overflow-x: auto;
+            padding: 16px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            max-height: calc(100vh - 200px);
+        }
+
+        .code-line {
+            position: relative;
+        }
+
+        .code-line.highlighting {
+            background: rgba(56, 161, 105, 0.2);
+            animation: pulse-highlight 1s ease-in-out;
+        }
+
+        @keyframes pulse-highlight {
+            0%, 100% { background: rgba(56, 161, 105, 0.2); }
+            50% { background: rgba(56, 161, 105, 0.4); }
+        }
+
+        .typing-indicator {
+            display: inline-block;
+            width: 2px;
+            height: 18px;
+            background: #68d391;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #6c757d;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-indicator.connected {
+            background: #28a745;
+        }
+
+        .status-indicator.connecting {
+            background: #ffc107;
+            animation: pulse 1s infinite;
+        }
+
+        .status-indicator.error {
+            background: #dc3545;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="container">
+            <div class="header">
+                <h1>AI Code Generator</h1>
+                <p>Lovart.ai 模拟器 - 让AI为你编写前端代码</p>
+            </div>
+            
+            <div class="main-content">
+                <!-- 左侧聊天面板 -->
+                <div class="chat-panel">
+                    <div class="chat-header">
+                        <h2>
+                            <span class="status-indicator" :class="connectionStatus"></span>
+                            AI 助手
+                        </h2>
+                        <p>描述你想要的网页，我来帮你实现</p>
+                    </div>
+                    
+                    <div class="chat-messages" ref="messagesContainer">
+                        <div v-for="message in messages" :key="message.id" 
+                             :class="['message', message.type, message.subType]">
+                            <div v-html="formatMessage(message.content)"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="chat-input">
+                        <div class="input-group">
+                            <input 
+                                v-model="userInput" 
+                                @keyup.enter="sendMessage"
+                                :disabled="isGenerating"
+                                placeholder="描述你想要的网页..."
+                                maxlength="500"
+                            />
+                            <button @click="sendMessage" :disabled="isGenerating || !userInput.trim()">
+                                {{ isGenerating ? '生成中...' : '发送' }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 右侧预览面板 -->
+                <div class="preview-panel">
+                    <div class="preview-header">
+                        <h2>实时预览</h2>
+                        <p>{{ previewStatus }}</p>
+                    </div>
+                    
+                    <div class="preview-tabs">
+                        <button 
+                            class="preview-tab" 
+                            :class="{ active: activeTab === 'preview' }"
+                            @click="activeTab = 'preview'">
+                            网页预览
+                        </button>
+                        <button 
+                            class="preview-tab" 
+                            :class="{ active: activeTab === 'code' }"
+                            @click="activeTab = 'code'">
+                            代码预览
+                        </button>
+                    </div>
+                    
+                    <div class="preview-content">
+                        <div v-if="isGenerating && !currentCode" class="loading">
+                            <div class="spinner"></div>
+                            <p>AI正在分析您的需求...</p>
+                        </div>
+                        
+                        <!-- 网页预览 -->
+                        <iframe 
+                            v-show="currentCode && activeTab === 'preview'"
+                            ref="previewFrame"
+                            class="preview-frame"
+                            :srcdoc="currentCode">
+                        </iframe>
+                        
+                        <!-- 代码预览 -->
+                        <div 
+                            v-show="activeTab === 'code'"
+                            class="code-preview">
+                            <!-- 文件浏览器 -->
+                            <div class="file-explorer">
+                                <h4>项目文件</h4>
+                                <div 
+                                    v-for="file in projectFiles" 
+                                    :key="file.name"
+                                    :class="['file-item', { 
+                                        active: file.name === currentFile,
+                                        editing: file.name === editingFile 
+                                    }]"
+                                    @click="switchToFile(file.name)">
+                                    {{ file.name }}
+                                </div>
+                            </div>
+                            
+                            <!-- 代码编辑器 -->
+                            <div class="code-editor">
+                                <div class="editor-header">
+                                    {{ currentFile || '等待选择文件...' }}
+                                </div>
+                                <div 
+                                    class="editor-content" 
+                                    ref="codeEditorContent"
+                                    v-html="formattedCurrentFileContent">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    userInput: '',
+                    messages: [],
+                    isGenerating: false,
+                    currentCode: '',
+                    connectionStatus: 'connected',
+                    previewStatus: '等待生成代码...',
+                    websocket: null,
+                    messageIdCounter: 0,
+                    activeTab: 'preview', // 'preview' 或 'code'
+                    sessionHistory: [], // 用于连续对话的历史记录
+                    currentSessionId: null,
+                    // 代码预览相关
+                    projectFiles: [
+                        { name: 'index.html', content: '', type: 'html' }
+                    ],
+                    currentFile: 'index.html',
+                    editingFile: null,
+                    codeBuffer: '' // 用于累积代码片段
+                };
+            },
+            computed: {
+                highlightedCode() {
+                    if (!this.currentCode) return '';
+                    return this.escapeHtml(this.currentCode);
+                },
+                
+                formattedCurrentFileContent() {
+                    const file = this.projectFiles.find(f => f.name === this.currentFile);
+                    if (!file || !file.content) {
+                        return '<div style="color: #a0aec0; font-style: italic;">等待代码生成...</div>';
+                    }
+                    
+                    // 将内容按行分割并格式化
+                    const lines = file.content.split('\n');
+                    return lines.map((line, index) => {
+                        const escapedLine = this.escapeHtml(line);
+                        const isHighlighting = file.name === this.editingFile && index >= lines.length - 2;
+                        return `<div class="code-line ${isHighlighting ? 'highlighting' : ''}">${escapedLine || '&nbsp;'}</div>`;
+                    }).join('');
+                }
+            },
+            methods: {
+                formatMessage(content) {
+                    return content.replace(/\n/g, '<br>');
+                },
+                
+                escapeHtml(text) {
+                    const div = document.createElement('div');
+                    div.textContent = text;
+                    return div.innerHTML;
+                },
+                
+                addMessage(type, content, subType = '') {
+                    this.messages.push({
+                        id: this.messageIdCounter++,
+                        type,
+                        content,
+                        subType,
+                        timestamp: new Date()
+                    });
+                    
+                    // 添加到会话历史中
+                    if (type === 'user' || type === 'ai') {
+                        this.sessionHistory.push({
+                            role: type === 'user' ? 'user' : 'assistant',
+                            content: content
+                        });
+                    }
+                    
+                    this.$nextTick(() => {
+                        this.scrollToBottom();
+                    });
+                },
+                
+                scrollToBottom() {
+                    const container = this.$refs.messagesContainer;
+                    if (container) {
+                        container.scrollTop = container.scrollHeight;
+                    }
+                },
+                
+                async sendMessage() {
+                    if (!this.userInput.trim() || this.isGenerating) return;
+                    
+                    const prompt = this.userInput.trim();
+                    this.userInput = '';
+                    
+                    // 添加用户消息
+                    this.addMessage('user', prompt);
+                    
+                    // 重置代码预览
+                    this.resetCodePreview();
+                    
+                    // 开始生成
+                    await this.generateCode(prompt);
+                },
+                
+                async generateCode(prompt) {
+                    try {
+                        this.isGenerating = true;
+                        this.connectionStatus = 'connecting';
+                        this.previewStatus = 'AI正在生成代码...';
+                        
+                        // 1. 创建任务（包含会话历史以支持连续对话）
+                        const requestBody = { 
+                            prompt: prompt
+                        };
+                        
+                        // 暂时禁用连续对话功能进行调试
+                        // if (this.sessionHistory.length > 0) {
+                        //     const contextPrompt = this.buildContextualPrompt(prompt);
+                        //     requestBody.prompt = contextPrompt;
+                        // }
+                        
+                        const response = await fetch('/api/v1/coding/generate-code', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(requestBody)
+                        });
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        }
+                        
+                        const { task_id } = await response.json();
+                        
+                        // 2. 建立WebSocket连接
+                        this.connectWebSocket(task_id);
+                        
+                    } catch (error) {
+                        console.error('生成代码失败:', error);
+                        this.addMessage('ai', `抱歉，生成代码时发生错误: ${error.message}`);
+                        this.isGenerating = false;
+                        this.connectionStatus = 'error';
+                        this.previewStatus = '生成失败';
+                    }
+                },
+                
+                connectWebSocket(taskId) {
+                    const wsUrl = `ws://${window.location.host}/api/v1/coding/status/${taskId}`;
+                    this.websocket = new WebSocket(wsUrl);
+                    
+                    this.websocket.onopen = () => {
+                        console.log('WebSocket连接已建立');
+                        this.connectionStatus = 'connected';
+                    };
+                    
+                    this.websocket.onmessage = (event) => {
+                        const data = JSON.parse(event.data);
+                        this.handleWebSocketMessage(data);
+                    };
+                    
+                    this.websocket.onerror = (error) => {
+                        console.error('WebSocket错误:', error);
+                        this.connectionStatus = 'error';
+                        this.addMessage('ai', '连接发生错误，请重试');
+                        this.isGenerating = false;
+                    };
+                    
+                    this.websocket.onclose = () => {
+                        console.log('WebSocket连接已关闭');
+                        this.isGenerating = false;
+                    };
+                },
+                
+                handleWebSocketMessage(data) {
+                    switch (data.type) {
+                        case 'status':
+                            this.addMessage('ai', data.content, 'status');
+                            break;
+                            
+                        case 'phase_change':
+                            this.addMessage('ai', data.content, 'phase_change');
+                            break;
+                            
+                        case 'analysis':
+                            this.addMessage('ai', data.content, 'analysis');
+                            break;
+                            
+                        case 'code_generation':
+                            this.addMessage('ai', data.content, 'code_generation');
+                            
+                            // 设置当前正在编辑的文件
+                            this.editingFile = 'index.html';
+                            
+                            // 实时更新代码预览
+                            this.updateFileContent('index.html', data.content, true);
+                            
+                            // 累积代码片段用于网页预览
+                            this.currentCode += data.content;
+                            this.previewStatus = '正在渲染代码...';
+                            this.updatePreview();
+                            break;
+                            
+                        case 'tool_use':
+                            this.addMessage('ai', data.content, 'tool_use');
+                            break;
+                            
+                        case 'thinking_step':
+                            this.addMessage('ai', data.content, 'thinking_step');
+                            break;
+                            
+                        case 'thought':
+                            this.addMessage('ai', data.content, 'thinking');
+                            break;
+                            
+                        case 'code_chunk':
+                            // 兼容旧版本事件类型
+                            this.currentCode += data.content;
+                            this.previewStatus = '正在渲染代码...';
+                            this.updatePreview();
+                            break;
+                            
+                        case 'complete':
+                            this.currentCode = data.final_code;
+                            
+                            // 更新文件内容为最终代码
+                            this.updateFileContent('index.html', data.final_code, false);
+                            
+                            // 清除编辑状态
+                            this.editingFile = null;
+                            
+                            this.updatePreview();
+                            this.addMessage('ai', '✅ 代码生成完成！请查看右侧预览。');
+                            this.previewStatus = '代码生成完成';
+                            this.isGenerating = false;
+                            
+                            // 显示元数据（可选）
+                            if (data.metadata) {
+                                const { model_used, cost_usd, total_tokens } = data.metadata;
+                                console.log(`使用模型: ${model_used}, 成本: $${cost_usd}, Token数: ${total_tokens}`);
+                                this.addMessage('ai', 
+                                    `📊 生成统计: 模型 ${model_used} | 成本 $${cost_usd} | Token ${total_tokens}`, 
+                                    'status'
+                                );
+                            }
+                            break;
+                            
+                        case 'error':
+                            this.addMessage('ai', `❌ 生成过程中出现错误: ${data.content}`);
+                            this.previewStatus = '生成失败';
+                            this.isGenerating = false;
+                            this.connectionStatus = 'error';
+                            break;
+                    }
+                },
+                
+                updatePreview() {
+                    // Vue会自动更新iframe的srcdoc属性
+                    this.$nextTick(() => {
+                        // 预览更新后的处理（如果需要）
+                    });
+                },
+                
+                buildContextualPrompt(newPrompt) {
+                    /**
+                     * 构建包含上下文的提示，用于支持连续对话
+                     */
+                    let contextualPrompt = `基于之前的对话继续：\n\n`;
+                    
+                    // 添加最近几轮对话作为上下文（最多5轮）
+                    const recentHistory = this.sessionHistory.slice(-10);
+                    for (const turn of recentHistory) {
+                        if (turn.role === 'user') {
+                            contextualPrompt += `用户: ${turn.content}\n`;
+                        } else {
+                            contextualPrompt += `AI: ${turn.content}\n`;
+                        }
+                    }
+                    
+                    contextualPrompt += `\n现在用户的新要求是: ${newPrompt}\n\n`;
+                    contextualPrompt += `请基于之前生成的代码进行修改或完善，如果当前代码已经满足新需求则保持不变。`;
+                    
+                    return contextualPrompt;
+                },
+                
+                // 代码预览相关方法
+                switchToFile(fileName) {
+                    this.currentFile = fileName;
+                },
+                
+                updateFileContent(fileName, content, incremental = false) {
+                    let file = this.projectFiles.find(f => f.name === fileName);
+                    if (!file) {
+                        file = { name: fileName, content: '', type: this.getFileType(fileName) };
+                        this.projectFiles.push(file);
+                    }
+                    
+                    if (incremental) {
+                        file.content += content;
+                    } else {
+                        file.content = content;
+                    }
+                    
+                    // 如果这是当前编辑的文件，自动滚动到底部
+                    if (fileName === this.currentFile) {
+                        this.$nextTick(() => {
+                            const editorContent = this.$refs.codeEditorContent;
+                            if (editorContent) {
+                                editorContent.scrollTop = editorContent.scrollHeight;
+                            }
+                        });
+                    }
+                },
+                
+                getFileType(fileName) {
+                    const ext = fileName.split('.').pop().toLowerCase();
+                    const typeMap = {
+                        'html': 'html',
+                        'htm': 'html',
+                        'css': 'css',
+                        'js': 'javascript',
+                        'ts': 'typescript',
+                        'json': 'json'
+                    };
+                    return typeMap[ext] || 'text';
+                },
+                
+                resetCodePreview() {
+                    this.projectFiles = [{ name: 'index.html', content: '', type: 'html' }];
+                    this.currentFile = 'index.html';
+                    this.editingFile = null;
+                    this.codeBuffer = '';
+                }
+            },
+            
+            beforeUnmount() {
+                if (this.websocket) {
+                    this.websocket.close();
+                }
+            },
+            
+            mounted() {
+                // 添加欢迎消息
+                this.addMessage('ai', '你好！我是AI代码生成助手。请描述你想要创建的网页，我会为你生成完整的前端代码。', 'thinking');
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
+
+
+
+
