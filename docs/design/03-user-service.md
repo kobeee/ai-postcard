@@ -41,30 +41,30 @@
 
 ```mermaid
 graph TD
-    subgraph "User Service 内部"
-        A["API Controller (gRPC/REST)"]
-        B["UserService (业务逻辑)"]
-        C["UserRepository (数据访问)"]
-        D["JwtProvider (JWT工具)"]
+    subgraph "User Service 内部 (FastAPI)"
+        A["API Router (./app/main.py)"]
+        B["Service Layer (业务逻辑)"]
+        C["Repository/CRUD Layer (数据访问)"]
+        D["JWT Utilities (JWT工具)"]
         
         A -- "调用" --> B
         B -- "调用" --> C
         B -- "调用" --> D
     end
     
-    C -- "操作" --> E[("Users 数据库")]
+    C -- "操作 (SQLAlchemy)" --> E[("Users 数据库")]
     
     style B fill:#87CEEB,stroke:#fff,stroke-width:2px,color:#fff
 ```
 
-- **API Controller**: 暴露 gRPC 或 REST 接口，处理外部请求的入口。
-- **UserService**: 实现核心业务逻辑，如 `loginOrRegister`、`getUserProfile`。
-- **UserRepository**: 数据访问层，使用 JPA、MyBatis 或其他 ORM 框架与数据库交互。
-- **JwtProvider**: 一个独立的工具类，负责 `JWT` 的生成和解析。
+- **API Router**: 使用 FastAPI 的 `APIRouter` 定义和暴露 RESTful API 端点。
+- **Service Layer**: 实现核心业务逻辑，如 `login_or_register`、`get_user_profile`。
+- **Repository/CRUD Layer**: 数据访问层，使用 **SQLAlchemy ORM** 与数据库进行交互。
+- **JWT Utilities**: 一个独立的工具模块，负责 `JWT` 的生成和解析。
 
 ## 5. 技术选型
 
-- **框架**: Spring Boot
-- **数据库**: PostgreSQL / MySQL
-- **ORM**: Spring Data JPA
-- **服务间通信**: gRPC (推荐) 或 REST 
+- **框架**: **Python (FastAPI)**
+- **数据库**: **PostgreSQL**
+- **ORM**: **SQLAlchemy**
+- **服务间通信**: **RESTful API** 

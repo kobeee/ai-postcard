@@ -16,12 +16,12 @@ graph TD
     end
 
     subgraph "后端服务 (Backend Services)"
-        B["API 网关 (Gateway)"]
-        C["用户服务 (User Service)"]
-        D["明信片服务 (Postcard Service)"]
-        E["AI Agent 服务 (AI Agent Service)"]
-        F["消息队列 (Message Queue)"]
-        G["数据库 (Database)"]
+        B["API 网关 (FastAPI)"]
+        C["用户服务 (FastAPI)"]
+        D["明信片服务 (FastAPI)"]
+        E["AI Agent 服务 (FastAPI)"]
+        F["消息队列 (Redis Streams)"]
+        G["数据库 (PostgreSQL)"]
         H["对象存储 (OSS)"]
         I["第三方 AI API (LLMs)"]
 
@@ -49,9 +49,9 @@ graph TD
 ```mermaid
 sequenceDiagram
     participant User as "用户 (小程序)"
-    participant Gateway as "API 网关"
-    participant MsgQueue as "消息队列"
-    participant Agent as "AI Agent 服务"
+    participant Gateway as "API 网关 (FastAPI)"
+    participant MsgQueue as "消息队列 (Redis)"
+    participant Agent as "AI Agent 服务 (FastAPI)"
     participant DB as "数据库/存储"
 
     User->>+Gateway: "POST /api/v1/postcards/create (携带创作要素)"
@@ -73,33 +73,34 @@ sequenceDiagram
     Gateway-->>-User: "status: completed, data: postcard_data"
     
     Note over User: "接收到completed状态和数据并在webview中渲染动态明信片"
+end
 ```
 
 ## 4. 服务模块职责
 
 ### 4.1. API 网关 (Gateway)
 - **职责**: 所有外部请求的统一入口，负责请求路由、用户认证、速率限制和初步的请求校验。
-- **技术选型**: Spring Cloud Gateway / Kong / Nginx
+- **技术选型**: **Python (FastAPI)**
 
 ### 4.2. 用户服务 (User Service)
 - **职责**: 管理用户信息，包括登录、注册、个人资料等。
-- **技术选型**: Spring Boot, gRPC/REST
+- **技术选型**: **Python (FastAPI)**
 
 ### 4.3. 明信片服务 (Postcard Service)
 - **职责**: 管理明信片的核心数据，包括AI生成的前端代码、图片URL、文案等。提供数据的增删改查接口。
-- **技术选型**: Spring Boot, gRPC/REST
+- **技术选型**: **Python (FastAPI)**
 
 ### 4.4. AI Agent 服务 (AI Agent Service)
 - **职责**: **项目核心**。消费来自消息队列的任务，通过内置的编排器 (Orchestrator) 和工具集 (ToolBox)，按步骤调用第三方 AI API，完成从概念生成到最终前端代码输出的完整流程。
-- **技术选型**: Python (LangChain/LlamaIndex), FastAPI/gRPC
+- **技术选型**: **Python (FastAPI)**
 
 ### 4.5. 消息队列 (Message Queue)
 - **职责**: 服务间解耦，作为异步任务的缓冲池。
-- **技术选型**: RabbitMQ / RocketMQ / Kafka
+- **技术选型**: **Redis (Streams/PubSub)**
 
 ### 4.6. 数据库 (Database)
 - **职责**: 持久化存储用户和明信片数据。
-- **技术选型**: PostgreSQL / MySQL
+- **技术选型**: **PostgreSQL**
 
 ### 4.7. 对象存储 (Object Storage Service)
 - **职责**: 存储 AI 生成的图片等静态资源。

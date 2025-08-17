@@ -67,47 +67,54 @@ else
     log_info ".env 文件已存在"
 fi
 
-# 3. 为 AI Agent 服务创建虚拟环境
-log_info "为 AI Agent 服务创建 Python 虚拟环境..."
-cd src/ai-agent-service
+# 3. 遍历 src 目录下的所有服务并设置环境
+log_info "开始为所有微服务设置开发环境..."
 
-if [ ! -d .venv ]; then
-    python3 -m venv .venv
-    log_success "Python 虚拟环境已创建"
-else
-    log_info "Python 虚拟环境已存在"
-fi
+for service_dir in src/*/; do
+    service_name=$(basename "$service_dir")
+    
+    log_info "正在处理服务: '${service_name}'"
 
-# 激活虚拟环境并安装基础依赖
-source .venv/bin/activate
-if [ -f requirements.txt ]; then
-    pip install -r requirements.txt
-    log_success "Python 依赖已安装"
-else
-    log_warning "requirements.txt 不存在，跳过依赖安装"
-fi
-deactivate
+    if [ -f "${service_dir}requirements.txt" ]; then
+        cd "$service_dir"
+        log_info "  -> 检测到 Python 服务，设置虚拟环境..."
+        
+        # 检查虚拟环境是否完整，如果不完整则重建
+        if [ ! -f ".venv/bin/activate" ]; then
+            log_warning "    - '.venv' 不完整或 'activate' 脚本不存在，将重建虚拟环境..."
+            rm -rf .venv
+            python3 -m venv .venv
+            log_success "    - 虚拟环境已成功重建"
+        else
+            log_info "    - 虚拟环境已存在且有效"
+        fi
+        
+        source .venv/bin/activate
+        pip install -r requirements.txt
+        deactivate
+        log_success "    - Python 依赖已安装"
 
+    elif [ -f "${service_dir}package.json" ]; then
+        cd "$service_dir"
+        log_info "  -> 检测到 Node.js 服务，安装依赖..."
+        npm install
+        log_success "    - Node.js 依赖已安装"
+    else
+        log_warning "  -> 在 '${service_name}' 中未找到 'requirements.txt' 或 'package.json'，跳过。"
+    fi
+    
+    # 每次循环结束后返回项目根目录
+    cd "$PROJECT_ROOT"
+done
+
+# 确保最后返回项目根目录
 cd "$PROJECT_ROOT"
 
-# 4. 为 Gateway 服务安装依赖
-log_info "为 Gateway 服务安装 Node.js 依赖..."
-cd src/gateway-service
-
-if [ -f package.json ]; then
-    npm install
-    log_success "Node.js 依赖已安装"
-else
-    log_warning "package.json 不存在，跳过依赖安装"
-fi
-
-cd "$PROJECT_ROOT"
-
-# 5. 创建必要目录
+# 4. 创建必要目录
 log_info "创建必要目录..."
 mkdir -p uploads logs
 
-# 6. 验证环境配置
+# 5. 验证环境配置
 log_info "验证环境配置..."
 if [ -x scripts/validate-env.sh ]; then
     ./scripts/validate-env.sh

@@ -1,0 +1,20 @@
+{
+  "name": "lovart-ai-simulator-frontend",
+  "version": "1.0.0",
+  "description": "Lovart.ai模拟器前端，支持Markdown渲染、代码高亮、流式输出，集成在ai-agent-service内部。",
+  "author": "AI Postcard Team",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "vue": "^3.4.0",
+    "marked": "^12.0.0",
+    "highlight.js": "^11.9.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.0",
+    "vite": "^5.0.0"
+  }
+}

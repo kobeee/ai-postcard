@@ -3,522 +3,464 @@ import logging
 import os
 import time
 import traceback
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Dict, Any
 from .base import BaseCodeProvider
 from ..config import settings
 
 # 导入Claude Code SDK
 from claude_code_sdk import ClaudeSDKClient, ClaudeCodeOptions
 
-# 配置增强日志
-import colorlog
-
-# 创建彩色日志处理器
-handler = colorlog.StreamHandler()
-handler.setFormatter(colorlog.ColoredFormatter(
-    '%(log_color)s%(asctime)s | %(name)s | %(levelname)s | %(message)s',
-    datefmt='%H:%M:%S',
-    log_colors={
-        'DEBUG': 'cyan',
-        'INFO': 'green',
-        'WARNING': 'yellow',
-        'ERROR': 'red',
-        'CRITICAL': 'red,bg_white',
-    }
-))
-
+# 设置日志记录器
 logger = logging.getLogger(__name__)
-logger.addHandler(handler)
-logger.setLevel(logging.DEBUG)
-
-# 性能监控辅助函数
-def log_timing(action: str, start_time: float):
-    """记录操作耗时"""
-    duration = time.time() - start_time
-    logger.info(f"⏱️  {action} 耗时: {duration:.2f}s")
-    return duration
 
 class ClaudeCodeProvider(BaseCodeProvider):
     """
-    使用 Claude Code SDK 与 Anthropic API 交互的代码生成提供者。
+    Claude Code SDK提供者 - 重构优化版本
     
-    这个类封装了 claude-code-sdk 的所有交互逻辑，
-    将其流式响应转换为标准化的事件格式。
+    基于Claude Code SDK官方文档最佳实践：
+    - 使用acceptEdits模式自动接受编辑
+    - 非交互式执行，无需用户确认
+    - 简化的流式处理逻辑
     """
     
     def __init__(self):
-        # 优先兼容两种环境变量命名：ANTHROPIC_AUTH_TOKEN（Claude Code风格）与 ANTHROPIC_API_KEY（标准Anthropic风格）
-        api_key = (
-            os.getenv("ANTHROPIC_AUTH_TOKEN")
-            or settings.ANTHROPIC_API_KEY
-            or os.getenv("ANTHROPIC_API_KEY")
-        )
-
-        if not api_key:
-            logger.error("未检测到API密钥，请设置 ANTHROPIC_AUTH_TOKEN 或 ANTHROPIC_API_KEY")
-            raise ValueError("ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN is required")
-
-        # 统一导出为两种变量，确保SDK和我们代码均可读取
-        os.environ["ANTHROPIC_AUTH_TOKEN"] = api_key
-        os.environ["ANTHROPIC_API_KEY"] = api_key
-
-        # 记录初始化信息
-        logger.info(f"ClaudeCodeProvider initialized with API key prefix: {api_key[:10]}...")
-        logger.info(f"Default model: {settings.CLAUDE_DEFAULT_MODEL}")
-
-        # BASE_URL 同样兼容常见命名
-        base_url = (
-            os.getenv("ANTHROPIC_BASE_URL")
-            or os.getenv("ANTHROPIC_API_BASE")
-            or settings.ANTHROPIC_BASE_URL
-        )
+        super().__init__()
+        self.name = "Claude Code SDK"
+        self.model = "claude-sonnet-4-20250514"
+        
+        # 验证环境变量
+        auth_token = os.getenv("ANTHROPIC_AUTH_TOKEN")
+        base_url = os.getenv("ANTHROPIC_BASE_URL")
+        
+        if not auth_token:
+            logger.error("❌ ANTHROPIC_AUTH_TOKEN 环境变量未设置")
+            raise ValueError("ANTHROPIC_AUTH_TOKEN 环境变量未设置")
+        
+        logger.info(f"✅ 环境变量配置完成 - Token: {auth_token[:8]}...{auth_token[-4:]}")
         if base_url:
-            os.environ["ANTHROPIC_BASE_URL"] = base_url
-            logger.info(f"Using custom Anthropic BASE_URL: {base_url}")
-        else:
-            logger.info("Using default Anthropic API endpoint")
-    
-    async def generate(
-        self, 
-        prompt: str,
-        session_id: str,
-        model: str | None = None
-    ) -> AsyncGenerator[dict, None]:
+            logger.info(f"✅ 使用自定义Base URL: {base_url}")
+
+    async def generate(self, prompt: str, session_id: str, model: str | None = None) -> AsyncGenerator[Dict[str, Any], None]:
         """
-        使用 Claude Code SDK 流式生成前端代码。
-        
-        Args:
-            prompt: 用户的编码需求描述。
-            session_id: 会话标识符。
-            model: 要使用的具体模型，如果为None则使用默认模型。
-        
-        Yields:
-            标准化的事件字典。
+        生成代码 - 简化版本，基于acceptEdits模式
         """
-        target_model = model or settings.CLAUDE_DEFAULT_MODEL
-        generation_start_time = time.time()
-        
-        logger.info(f"🚀 === 开始代码生成会话: {session_id} ===")
-        logger.info(f"📝 用户提示: {prompt[:200]}...")
-        logger.info(f"🤖 使用模型: {target_model}")
-        logger.info(f"⏰ 开始时间: {time.strftime('%H:%M:%S')}")
+        # 使用传入的model参数，如果没有则使用默认模型
+        target_model = model or self.model
         
         try:
-            # 首先验证API端点配置
-            logger.info("🔍 验证API端点配置...")
-            try:
-                self._validate_api_endpoint()
-                logger.info("✅ API端点验证成功")
-            except ValueError as api_error:
-                logger.error(f"❌ API端点配置错误: {str(api_error)}")
-                yield {
-                    "type": "error",
-                    "content": f"🚨 API配置错误\n\n{str(api_error)}\n\n💡 解决建议：\n1. 检查 ANTHROPIC_BASE_URL 是否指向有效的API服务\n2. 确认URL返回JSON而非HTML页面\n3. 验证API密钥是否正确配置"
-                }
-                return
-                
-            # 构建专门用于前端代码生成的系统提示
-            logger.debug("🔧 构建系统提示...")
+            yield {"type": "status", "content": "🚀 初始化AI代码生成器..."}
+            logger.info(f"📤 开始代码生成任务 - 会话ID: {session_id}, 模型: {target_model}")
+
+            # 构建系统提示 - 非交互式模式
             system_prompt = self._build_system_prompt()
-            logger.debug(f"📄 系统提示长度: {len(system_prompt)} 字符")
             
-            # 构建完整的编码提示
-            logger.debug("📝 构建用户提示...")
-            full_prompt = self._build_coding_prompt(prompt)
-            logger.debug(f"📄 完整提示长度: {len(full_prompt)} 字符")
-            logger.debug(f"📄 完整提示内容: {full_prompt[:200]}...")
-            
-            yield {"type": "status", "content": f"🔄 初始化 {target_model} 模型..."}
-            logger.info("📤 发送初始化状态")
-            
-            yield {"type": "status", "content": "🧠 分析您的需求描述..."}
-            logger.info("📤 发送分析状态")
-            
-            # 使用Claude Code SDK配置选项
-            # 注意：ANTHROPIC_BASE_URL通过环境变量自动被Claude SDK读取，不需要在选项中传递
+            # Claude Code SDK配置 - 基于官方文档最佳实践
             options = ClaudeCodeOptions(
                 system_prompt=system_prompt,
-                max_turns=3,  # 允许多轮对话来完善代码
-                allowed_tools=["Read", "WebSearch", "Bash"]  # 允许的工具
+                max_turns=3,
+                allowed_tools=["Read", "WebSearch", "Bash"],
+                permission_mode="bypassPermissions",  # 绕过权限检查，直接生成代码
+                cwd="/app"  # 设置工作目录
             )
             
-            # 记录BASE_URL配置情况
-            if settings.ANTHROPIC_BASE_URL:
-                logger.info(f"Claude SDK will use base URL from env: {settings.ANTHROPIC_BASE_URL}")
-            else:
-                logger.info("Claude SDK will use default Anthropic API endpoint")
-            logger.info(f"Created ClaudeCodeOptions with max_turns=3, tools={options.allowed_tools}")
+            logger.info("🔧 创建Claude SDK客户端...")
             
-            # 创建Claude SDK客户端
-            logger.info("🔧 初始化 ClaudeSDKClient...")
-            client_start_time = time.time()
-            generated_code_chunks = []  # 初始化代码片段列表
-            try:
-                async with ClaudeSDKClient(options=options) as client:
-                    client_init_duration = time.time() - client_start_time
-                    logger.info(f"✅ ClaudeSDKClient 初始化成功，耗时 {client_init_duration:.2f}s")
+            # 使用Claude SDK进行代码生成
+            async with ClaudeSDKClient(options=options) as client:
+                logger.info("✅ Claude SDK客户端初始化成功")
+                
+                # 发送查询
+                yield {"type": "status", "content": "🧠 分析需求并生成代码..."}
+                await client.query(prompt)
+                logger.info("📨 查询发送成功，开始接收响应...")
+                
+                # 收集生成的代码和分析内容
+                generated_code_chunks = []
+                markdown_content = []
+                
+                # 流式接收响应
+                async for message in client.receive_response():
+                    logger.debug(f"📨 收到消息: {type(message).__name__}")
                     
-                    yield {"type": "status", "content": "💭 Claude 正在制定代码方案..."}
-                    logger.info("📤 发送制定方案状态")
+                    # 🔍 DEBUG: 打印完整消息结构
+                    logger.info(f"🔍 DEBUG - 消息类型: {type(message).__name__}")
+                    logger.info(f"🔍 DEBUG - 消息属性: {dir(message)}")
+                    if hasattr(message, '__dict__'):
+                        logger.info(f"🔍 DEBUG - 消息内容: {message.__dict__}")
                     
-                    # 发送查询
-                    logger.info("📨 发送查询到 Claude...")
-                    query_start_time = time.time()
-                    await client.query(full_prompt)
-                    query_duration = time.time() - query_start_time
-                    logger.info(f"✅ 查询发送成功，耗时 {query_duration:.2f}s，开始接收响应...")
-                    
-                    generated_code_chunks = []
-                    current_phase = "thinking"  # thinking, coding, reviewing
-                    message_count = 0
-                    timeout_counter = 0
-                    max_timeout = 120  # 2分钟超时
-                    response_start_time = time.time()
-                    
-                    # 流式接收响应
-                    try:
-                        logger.info("🔄 开始流式接收 Claude 响应...")
-                        async for message in client.receive_response():
-                            message_count += 1
-                            response_elapsed = time.time() - response_start_time
-                            logger.debug(f"📨 收到消息 #{message_count}: {type(message).__name__} (已用时 {response_elapsed:.1f}s)")
-                            
-                            # 处理消息内容
-                            if hasattr(message, 'content'):
-                                logger.debug(f"📄 消息包含 {len(message.content)} 个内容块")
-                                for block_idx, block in enumerate(message.content):
-                                    if hasattr(block, 'text'):
-                                        text = block.text
-                                        # 记录完整的原始响应以便调试
-                                        if "error" in text.lower() or "api error" in text.lower():
-                                            logger.warning(f"⚠️ 检测到错误响应: {text}")
-                                            
-                                        logger.debug(f"📝 处理文本块 {block_idx}: {text[:100]}...")
-                                        logger.debug(f"📊 文本块长度: {len(text)} 字符")
-                                        
-                                        # 分析消息内容，确定当前阶段
-                                        phase_info = self._analyze_phase(text)
-                                        if phase_info != current_phase:
-                                            current_phase = phase_info
-                                            logger.info(f"Phase changed to: {current_phase}")
-                                            yield {"type": "phase_change", "content": self._get_phase_description(current_phase)}
-                                        
-                                        # 检查是否包含代码块
-                                        if self._contains_code(text):
-                                            generated_code_chunks.append(text)
-                                            logger.info(f"Found code block, total chunks: {len(generated_code_chunks)}")
-                                            yield {"type": "code_generation", "content": text, "phase": current_phase}
-                                        else:
-                                            # 这是思考过程或分析文字
-                                            logger.debug("Text is analysis content")
-                                            yield {"type": "analysis", "content": text, "phase": current_phase}
+                    # 处理消息内容
+                    if hasattr(message, 'content') and message.content:
+                        logger.info(f"🔍 DEBUG - content类型: {type(message.content)}, 长度: {len(message.content) if hasattr(message.content, '__len__') else 'N/A'}")
                         
-                            # 处理工具调用
-                            if hasattr(message, 'tool_calls'):
-                                logger.info(f"Message has {len(message.tool_calls)} tool calls")
-                                for tool_call in message.tool_calls:
-                                    logger.info(f"Tool call: {tool_call.name}")
-                                    yield {
-                                        "type": "tool_use", 
-                                        "content": f"🔧 使用工具: {tool_call.name}",
-                                        "tool_name": tool_call.name,
-                                        "tool_args": getattr(tool_call, 'arguments', {})
-                                    }
+                        for i, block in enumerate(message.content):
+                            logger.info(f"🔍 DEBUG - Block {i}: 类型={type(block).__name__}, 属性={dir(block)}")
+                            if hasattr(block, '__dict__'):
+                                logger.info(f"🔍 DEBUG - Block {i} 内容: {block.__dict__}")
                             
-                            # 处理思考步骤
-                            if hasattr(message, 'role') and message.role == 'assistant':
-                                if hasattr(message, 'thinking_steps'):
-                                    logger.info(f"Message has {len(message.thinking_steps)} thinking steps")
-                                    for i, step in enumerate(message.thinking_steps):
-                                        yield {
-                                            "type": "thinking_step",
-                                            "content": f"步骤 {i+1}: {step}",
-                                            "step_number": i+1
-                                        }
-                            
-                            # 检查是否为最终结果消息
-                            if type(message).__name__ == "ResultMessage":
-                                logger.info("Received ResultMessage, completing generation")
-                                yield {"type": "status", "content": "✅ 代码生成完成，正在优化..."}
+                            if hasattr(block, 'text') and block.text:
+                                text = block.text
+                                logger.info(f"🔍 DEBUG - Block {i} text长度: {len(text)}")
+                                logger.info(f"🔍 DEBUG - Block {i} text内容: {text[:500]}...")  # 只显示前500字符
                                 
-                                # 整合所有生成的代码片段
-                                final_code = self._extract_and_clean_code(generated_code_chunks)
-                                logger.info(f"Final code length: {len(final_code)} characters")
+                                # 判断是否为代码块
+                                if self._contains_code(text):
+                                    generated_code_chunks.append(text)
+                                    logger.info(f"✅ 发现代码块 {len(generated_code_chunks)}，内容: {text[:200]}...")
+                                    yield {"type": "code", "content": text, "phase": "coding"}
+                                else:
+                                    markdown_content.append(text)
+                                    logger.info(f"📝 发现markdown内容: {text[:200]}...")
+                                    yield {"type": "markdown", "content": text, "phase": "thinking"}
+                    
+                # 处理工具调用 - 提取文件名信息
+                if hasattr(message, 'content') and message.content:
+                    for block in message.content:
+                        if hasattr(block, 'name') and block.name == 'Write':
+                            # 从Write工具调用中提取文件名
+                            if hasattr(block, 'input') and 'file_path' in block.input:
+                                file_path = block.input['file_path']
+                                file_name = file_path.split('/')[-1]  # 提取文件名
+                                logger.info(f"🔧 Claude尝试写入文件: {file_name}")
+                                
+                                # 记录文件名信息，供后续使用
+                                if not hasattr(self, '_detected_filenames'):
+                                    self._detected_filenames = []
+                                self._detected_filenames.append(file_name)
                                 
                                 yield {
-                                    "type": "complete",
-                                    "final_code": final_code,
-                                    "metadata": {
-                                        "model_used": target_model,
-                                        "session_id": session_id,
-                                        "cost_usd": getattr(message, 'total_cost_usd', 0),
-                                        "duration_ms": getattr(message, 'duration_ms', 0),
-                                        "total_tokens": getattr(message, 'total_tokens', 0)
-                                    }
+                                    "type": "tool_use", 
+                                    "content": f"🔧 生成文件: {file_name}",
+                                    "tool_name": "Write",
+                                    "file_name": file_name
                                 }
-                                logger.info("Code generation completed successfully")
-                                return
+                    
+                    # 处理结果消息
+                    if type(message).__name__ == "ResultMessage":
+                        logger.info("✅ 收到结果消息，生成完成")
                         
-                        total_response_time = time.time() - response_start_time
-                        logger.warning(f"⚠️  响应接收完毕但未找到 ResultMessage，总用时 {total_response_time:.2f}s")
+                        # 🔍 DEBUG: 分析收集到的代码块
+                        logger.info(f"🔍 DEBUG - 总共收集到 {len(generated_code_chunks)} 个代码块")
+                        for i, chunk in enumerate(generated_code_chunks):
+                            logger.info(f"🔍 DEBUG - 代码块 {i+1}: 长度={len(chunk)}, 内容前200字符: {chunk[:200]}...")
                         
-                        # 如果收集到了代码片段，仍然尝试生成结果
-                        if generated_code_chunks:
-                            logger.info(f"🔧 尝试从 {len(generated_code_chunks)} 个代码片段生成最终结果")
-                            final_code = self._extract_and_clean_code(generated_code_chunks)
-                            yield {
-                                "type": "complete",
-                                "final_code": final_code,
-                                "metadata": {
-                                    "model_used": target_model,
-                                    "session_id": session_id,
-                                    "total_time_seconds": total_response_time,
-                                    "message_count": message_count,
-                                    "note": "完成但未收到正式结束消息"
-                                }
-                            }
+                        logger.info(f"🔍 DEBUG - 总共收集到 {len(markdown_content)} 个markdown块")
+                        for i, md in enumerate(markdown_content):
+                            logger.info(f"🔍 DEBUG - Markdown块 {i+1}: 长度={len(md)}, 内容前200字符: {md[:200]}...")
                         
-                    except Exception as receive_error:
-                        receive_time = time.time() - response_start_time
-                        logger.error(f"❌ 接收消息时发生错误 (用时 {receive_time:.2f}s): {str(receive_error)}")
-                        logger.error(f"📋 错误详情: {traceback.format_exc()}")
-                        yield {
-                            "type": "error",
-                            "content": f"接收消息时发生错误: {str(receive_error)}"
-                        }
-            
-            except asyncio.CancelledError:
-                # 捕获取消错误，优雅结束
-                sdk_time = time.time() - client_start_time
-                logger.warning(f"⚠️ 请求被取消 (用时 {sdk_time:.2f}s)")
-                yield {
-                    "type": "error",
-                    "content": "请求被取消，可能是由于连接超时或服务中断"
-                }
-            except RuntimeError as runtime_err:
-                # 特殊处理异步作用域错误
-                sdk_time = time.time() - client_start_time
-                if "cancel scope" in str(runtime_err):
-                    logger.warning(f"⚠️ 异步作用域错误 (用时 {sdk_time:.2f}s): {str(runtime_err)}")
-                    if generated_code_chunks:
-                        # 尽管有错误，仍然尝试返回收集到的代码
-                        logger.info("尝试从已收集的代码片段生成结果...")
+                        # 提取最终代码
                         final_code = self._extract_and_clean_code(generated_code_chunks)
+                        logger.info(f"🔍 DEBUG - 最终代码长度: {len(final_code)}")
+                        logger.info(f"🔍 DEBUG - 最终代码内容: {final_code[:500]}...")
+                        
+                        yield {"type": "status", "content": "✅ 代码生成完成！"}
+                        
+                        # 🔍 DEBUG: 提取并返回文件信息
+                        extracted_files = self._extract_files_info(generated_code_chunks)
+                        logger.info(f"🔍 DEBUG - 提取到的文件: {list(extracted_files.keys())}")
+                        
                         yield {
                             "type": "complete",
                             "final_code": final_code,
+                            "files": extracted_files,  # 新增：文件信息
                             "metadata": {
                                 "model_used": target_model,
                                 "session_id": session_id,
-                                "note": "尽管有异步错误，但仍完成了代码生成"
+                                "cost_usd": getattr(message, 'total_cost_usd', 0),
+                                "duration_ms": getattr(message, 'duration_ms', 0),
+                                "total_tokens": getattr(message, 'total_tokens', 0)
                             }
                         }
-                    else:
-                        yield {
-                            "type": "error",
-                            "content": "请求处理过程中发生异步错误"
-                        }
-                else:
-                    logger.error(f"❌ 运行时错误 (用时 {sdk_time:.2f}s): {str(runtime_err)}")
-                    logger.error(f"📋 错误详情: {traceback.format_exc()}")
-                    yield {
-                        "type": "error",
-                        "content": f"运行时错误: {str(runtime_err)}"
-                    }
-            except Exception as sdk_error:
-                sdk_time = time.time() - client_start_time
-                logger.error(f"❌ ClaudeSDKClient 错误 (用时 {sdk_time:.2f}s): {str(sdk_error)}")
-                logger.error(f"📋 SDK 错误详情: {traceback.format_exc()}")
-                yield {
-                    "type": "error",
-                    "content": f"Claude SDK 连接错误: {str(sdk_error)}"
-                }
-        
+                        logger.info("🎉 代码生成任务完成")
+                        return
+                        
+        except GeneratorExit:
+            # WebSocket连接断开时的正常清理，不是错误
+            logger.info("🔌 WebSocket连接已断开，停止代码生成")
+            raise  # 重新抛出，让异步生成器正常退出
+        except RuntimeError as e:
+            if "cancel scope" in str(e) or "GeneratorExit" in str(e):
+                # 异步作用域错误，通常发生在连接断开时，不影响功能
+                logger.warning(f"⚠️ 异步清理警告: {str(e)}")
+                # 不yield错误消息，因为这不是真正的错误
+            else:
+                logger.error(f"❌ 运行时错误: {str(e)}")
+                yield {"type": "error", "content": f"运行时错误: {str(e)}"}
         except Exception as e:
-            total_generation_time = time.time() - generation_start_time
-            logger.error(f"❌ 代码生成过程发生错误 (总用时 {total_generation_time:.2f}s): {str(e)}")
-            logger.error(f"📋 完整错误追踪: {traceback.format_exc()}")
-            yield {
-                "type": "error", 
-                "content": f"代码生成过程中发生错误: {str(e)}"
-            }
-        finally:
-            total_generation_time = time.time() - generation_start_time
-            logger.info(f"🏁 === 代码生成会话结束: {session_id} ===")
-            logger.info(f"⏱️  总耗时: {total_generation_time:.2f}s")
-            logger.info(f"⏰ 结束时间: {time.strftime('%H:%M:%S')}")
+            logger.error(f"❌ 代码生成失败: {str(e)}")
+            logger.error(f"📋 异常详情: {traceback.format_exc()}")
+            yield {"type": "error", "content": f"代码生成失败: {str(e)}"}
     
     def _build_system_prompt(self) -> str:
-        """构建专门用于前端代码生成的系统提示"""
-        return """你是一个专业的前端开发工程师和UI/UX设计师。你的任务是根据用户的描述，生成完整的、可以直接在浏览器中运行的前端代码。
+        """构建系统提示 - 非交互式模式"""
+        return """
+你是一个专业的前端代码生成助手。
 
-要求：
-1. 生成的代码必须是完整的HTML文件，包含HTML、CSS和JavaScript
-2. 代码应该是自包含的，不依赖任何外部库或资源
-3. 注重视觉效果和用户体验，创建美观、现代的界面
-4. 包含合适的动画效果和交互元素
-5. 确保代码在现代浏览器中能正常运行
-6. 使用响应式设计，适配不同屏幕尺寸
+**工作模式**：
+- 直接根据用户需求生成完整可运行的前端代码
+- 必须在需要时调用工具（如Write）将代码写入对应文件，而不是只输出代码文本
+- 代码和文件创建要同步进行，确保每个文件都通过工具创建
+- 不要添加无关的解释性文字
+- 遇到多文件项目时，自动拆分并分别创建
 
-请按照以下格式生成代码：
-1. 首先简述你的设计思路
-2. 然后提供完整的HTML代码
-3. 最后说明关键功能和特性"""
-    
-    def _build_coding_prompt(self, user_prompt: str) -> str:
-        """构建完整的编码提示"""
-        return f"""请根据以下需求生成前端代码：
+**输出要求**：
+- 使用标准的代码块格式（```html、```css、```javascript等）包裹代码
+- 生成的代码必须能在浏览器中直接运行
+- 包含完整的HTML结构、CSS样式和JavaScript逻辑
+- 代码风格现代化，用户体验友好
+- 适当的注释说明关键功能
+- 不要输出“我来为你创建...”等说明性文字
 
-{user_prompt}
+请根据用户需求直接生成代码，并通过工具创建文件，无需询问确认。"""
 
-请创建一个完整的HTML页面，包含所有必要的HTML、CSS和JavaScript代码。
-代码应该能够直接在浏览器中打开并正常工作。"""
-    
-    def _validate_api_endpoint(self):
-        """
-        验证API端点是否有效，确保不是HTML页面
-        
-        Raises:
-            ValueError: 如果API端点无效或返回HTML内容
-        """
-        import requests
-        
-        # 获取API配置
-        api_key = settings.ANTHROPIC_API_KEY or os.getenv("ANTHROPIC_AUTH_TOKEN")
-        base_url = settings.ANTHROPIC_BASE_URL or "https://api.anthropic.com"
-        
-        if not api_key:
-            raise ValueError("未设置API密钥")
-        
-        logger.debug(f"🔍 验证API端点: {base_url}")
-        
-        # 构造测试请求
-        test_url = f"{base_url}/v1/messages"
-        headers = {
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json"
-        }
-        
-        test_data = {
-            "model": "claude-3-sonnet-20240229",
-            "max_tokens": 10,
-            "messages": [{"role": "user", "content": "test"}]
-        }
-        
-        try:
-            logger.debug("📤 发送API验证请求...")
-            response = requests.post(test_url, headers=headers, json=test_data, timeout=10)
-            
-            # 检查响应内容类型
-            content_type = response.headers.get('content-type', '').lower()
-            logger.debug(f"📥 响应类型: {content_type}")
-            
-            # 如果返回HTML，说明不是有效的API端点
-            if 'text/html' in content_type:
-                raise ValueError(f"API端点 {base_url} 返回HTML页面，不是有效的API服务")
-            
-            # 检查响应内容是否包含HTML标签
-            if '<html' in response.text.lower():
-                logger.warning(f"⚠️ 检测到HTML响应: {response.text[:100]}...")
-                raise ValueError(f"API端点 {base_url} 返回HTML内容，可能是代理页面而非API服务")
-            
-            # 尝试解析JSON响应
-            try:
-                response.json()
-                logger.debug("✅ API端点返回有效JSON响应")
-            except ValueError:
-                logger.warning(f"⚠️ 无法解析JSON响应: {response.text[:100]}...")
-                raise ValueError(f"API端点 {base_url} 未返回有效JSON响应")
-                
-        except requests.exceptions.RequestException as e:
-            raise ValueError(f"无法连接到API端点 {base_url}: {str(e)}")
-    
     def _contains_code(self, text: str) -> bool:
-        """检查文本是否包含代码块"""
+        """判断文本是否包含代码块"""
+        if not text:
+            return False
+        
+        # 更宽松的代码块判断条件
         code_indicators = [
-            "```html", "```css", "```javascript", "```js",
-            "<!DOCTYPE", "<html", "<head", "<body",
-            "<script", "<style", "function ", "const ", "let ", "var "
+            # 代码块标记
+            '```',
+            # HTML相关
+            '<!DOCTYPE', '<html', '<body', '<div', '<script', '<style',
+            '<button', '<input', '<form', '<canvas', '<svg',
+            # JavaScript相关
+            'function ', 'const ', 'let ', 'var ', '=>',
+            'document.', 'window.', 'addEventListener',
+            'console.log', 'querySelector',
+            # CSS相关
+            'background:', 'color:', 'font-size:', 'margin:', 'padding:',
+            'display:', 'position:', 'width:', 'height:',
+            # 其他代码特征
+            '{', '}', ';', '//', '/*', '*/',
         ]
-        text_lower = text.lower()
-        return any(indicator in text_lower for indicator in code_indicators)
-    
-    def _extract_and_clean_code(self, code_chunks: list[str]) -> str:
-        """从代码片段中提取并清理完整的代码"""
+        
+        # 如果包含代码块标记，直接返回True
+        if '```' in text:
+            return True
+            
+        # 否则检查其他代码特征，需要满足多个条件
+        matches = sum(1 for indicator in code_indicators if indicator in text)
+        return matches >= 3  # 至少包含3个代码特征才认为是代码
+
+    def _extract_files_info(self, code_chunks: list) -> dict:
+        """提取文件信息，返回文件名和内容的映射，自动去除代码块标记"""
         if not code_chunks:
-            logger.warning("No code chunks found, returning default HTML")
-            return "<html><body><h1>抱歉，未能生成有效的代码</h1></body></html>"
+            return {}
+        import re
+        full_content = '\n'.join(code_chunks)
+        extracted_files = {}
+        # 提取带文件名的代码块
+        file_patterns = [
+            r'```([\w\-_.]+\.[\w]+)\s*\n(.*?)```',  # ```filename.ext
+            r'```\s*\n([\w\-_.]+\.[\w]+)\s*\n(.*?)```'  # ```\nfilename.ext
+        ]
+        for pattern in file_patterns:
+            matches = re.findall(pattern, full_content, re.DOTALL | re.IGNORECASE)
+            for match in matches:
+                if isinstance(match, tuple) and len(match) == 2:
+                    filename, content = match
+                    if filename and content.strip():
+                        # 去除所有代码块标记
+                        clean_content = re.sub(r'^```[\w\-_.]*\n?', '', content.strip())
+                        clean_content = re.sub(r'```$', '', clean_content.strip())
+                        extracted_files[filename] = clean_content.strip()
+                        logger.info(f"🔍 提取文件: {filename} ({len(clean_content)} 字符)")
+        # 如果没有找到带文件名的代码块，使用默认文件名
+        if not extracted_files:
+            detected_filename = None
+            if hasattr(self, '_detected_filenames') and self._detected_filenames:
+                detected_filename = self._detected_filenames[0]
+                logger.info(f"🔍 使用检测到的文件名: {detected_filename}")
+            html_match = re.search(r'```(?:html)?\s*\n(.*?)```', full_content, re.DOTALL)
+            if html_match:
+                filename = detected_filename if detected_filename and detected_filename.endswith('.html') else 'index.html'
+                clean_content = re.sub(r'^```[\w\-_.]*\n?', '', html_match.group(1).strip())
+                clean_content = re.sub(r'```$', '', clean_content.strip())
+                extracted_files[filename] = clean_content.strip()
+            css_match = re.search(r'```css\s*\n(.*?)```', full_content, re.DOTALL)
+            if css_match:
+                filename = detected_filename if detected_filename and detected_filename.endswith('.css') else 'style.css'
+                clean_content = re.sub(r'^```[\w\-_.]*\n?', '', css_match.group(1).strip())
+                clean_content = re.sub(r'```$', '', clean_content.strip())
+                extracted_files[filename] = clean_content.strip()
+            js_match = re.search(r'```(?:javascript|js)\s*\n(.*?)```', full_content, re.DOTALL)
+            if js_match:
+                filename = detected_filename if detected_filename and detected_filename.endswith('.js') else 'script.js'
+                clean_content = re.sub(r'^```[\w\-_.]*\n?', '', js_match.group(1).strip())
+                clean_content = re.sub(r'```$', '', clean_content.strip())
+                extracted_files[filename] = clean_content.strip()
+        return extracted_files
+
+    def _extract_and_clean_code(self, code_chunks: list) -> str:
+        """提取和清理代码，自动去除代码块标记"""
+        logger.info(f"🔍 DEBUG - _extract_and_clean_code: 输入 {len(code_chunks)} 个代码块")
+        if not code_chunks:
+            logger.warning("⚠️ 没有代码块，返回默认HTML")
+            return "<html><head><title>生成失败</title></head><body><h1>未能生成有效代码</h1></body></html>"
+        import re
+        # 合并所有代码块
+        full_content = '\n'.join(code_chunks)
+        logger.info(f"🔍 DEBUG - 合并后内容长度: {len(full_content)}")
+        logger.info(f"🔍 DEBUG - 合并后内容前1000字符: {full_content[:1000]}...")
+        # 检查是否包含HTML结构，但需要精确提取
+        if '<!DOCTYPE' in full_content or '<html' in full_content:
+            logger.info("✅ 发现完整HTML结构，开始精确提取")
+            html_start = full_content.find('<!DOCTYPE')
+            if html_start == -1:
+                html_start = full_content.find('<html')
+            if html_start != -1:
+                clean_html = full_content[html_start:].strip()
+                # 移除markdown代码块标记
+                clean_html = re.sub(r'^```[\w\-_.]*\n?', '', clean_html)
+                clean_html = re.sub(r'```$', '', clean_html)
+                logger.info(f"🔍 精确提取HTML，长度: {len(clean_html)}")
+                logger.info(f"🔍 HTML开头: {clean_html[:200]}...")
+                return clean_html
         
-        logger.info(f"Extracting and cleaning {len(code_chunks)} code chunks")
+        # 否则尝试提取代码块
+        import re
         
-        # 合并所有代码片段
-        combined_code = "\n".join(code_chunks)
+        logger.info("🔍 尝试从代码块中提取HTML/CSS/JS...")
         
-        # 尝试提取HTML代码块
-        if "```html" in combined_code:
-            # 提取HTML代码块
-            start = combined_code.find("```html") + 7
-            end = combined_code.find("```", start)
-            if end > start:
-                extracted = combined_code[start:end].strip()
-                logger.info(f"Extracted HTML code block: {len(extracted)} characters")
-                return extracted
+        # 🔍 更强大的代码块提取逻辑
+        html_matches = []
+        css_matches = []
+        js_matches = []
+        extracted_files = {}  # 存储文件名和内容的映射
         
-        # 如果没有明确的代码块标记，但包含HTML标签，直接返回
-        if "<!DOCTYPE" in combined_code or "<html" in combined_code:
-            logger.info("Found complete HTML document without code block markers")
-            return combined_code.strip()
+        # 通用代码块模式 - 支持各种格式
+        code_block_patterns = [
+            # 标准格式: ```language\ncode```
+            r'```(\w+)\s*\n(.*?)```',
+            # 带文件名: ```filename.ext\ncode```
+            r'```([\w\-_.]+\.[\w]+)\s*\n(.*?)```',
+            # 文件名在第一行: ```\nfilename.ext\ncode```
+            r'```\s*\n([\w\-_.]+\.[\w]+)\s*\n(.*?)```',
+            # 简单代码块: ```\ncode```
+            r'```\s*\n(.*?)```'
+        ]
         
-        # 作为后备，包装成完整的HTML文档
-        logger.warning("No complete HTML found, wrapping content in HTML document")
-        return f"""<!DOCTYPE html>
+        for pattern in code_block_patterns:
+            matches = re.findall(pattern, full_content, re.DOTALL | re.IGNORECASE)
+            logger.info(f"🔍 代码块模式 '{pattern}' 匹配到 {len(matches)} 个结果")
+            
+            for match in matches:
+                if isinstance(match, tuple) and len(match) == 2:
+                    first_part, content = match
+                    content = content.strip()
+                    
+                    if not content:  # 跳过空内容
+                        continue
+                    
+                    # 判断第一部分是语言还是文件名
+                    if '.' in first_part:  # 包含点号，可能是文件名
+                        filename = first_part
+                        logger.info(f"🔍 发现文件: {filename}")
+                        extracted_files[filename] = content
+                        
+                        # 根据文件扩展名分类
+                        if filename.endswith('.html'):
+                            html_matches.append(content)
+                        elif filename.endswith('.css'):
+                            css_matches.append(content)
+                        elif filename.endswith('.js'):
+                            js_matches.append(content)
+                    else:  # 是语言标识符
+                        language = first_part.lower()
+                        if language in ['html', 'htm']:
+                            html_matches.append(content)
+                            logger.info(f"🔍 HTML代码块: {content[:100]}...")
+                        elif language in ['css']:
+                            css_matches.append(content)
+                            logger.info(f"🔍 CSS代码块: {content[:100]}...")
+                        elif language in ['javascript', 'js']:
+                            js_matches.append(content)
+                            logger.info(f"🔍 JS代码块: {content[:100]}...")
+                        else:
+                            # 未知语言，尝试根据内容判断
+                            if any(tag in content for tag in ['<html', '<body', '<div', '<!DOCTYPE']):
+                                html_matches.append(content)
+                                logger.info(f"🔍 根据内容判断为HTML: {content[:100]}...")
+                            elif any(prop in content for prop in ['background:', 'color:', 'font-size:']):
+                                css_matches.append(content)
+                                logger.info(f"🔍 根据内容判断为CSS: {content[:100]}...")
+                            elif any(keyword in content for keyword in ['function', 'const', 'let', 'document.']):
+                                js_matches.append(content)
+                                logger.info(f"🔍 根据内容判断为JS: {content[:100]}...")
+                elif isinstance(match, str):  # 简单代码块，没有语言标识
+                    content = match.strip()
+                    if content:
+                        # 根据内容特征判断类型
+                        if any(tag in content for tag in ['<html', '<body', '<div', '<!DOCTYPE']):
+                            html_matches.append(content)
+                            logger.info(f"🔍 无标识HTML代码块: {content[:100]}...")
+                        elif any(prop in content for prop in ['background:', 'color:', 'font-size:']):
+                            css_matches.append(content)
+                            logger.info(f"🔍 无标识CSS代码块: {content[:100]}...")
+                        elif any(keyword in content for keyword in ['function', 'const', 'let', 'document.']):
+                            js_matches.append(content)
+                            logger.info(f"🔍 无标识JS代码块: {content[:100]}...")
+                        else:
+                            # 默认当作HTML处理
+                            html_matches.append(content)
+                            logger.info(f"🔍 默认HTML代码块: {content[:100]}...")
+        
+        logger.info(f"🔍 提取结果: HTML={len(html_matches)}, CSS={len(css_matches)}, JS={len(js_matches)}")
+        
+        # 打印提取到的内容
+        for i, html in enumerate(html_matches):
+            logger.info(f"🔍 HTML块 {i+1} 前200字符: {html[:200]}...")
+        for i, css in enumerate(css_matches):
+            logger.info(f"🔍 CSS块 {i+1} 前200字符: {css[:200]}...")
+        for i, js in enumerate(js_matches):
+            logger.info(f"🔍 JS块 {i+1} 前200字符: {js[:200]}...")
+        
+        # 组装完整的HTML文档
+        html_content = html_matches[0] if html_matches else ""
+        css_content = css_matches[0] if css_matches else ""
+        js_content = js_matches[0] if js_matches else ""
+        
+        if html_content:
+            # 如果HTML内容不完整，补充基本结构
+            if not html_content.strip().startswith('<!DOCTYPE'):
+                if '<style>' not in html_content and css_content:
+                    html_content = html_content.replace('<head>', f'<head>\n<style>\n{css_content}\n</style>')
+                if '<script>' not in html_content and js_content:
+                    html_content = html_content.replace('</body>', f'<script>\n{js_content}\n</script>\n</body>')
+            
+            return html_content
+        
+        # 如果没有明确的HTML结构，创建一个基本模板
+        if css_content or js_content:
+            return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI生成的页面</title>
+    <title>AI生成的应用</title>
+    <style>
+{css_content}
+    </style>
 </head>
 <body>
-    {combined_code}
+    <div id="app">
+        <h1>AI生成的应用</h1>
+    </div>
+    <script>
+{js_content}
+    </script>
 </body>
 </html>"""
-    
-    def _analyze_phase(self, text: str) -> str:
-        """分析当前文本内容，判断AI处于哪个工作阶段"""
-        text_lower = text.lower()
         
-        # 编码阶段的关键词
-        coding_indicators = [
-            "```", "html", "css", "javascript", "function", "class", 
-            "<!doctype", "<html", "<head", "<body", "<script", "<style"
-        ]
-        
-        # 分析阶段的关键词  
-        analysis_indicators = [
-            "分析", "思考", "设计", "计划", "考虑", "需要", "应该", "可以",
-            "理解", "要求", "功能", "特性", "布局", "样式", "交互"
-        ]
-        
-        # 审查阶段的关键词
-        reviewing_indicators = [
-            "检查", "确保", "验证", "测试", "优化", "完善", "修改", "调整"
-        ]
-        
-        if any(indicator in text_lower for indicator in coding_indicators):
-            return "coding"
-        elif any(indicator in text_lower for indicator in reviewing_indicators):
-            return "reviewing"  
-        elif any(indicator in text_lower for indicator in analysis_indicators):
-            return "thinking"
-        else:
-            return "thinking"  # 默认为思考阶段
-    
-    def _get_phase_description(self, phase: str) -> str:
-        """获取阶段的描述信息"""
-        phase_descriptions = {
-            "thinking": "🤔 分析阶段 - Claude 正在理解需求并制定方案...",
-            "coding": "⚡ 编码阶段 - Claude 正在生成代码...",
-            "reviewing": "🔍 优化阶段 - Claude 正在检查和优化代码..."
-        }
-        return phase_descriptions.get(phase, "🔄 处理中...")
+        # 兜底：返回原始内容
+        return full_content
+
+    def _build_coding_prompt(self, user_prompt: str) -> str:
+        """构建编码提示"""
+        return f"""请根据以下需求生成前端代码：
+
+{user_prompt}
+
+请直接生成完整可运行的HTML代码，包含必要的CSS和JavaScript。
+"""

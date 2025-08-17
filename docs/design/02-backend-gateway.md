@@ -75,12 +75,13 @@ API 网关是所有客户端请求的唯一入口，其核心职责包括：
 
 ## 3. 技术选型
 
-- **主要框架**: Spring Cloud Gateway
+- **主要框架**: **Python (FastAPI)**
 - **理由**:
-  - 与 Spring 生态系统无缝集成。
-  - 支持基于路径、Host、HTTP 方法等多种方式的灵活路由。
-  - 易于通过 `Filter` 机制实现认证、限流等自定义逻辑。
-  - 支持服务发现 (Eureka, Nacos)。
-- **集成库**:
-  - **熔断器**: Spring Cloud Circuit Breaker (Resilience4j)
-  - **分布式追踪**: Spring Cloud Sleuth 或 Micrometer Tracing 
+  - **高性能**: 基于 Starlette 和 Pydantic，提供极高的异步性能。
+  - **开发效率**: 利用 Python 的类型提示，可以自动生成交互式 API 文档（Swagger UI, ReDoc），并进行数据校验。
+  - **生态系统**: 拥有庞大的 Python 库支持，可以轻松集成各类工具。
+  - **技术栈统一**: 与所有其他后端服务保持一致，降低了维护和学习成本。
+- **核心实现机制**:
+  - **全局策略**: **FastAPI 中间件 (Middleware)** 将是实现分布式追踪、日志记录、CORS 处理和全局异常捕获的核心。
+  - **熔断器**: 可选用 `pybreaker` 等成熟的 Python 库来实现熔断逻辑。
+  - **分布式追踪**: 可集成 OpenTelemetry 等开源标准库，通过中间件自动注入和传递 `Trace ID`。 

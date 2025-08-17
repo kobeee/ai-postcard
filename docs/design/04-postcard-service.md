@@ -31,38 +31,35 @@
 
   *注：`Tasks` 表用于解耦任务跟踪和最终数据存储，让状态查询更高效。*
 
-## 3. 服务间接口 (Inter-Service API)
+## 3. 服务间接口 (Inter-Service API - RESTful)
 
-- **`rpc CreateTask (CreateTaskRequest) returns (CreateTaskResponse)`**
+- **`POST /internal/tasks`**
   - **描述**: 在接收到来自消息队列的创建指令后，创建一个初始任务记录。
-  - **请求**: `{ task_id: "...", user_id: 123, generation_params: {...} }`
-  - **响应**: `{ success: true }`
+  - **请求体**: `{ "task_id": "...", "user_id": 123, "generation_params": {...} }`
   - **调用方**: AI Agent Service (任务开始时)。
 
-- **`rpc CompleteTaskWithPostcard (CompleteTaskRequest) returns (CompleteTaskResponse)`**
-  - **描述**: AI Agent 完成工作后，调用此接口。它将一次性完成两件事：1) 创建 `Postcards` 记录；2) 更新 `Tasks` 表的状态为 `COMPLETED`。这是一个**事务性操作 (`@Transactional`)**，必须保证原子性。
-  - **请求**: `{ task_id: "...", postcard_data: { user_id: 123, frontend_code: "...", ... } }`
-  - **响应**: `{ postcard_id: 456 }`
+- **`PUT /internal/tasks/{taskId}/complete`**
+  - **描述**: AI Agent 完成工作后，调用此接口。它将一次性完成两件事：1) 创建 `Postcards` 记录；2) 更新 `Tasks` 表的状态为 `COMPLETED`。这是一个**事务性操作**，必须保证原子性（在 FastAPI 中可通过 `database session` 控制）。
+  - **请求体**: `{ "postcard_data": { "user_id": 123, "frontend_code": "...", ... } }`
+  - **响应**: `{ "postcard_id": 456 }`
   - **调用方**: AI Agent Service (任务成功时)。
 
-- **`rpc FailTask (FailTaskRequest) returns (FailTaskResponse)`**
+- **`PUT /internal/tasks/{taskId}/fail`**
   - **描述**: AI Agent 任务失败时调用，用于更新任务状态。
-  - **请求**: `{ task_id: "...", error_message: "..." }`
-  - **响应**: `{ success: true }`
+  - **请求体**: `{ "error_message": "..." }`
   - **调用方**: AI Agent Service (任务失败时)。
 
-- **`rpc GetTaskStatus (GetTaskStatusRequest) returns (GetTaskStatusResponse)`**
+- **`GET /internal/tasks/{taskId}/status`**
   - **描述**: 供 API 网关轮询查询任务状态。
-  - **请求**: `{ task_id: "..." }`
-  - **响应**: `{ status: "COMPLETED", data: { ...postcard_details... } }` 或 `{ status: "PROCESSING" }`
+  - **响应**: `{ "status": "COMPLETED", "data": { ...postcard_details... } }` 或 `{ "status": "PROCESSING" }`
   - **调用方**: API 网关。
 
-- **`rpc GetPostcardById (GetPostcardRequest) returns (PostcardResponse)`**
-- **`rpc ListPostcardsByUser (ListPostcardsRequest) returns (ListPostcardsResponse)`**
+- **`GET /internal/postcards/{postcardId}`**
+- **`GET /internal/users/{userId}/postcards`**
 
 ## 4. 技术选型
 
-- **框架**: Spring Boot
-- **数据库**: PostgreSQL (推荐，因其强大的 JSONB 支持)
-- **ORM**: Spring Data JPA
-- **服务间通信**: gRPC 或 REST 
+- **框架**: **Python (FastAPI)**
+- **数据库**: **PostgreSQL** (推荐，因其强大的 JSONB 支持)
+- **ORM**: **SQLAlchemy**
+- **服务间通信**: **RESTful API** 

@@ -1,203 +1,166 @@
+version: '3.9'
+
+x-python-base: &python-base
+  env_file:
+    - .env
+  environment:
+    - PYTHONUNBUFFERED=1
+    - PYTHONPATH=/app
+    - PATH=/app/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  build:
+    context: .
+  volumes:
+    - ./src:/app/src
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  networks:
+    - app-network
+
+x-ai-agent-base: &ai-agent-base
+  <<: *python-base
+  build:
+    context: ./src/ai-agent-service
+    dockerfile: Dockerfile.dev
+  volumes:
+    - ./src/ai-agent-service/app:/app/app  # 只挂载源码，不挂载.venv
+    - ./src/ai-agent-service/requirements.txt:/app/requirements.txt
+    - ./src/ai-agent-service/logs:/app/logs  # 挂载日志目录
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
 services:
-  # =============================================================================
-  # 基础设施服务 (无 profile，默认启动)
-  # =============================================================================
-  
-  postgres-db:
-    image: postgres:15-alpine
-    container_name: ai-postcard-postgres
-    environment:
-      POSTGRES_DB: ${DB_NAME:-ai_postcard}
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
-      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./configs/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+  # --- AI Agent Service ---
+  ai-agent-service:
+    <<: *ai-agent-base
+    container_name: ai-postcard-ai-agent-service
     ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-ai_postcard}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - "8080:8000"
+    profiles:
+      - agent
+      - all
 
-  redis-cache:
-    image: redis:7-alpine
-    container_name: ai-postcard-redis
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis}
-    volumes:
-      - redis_data:/data
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
+  # --- AI Agent Service Tests ---
+  ai-agent-service-tests:
+    <<: *ai-agent-base
+    container_name: ai-postcard-agent-tests
+    command: ["pytest"]
+    profiles:
+      - agent-tests
 
-  # =============================================================================
-  # 应用服务 (使用 profiles 进行场景化启动)
-  # =============================================================================
-
-  # 使用 YAML 锚点定义可复用的基础配置
-  x-gateway-base: &gateway-base
+  # --- User Service (Python/FastAPI) ---
+  user-service:
+    <<: *python-base
+    container_name: ai-postcard-user-service
     build:
-      context: ./src/gateway-service
+      context: ./src/user-service
       dockerfile: Dockerfile.dev
     volumes:
-      # 挂载整个服务目录，包括源代码和 node_modules
-      - ./src/gateway-service:/app
-      # 如果遇到跨平台二进制兼容问题，可启用下面的匿名卷
-      # - /app/node_modules
-    environment:
-      - NODE_ENV=development
-      - DB_HOST=postgres-db
-      - DB_PORT=5432
-      - DB_NAME=${DB_NAME:-ai_postcard}
-      - DB_USER=${DB_USER:-postgres}
-      - DB_PASSWORD=${DB_PASSWORD:-postgres}
-      - REDIS_HOST=redis-cache
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis}
-    depends_on:
-      postgres-db:
-        condition: service_healthy
-      redis-cache:
-        condition: service_healthy
-
-  gateway-service:
-    <<: *gateway-base
-    profiles: ["gateway"]
-    container_name: ai-postcard-gateway
+      - ./src/user-service/app:/app/app  # 只挂载源代码，不挂载虚拟环境
     ports:
-      - "8080:8080"
-    command: npm run dev
+      - "8081:8000"
+    profiles:
+      - user
+      - all
 
-  # --- User Service 场景化配置 ---
-  x-user-base: &user-base
+  # --- User Service Tests ---
+  user-service-tests:
+    <<: *python-base
+    container_name: ai-postcard-user-service-tests
     build:
       context: ./src/user-service
       dockerfile: Dockerfile.dev
     volumes:
       - ./src/user-service:/app
-    environment:
-      - DB_HOST=postgres-db
-      - DB_PORT=5432
-      - DB_NAME=${DB_NAME:-ai_postcard}
-      - DB_USER=${DB_USER:-postgres}
-      - DB_PASSWORD=${DB_PASSWORD:-postgres}
-      - REDIS_HOST=redis-cache
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis}
-    depends_on:
-      postgres-db:
-        condition: service_healthy
-      redis-cache:
-        condition: service_healthy
-
-  user-service:
-    <<: *user-base
-    profiles: ["user"]
-    container_name: ai-postcard-user
+      - ./src/user-service/.venv:/app/.venv
+    command: ["pytest"]
+    profiles:
+      - user-tests
+  
+  # --- Postcard Service (Python/FastAPI) ---
+  postcard-service:
+    <<: *python-base
+    container_name: ai-postcard-postcard-service
+    build:
+      context: ./src/postcard-service
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./src/postcard-service/app:/app/app  # 只挂载源代码，不挂载虚拟环境
     ports:
-      - "8081:8080"
+      - "8082:8000"
+    profiles:
+      - postcard
+      - all
 
-  user-service-tests:
-    <<: *user-base
-    profiles: ["user-tests"]
-    container_name: ai-postcard-user-tests
-    command: sh -c "echo 'Running user-service tests (placeholder)'; sleep 5"
-
-  # --- Postcard Service 场景化配置 ---
-  x-postcard-base: &postcard-base
+  # --- Postcard Service Tests ---
+  postcard-service-tests:
+    <<: *python-base
+    container_name: ai-postcard-postcard-service-tests
     build:
       context: ./src/postcard-service
       dockerfile: Dockerfile.dev
     volumes:
       - ./src/postcard-service:/app
-    environment:
-      - DB_HOST=postgres-db
-      - DB_PORT=5432
-      - DB_NAME=${DB_NAME:-ai_postcard}
-      - DB_USER=${DB_USER:-postgres}
-      - DB_PASSWORD=${DB_PASSWORD:-postgres}
-      - REDIS_HOST=redis-cache
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis}
-    depends_on:
-      postgres-db:
-        condition: service_healthy
-      redis-cache:
-        condition: service_healthy
+      - ./src/postcard-service/.venv:/app/.venv
+    command: ["pytest"]
+    profiles:
+      - postcard-tests
 
-  postcard-service:
-    <<: *postcard-base
-    profiles: ["postcard"]
-    container_name: ai-postcard-postcard
-    ports:
-      - "8082:8080"
-
-  postcard-service-tests:
-    <<: *postcard-base
-    profiles: ["postcard-tests"]
-    container_name: ai-postcard-postcard-tests
-    command: sh -c "echo 'Running postcard-service tests (placeholder)'; sleep 5"
-
-  # --- AI Agent Service 场景化配置 ---
-  x-ai-agent-base: &ai-agent-base
+  # --- Gateway Service (Python/FastAPI) ---
+  gateway-service:
+    <<: *python-base
+    container_name: ai-postcard-gateway-service
     build:
-      context: ./src/ai-agent-service
+      context: ./src/gateway-service
       dockerfile: Dockerfile.dev
     volumes:
-      # 挂载整个服务目录，包括源代码和 .venv
-      - ./src/ai-agent-service:/app
-    environment:
-      # Python环境配置
-      - PATH=/app/.venv/bin:$PATH
-      - PYTHONPATH=/app
-      - PYTHONDONTWRITEBYTECODE=1
-      - PYTHONUNBUFFERED=1
-      # 数据库和缓存配置
-      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres-db:5432/${DB_NAME:-ai_postcard}
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-redis}@redis-cache:6379/0
-      # AI Provider配置
-      - AI_PROVIDER_TYPE=${AI_PROVIDER_TYPE:-claude}
-      # 同时传递两种命名，兼容 Claude Code SDK 与标准Anthropic SDK
-      - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-}
-      - CLAUDE_DEFAULT_MODEL=${CLAUDE_DEFAULT_MODEL:-claude-sonnet-4-20250514}
-      - CLAUDE_FALLBACK_MODEL=${CLAUDE_FALLBACK_MODEL:-}
-      # 未来扩展的Provider
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - QWEN_API_KEY=${QWEN_API_KEY:-}
-    depends_on:
-      postgres-db:
-        condition: service_healthy
-      redis-cache:
-        condition: service_healthy
-
-  ai-agent-service:
-    <<: *ai-agent-base
-    profiles: ["agent"]
-    container_name: ai-postcard-agent
+      - ./src/gateway-service/app:/app/app  # 只挂载源代码，不挂载虚拟环境
     ports:
-      - "8001:8000"
-    # 使用Dockerfile.dev中定义的CMD，它会安装requirements.txt中的所有依赖
+      - "8083:8000"
+    profiles:
+      - gateway
+      - all
 
-  ai-agent-service-tests:
-    <<: *ai-agent-base
-    profiles: ["agent-tests"]
-    container_name: ai-postcard-agent-tests
-    command: pytest -v
+  # --- Infrastructure Services ---
+  postgres:
+    image: postgres:15-alpine
+    container_name: ai-postcard-postgres
+    environment:
+      - POSTGRES_DB=${DB_NAME:-ai_postcard}
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
 
-  ai-agent-service-script:
-    <<: *ai-agent-base
-    profiles: ["agent-script"]
-    container_name: ai-postcard-agent-script
-    # 允许通过环境变量动态传入要执行的命令
-    command: sh -c "${SCRIPT_COMMAND:-echo 'No command provided. Exiting.'}"
+  redis:
+    image: redis:7-alpine
+    container_name: ai-postcard-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
 
 # =============================================================================
 # 数据卷定义
@@ -214,3 +177,5 @@ volumes:
 networks:
   default:
     name: ai-postcard-network
+  app-network:
+    name: ai-postcard-app-network

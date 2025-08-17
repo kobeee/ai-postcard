@@ -21,43 +21,38 @@ alwaysApply: true
 
 ## 3. 依赖变更自动感知与更新
 
-**核心原则**：新增依赖必须能被自动感知并更新到运行环境中，无需手动重启或重建。
+**核心原则**：新增的 Python 依赖必须通过重建 Docker 镜像来更新到运行环境中，以确保环境的绝对一致性。代码热更新只针对源代码文件。
 
-- **Python 服务依赖更新**：
-  - 当 `requirements.txt` 发生变更时，通过卷挂载的 `.venv` 虚拟环境会自动同步
-  - 在主机执行 `pip install <new-package>` 后，容器内立即可用
-  - 更新 `requirements.txt`: `pip freeze > requirements.txt`
-
-- **Node.js 服务依赖更新**：
-  - 当 `package.json` 发生变更时，通过卷挂载的 `node_modules` 会自动同步
-  - 在主机执行 `npm install <new-package>` 后，容器内立即可用
-  - 热重载工具（如 `nodemon`）会自动检测变化并重启服务
+- **Python 服务依赖更新工作流**:
+  1.  开发者在**主机**上修改对应服务的 `requirements.txt` 文件。
+  2.  开发者**必须**运行 `docker-compose build <service-name>` 来重新构建服务的镜像。这会将新的依赖安装到容器内置的 `.venv` 中。
+  3.  重新启动服务 (`sh scripts/dev.sh up <profile>`)。容器将使用包含最新依赖的新镜像。
 
 ## 4. 自动化测试与构建环境
 
 **核心原则**：所有运行和测试必须在容器化环境中自动进行，确保环境一致性。
 
 - **自动容器化执行**：
-  - 任何代码运行、测试、脚本执行都必须通过 `sh scripts/dev.sh` 在容器中进行
-  - 禁止在主机直接运行业务代码，除非是依赖管理操作
-  - **示例**: `sh scripts/dev.sh up agent-tests` 而不是在主机运行 `pytest`
+  - 任何代码运行、测试、脚本执行都必须通过 `sh scripts/dev.sh` 在容器中进行。
+  - 禁止在主机直接运行业务代码，除非是 `setup-dev-env.sh` 等环境初始化脚本。
+  - **示例**: `sh scripts/dev.sh up agent-tests` 而不是在主机运行 `pytest`。
 
 - **热重载与实时同步**：
-  - 代码修改后无需手动重启，通过卷挂载实现实时同步
-  - 容器内的热重载工具自动检测变化并重新加载
-  - 依赖安装在主机进行，通过卷挂载同步到容器
+  - **源代码**的修改通过卷挂载（例如 `src/user-service/app:/app/app`）实现实时同步。
+  - 容器内的 `uvicorn --reload` 会自动检测源代码变化并重新加载服务。
+  - **依赖**的变更**不会**自动同步，必须通过重建镜像来更新。
 
 ## 5. 开发环境生命周期管理
 
 - **环境初始化**：
-  - 首次启动必须运行 `sh scripts/setup-dev-env.sh` 初始化环境
-  - 自动创建虚拟环境、安装依赖、验证配置
+  - 首次启动或环境损坏时，运行 `sh scripts/setup-dev-env.sh` 初始化**本地 IDE 支持环境**。
+  - 该脚本为本地 IDE（如 VS Code）创建 `.venv`，用于代码补全和静态检查，**此 `.venv` 不被容器使用**。
 
 - **日常开发循环**：
-  1. 修改代码 → 自动热重载生效
-  2. 添加依赖 → 在主机安装 → 容器自动同步
-  3. 运行测试 → `sh scripts/dev.sh up <service>-tests`
-  4. 查看日志 → `sh scripts/dev.sh logs <service>`
+  1. 修改代码 (`.py` 文件) → `uvicorn` 在容器内自动热重载。
+  2. 添加依赖 (`requirements.txt` 文件) → 在主机修改文件 → 运行 `docker-compose build <service>` → 重启服务。
+  3. 运行测试 → `sh scripts/dev.sh up <service>-tests`。
+  4. 查看日志 → `sh scripts/dev.sh logs <service>`。
 
 ## 6. 自动化环境资源管理
 
@@ -82,10 +77,10 @@ alwaysApply: true
 
 作为 AI 助手，在协助开发时，你必须自动感知并执行以上规则：
 
-- **环境准备**：在执行任何开发任务前，确保容器环境已启动
-- **依赖管理**：新增依赖时，在主机安装并更新配置文件
-- **代码执行**：所有业务代码运行必须在容器中进行
-- **测试执行**：使用 `sh scripts/dev.sh up <service>-tests` 运行测试
-- **构建更新**：代码变更后使用 `--build` 标志重新构建镜像
-- **环境一致性**：确保开发、测试、生产环境的一致性
-- **自动清理**：任务完成后必须自动执行 `sh scripts/dev.sh down` 关闭环境
+- **环境准备**：在执行任何开发任务前，确保容器环境已启动。
+- **依赖管理**：新增依赖时，在主机更新 `requirements.txt`，然后指导进行镜像重建。
+- **代码执行**：所有业务代码运行必须在容器中进行。
+- **测试执行**：使用 `sh scripts/dev.sh up <service>-tests` 运行测试。
+- **构建更新**：当 `requirements.txt` 发生变更后，使用 `docker-compose build <service-name>` 重新构建镜像。
+- **环境一致性**：确保开发、测试、生产环境的一致性。
+- **自动清理**：任务完成后必须自动执行 `sh scripts/dev.sh down` 关闭环境。

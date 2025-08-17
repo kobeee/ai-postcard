@@ -96,31 +96,47 @@ app.include_router(
     tags=["AI代码生成"]
 )
 
-# 添加静态文件服务，用于托管前端应用
+# 添加静态文件服务，用于托管前端构建产物
 import os
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(static_dir):
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
-
-# 添加lovart.ai模拟器的根路由
-@app.get("/lovart-sim")
-async def lovart_simulator():
-    """重定向到lovart.ai模拟器页面"""
-    from fastapi.responses import FileResponse
-    static_file = os.path.join(static_dir, "index.html")
-    if os.path.exists(static_file):
-        return FileResponse(static_file)
-    else:
-        return {"error": "前端文件未找到"}
+    # 先定义路由，再挂载静态文件（避免路由冲突）
+    
+    # 托管前端应用的根路由
+    @app.get("/")
+    async def serve_frontend():
+        """托管前端应用"""
+        from fastapi.responses import FileResponse
+        index_file = os.path.join(static_dir, "index.html")
+        if os.path.exists(index_file):
+            return FileResponse(index_file)
+        else:
+            return {"message": "AI Agent Service is running", "service": "ai-agent-service", "status": "healthy", "note": "前端未构建"}
+    
+    # 兼容旧的lovart-sim路由
+    @app.get("/lovart-sim")
+    async def lovart_simulator():
+        """重定向到lovart.ai模拟器页面"""
+        from fastapi.responses import FileResponse
+        index_file = os.path.join(static_dir, "index.html")
+        if os.path.exists(index_file):
+            return FileResponse(index_file)
+        else:
+            return {"error": "前端文件未找到，请先构建前端: cd app/frontend && npm run build"}
+    
+    # 挂载静态文件，这样 /assets/xxx.js 可以直接访问
+    app.mount("/assets", StaticFiles(directory=os.path.join(static_dir, "assets")), name="assets")
+else:
+    main_logger.warning("静态文件目录不存在，前端可能未构建")
 
 class HealthResponse(BaseModel):
     status: str
     service: str
     environment: str
 
-@app.get("/")
+@app.get("/health-check")
 async def root():
-    """根路径 - 基础健康检查"""
+    """健康检查API"""
     return {
         "message": "AI Agent Service is running",
         "service": "ai-agent-service",
