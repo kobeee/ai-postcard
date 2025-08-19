@@ -55,12 +55,17 @@ class ClaudeCodeProvider(BaseCodeProvider):
             system_prompt = self._build_system_prompt()
             
             # Claude Code SDK配置 - 基于官方文档最佳实践
+            # 设置工作目录为AI生成文件的专用目录，避免与前端文件冲突
+            # 与main.py中的static_dir保持一致：/app/app/static/generated
+            generated_dir = "/app/app/static/generated"
+            os.makedirs(generated_dir, exist_ok=True)  # 确保目录存在
+            
             options = ClaudeCodeOptions(
                 system_prompt=system_prompt,
                 max_turns=3,
-                allowed_tools=["Read", "WebSearch", "Bash"],
-                permission_mode="bypassPermissions",  # 绕过权限检查，直接生成代码
-                cwd="/app"  # 设置工作目录
+                allowed_tools=["Write", "Read", "Edit"],  # 使用Write、Read、Edit工具用于文件生成
+                permission_mode="acceptEdits",  # 接受编辑模式，允许代码生成
+                cwd=generated_dir  # 设置为AI生成文件专用目录
             )
             
             logger.info("🔧 创建Claude SDK客户端...")
@@ -79,84 +84,177 @@ class ClaudeCodeProvider(BaseCodeProvider):
                 markdown_content = []
                 
                 # 流式接收响应
+                current_stream_buffer = ""  # 用于累积流式内容
+                
                 async for message in client.receive_response():
                     logger.debug(f"📨 收到消息: {type(message).__name__}")
                     
-                    # 🔍 DEBUG: 打印完整消息结构
-                    logger.info(f"🔍 DEBUG - 消息类型: {type(message).__name__}")
-                    logger.info(f"🔍 DEBUG - 消息属性: {dir(message)}")
-                    if hasattr(message, '__dict__'):
-                        logger.info(f"🔍 DEBUG - 消息内容: {message.__dict__}")
+                    # 🔍 DEBUG模式 - 详细消息分析（仅在需要时启用）
+                    debug_mode = logger.isEnabledFor(logging.DEBUG)
+                    if debug_mode:
+                        logger.info(f"🔍 DEBUG - 消息类型: {type(message).__name__}")
+                        logger.info(f"🔍 DEBUG - 消息属性: {[attr for attr in dir(message) if not attr.startswith('_')]}")
+                        if hasattr(message, 'content'):
+                            logger.info(f"🔍 DEBUG - 消息内容: {getattr(message, '__dict__', 'No dict available')}")
                     
                     # 处理消息内容
                     if hasattr(message, 'content') and message.content:
-                        logger.info(f"🔍 DEBUG - content类型: {type(message.content)}, 长度: {len(message.content) if hasattr(message.content, '__len__') else 'N/A'}")
-                        
                         for i, block in enumerate(message.content):
-                            logger.info(f"🔍 DEBUG - Block {i}: 类型={type(block).__name__}, 属性={dir(block)}")
-                            if hasattr(block, '__dict__'):
-                                logger.info(f"🔍 DEBUG - Block {i} 内容: {block.__dict__}")
-                            
                             if hasattr(block, 'text') and block.text:
                                 text = block.text
-                                logger.info(f"🔍 DEBUG - Block {i} text长度: {len(text)}")
-                                logger.info(f"🔍 DEBUG - Block {i} text内容: {text[:500]}...")  # 只显示前500字符
+                                current_stream_buffer += text
                                 
-                                # 判断是否为代码块
+                                # 实时流式输出文本内容
                                 if self._contains_code(text):
                                     generated_code_chunks.append(text)
-                                    logger.info(f"✅ 发现代码块 {len(generated_code_chunks)}，内容: {text[:200]}...")
-                                    yield {"type": "code", "content": text, "phase": "coding"}
+                                    logger.info(f"✅ 流式代码块: {text[:100]}...")
+                                    
+                                    # 尝试实时提取和更新文件
+                                    partial_files = self._extract_files_info([current_stream_buffer])
+                                    
+                                    yield {
+                                        "type": "code_stream", 
+                                        "content": text, 
+                                        "phase": "coding",
+                                        "partial_files": partial_files,
+                                        "buffer_length": len(current_stream_buffer)
+                                    }
                                 else:
                                     markdown_content.append(text)
-                                    logger.info(f"📝 发现markdown内容: {text[:200]}...")
-                                    yield {"type": "markdown", "content": text, "phase": "thinking"}
+                                    logger.info(f"📝 流式markdown: {text[:100]}...")
+                                    yield {"type": "markdown_stream", "content": text, "phase": "thinking"}
                     
-                # 处理工具调用 - 提取文件名信息
-                if hasattr(message, 'content') and message.content:
-                    for block in message.content:
-                        if hasattr(block, 'name') and block.name == 'Write':
-                            # 从Write工具调用中提取文件名
-                            if hasattr(block, 'input') and 'file_path' in block.input:
-                                file_path = block.input['file_path']
-                                file_name = file_path.split('/')[-1]  # 提取文件名
-                                logger.info(f"🔧 Claude尝试写入文件: {file_name}")
+                    # 处理工具调用和工具结果 - 提取文件名信息
+                    if hasattr(message, 'content') and message.content:
+                        for block in message.content:
+                            # 处理工具调用 (ToolUseBlock)
+                            if hasattr(block, 'name') and block.name == 'Write':
+                                # 从Write工具调用中提取文件名
+                                if hasattr(block, 'input') and 'file_path' in block.input:
+                                    file_path = block.input['file_path']
+                                    file_name = file_path.split('/')[-1]  # 提取文件名
+                                    logger.info(f"🔧 Claude尝试写入文件: {file_name}")
+                                    
+                                    # 记录文件名信息，供后续使用
+                                    if not hasattr(self, '_detected_filenames'):
+                                        self._detected_filenames = []
+                                    self._detected_filenames.append(file_name)
+                                    
+                                    yield {
+                                        "type": "tool_use", 
+                                        "content": f"🔧 生成文件: {file_name}",
+                                        "tool_name": "Write",
+                                        "file_name": file_name
+                                    }
+                            
+                            # 处理工具结果 (ToolResultBlock) - 可能包含文件创建的反馈
+                            elif hasattr(block, 'content') and hasattr(block, 'tool_use_id'):
+                                tool_result_content = block.content
+                                logger.info(f"🔧 工具执行结果: {tool_result_content}")
                                 
-                                # 记录文件名信息，供后续使用
-                                if not hasattr(self, '_detected_filenames'):
-                                    self._detected_filenames = []
-                                self._detected_filenames.append(file_name)
-                                
-                                yield {
-                                    "type": "tool_use", 
-                                    "content": f"🔧 生成文件: {file_name}",
-                                    "tool_name": "Write",
-                                    "file_name": file_name
-                                }
+                                # 从工具结果中提取文件信息
+                                if "File created successfully at:" in tool_result_content:
+                                    import re
+                                    file_path_match = re.search(r"File created successfully at:\s*(.+)", tool_result_content)
+                                    if file_path_match:
+                                        raw_file_path = file_path_match.group(1).strip()
+                                        
+                                        # 处理相对路径：如果Claude返回相对路径，需要基于generated_dir构建完整路径
+                                        if not os.path.isabs(raw_file_path):
+                                            # 相对路径，基于工作目录构建完整路径
+                                            full_file_path = os.path.join(generated_dir, raw_file_path)
+                                        else:
+                                            # 绝对路径直接使用
+                                            full_file_path = raw_file_path
+                                        
+                                        file_name = os.path.basename(full_file_path)
+                                        logger.info(f"✅ 文件创建成功: {file_name}")
+                                        logger.info(f"📁 原始路径: {raw_file_path}")
+                                        logger.info(f"📁 完整路径: {full_file_path}")
+                                        
+                                        # 读取文件内容并确保复制到预期路径
+                                        try:
+                                            if os.path.exists(full_file_path):
+                                                with open(full_file_path, 'r', encoding='utf-8') as f:
+                                                    file_content = f.read()
+                                                    logger.info(f"📄 成功读取文件内容: {file_name} ({len(file_content)} 字符)")
+                                                    
+                                                    # 🔧 强制确保文件在预期路径下存在
+                                                    self._ensure_file_in_target_path(file_name, file_content, generated_dir)
+                                                    
+                                                    yield {
+                                                        "type": "file_created",
+                                                        "file_name": file_name,
+                                                        "file_content": file_content,
+                                                        "content": f"✅ 文件创建完成: {file_name}"
+                                                    }
+                                            else:
+                                                logger.warning(f"⚠️ 文件不存在: {full_file_path}")
+                                                # 尝试在当前工作目录查找
+                                                alt_paths = [
+                                                    os.path.join(os.getcwd(), file_name),
+                                                    os.path.join("/app", file_name),
+                                                    file_name  # 直接使用文件名
+                                                ]
+                                                
+                                                file_found = False
+                                                for alt_path in alt_paths:
+                                                    if os.path.exists(alt_path):
+                                                        logger.info(f"🔍 在备用路径找到文件: {alt_path}")
+                                                        with open(alt_path, 'r', encoding='utf-8') as f:
+                                                            file_content = f.read()
+                                                            yield {
+                                                                "type": "file_created",
+                                                                "file_name": file_name,
+                                                                "file_content": file_content,
+                                                                "content": f"✅ 文件创建完成: {file_name}"
+                                                            }
+                                                        file_found = True
+                                                        break
+                                                
+                                                if not file_found:
+                                                    yield {
+                                                        "type": "tool_result", 
+                                                        "content": f"⚠️ 文件创建完成但无法读取: {file_name}",
+                                                        "file_name": file_name,
+                                                        "file_path": full_file_path
+                                                    }
+                                        except Exception as e:
+                                            logger.error(f"❌ 读取文件失败: {file_name} - {str(e)}")
+                                            yield {
+                                                "type": "tool_result", 
+                                                "content": f"⚠️ 文件创建完成但读取失败: {file_name}",
+                                                "file_name": file_name,
+                                                "file_path": full_file_path
+                                            }
                     
                     # 处理结果消息
                     if type(message).__name__ == "ResultMessage":
                         logger.info("✅ 收到结果消息，生成完成")
                         
-                        # 🔍 DEBUG: 分析收集到的代码块
-                        logger.info(f"🔍 DEBUG - 总共收集到 {len(generated_code_chunks)} 个代码块")
-                        for i, chunk in enumerate(generated_code_chunks):
-                            logger.info(f"🔍 DEBUG - 代码块 {i+1}: 长度={len(chunk)}, 内容前200字符: {chunk[:200]}...")
-                        
-                        logger.info(f"🔍 DEBUG - 总共收集到 {len(markdown_content)} 个markdown块")
-                        for i, md in enumerate(markdown_content):
-                            logger.info(f"🔍 DEBUG - Markdown块 {i+1}: 长度={len(md)}, 内容前200字符: {md[:200]}...")
-                        
                         # 提取最终代码
                         final_code = self._extract_and_clean_code(generated_code_chunks)
-                        logger.info(f"🔍 DEBUG - 最终代码长度: {len(final_code)}")
-                        logger.info(f"🔍 DEBUG - 最终代码内容: {final_code[:500]}...")
+                        logger.info(f"✅ 最终代码生成完成，长度: {len(final_code)} 字符")
                         
                         yield {"type": "status", "content": "✅ 代码生成完成！"}
                         
-                        # 🔍 DEBUG: 提取并返回文件信息
+                        # 提取并返回文件信息
                         extracted_files = self._extract_files_info(generated_code_chunks)
-                        logger.info(f"🔍 DEBUG - 提取到的文件: {list(extracted_files.keys())}")
+                        
+                        # 🔍 扫描generated目录中实际存在的文件（兜底方案）
+                        actual_files = self._scan_generated_files(generated_dir)
+                        if actual_files:
+                            # 合并实际文件和提取的文件
+                            for filename, content in actual_files.items():
+                                if filename not in extracted_files:
+                                    extracted_files[filename] = content
+                                    logger.info(f"📁 从目录扫描到新文件: {filename}")
+                        
+                        # 🔧 确保所有文件都在正确的位置（关键步骤）
+                        for filename, content in extracted_files.items():
+                            self._ensure_file_in_target_path(filename, content, generated_dir)
+                        
+                        logger.info(f"📁 最终文件列表: {list(extracted_files.keys())}")
                         
                         yield {
                             "type": "complete",
@@ -191,26 +289,56 @@ class ClaudeCodeProvider(BaseCodeProvider):
             yield {"type": "error", "content": f"代码生成失败: {str(e)}"}
     
     def _build_system_prompt(self) -> str:
-        """构建系统提示 - 非交互式模式"""
+        """构建系统提示 - 非交互式模式，强调生成高质量可运行代码"""
         return """
-你是一个专业的前端代码生成助手。
+你是一个专业的前端代码生成助手。当前工作目录已设置为/app/static/generated。
 
-**工作模式**：
-- 直接根据用户需求生成完整可运行的前端代码
-- 必须在需要时调用工具（如Write）将代码写入对应文件，而不是只输出代码文本
-- 代码和文件创建要同步进行，确保每个文件都通过工具创建
-- 不要添加无关的解释性文字
-- 遇到多文件项目时，自动拆分并分别创建
+**核心工作模式**：
+- 根据用户需求生成完整可运行、可交互的前端代码
+- **必须使用Write工具将代码写入文件到当前工作目录**
+- 使用相对路径创建文件，如: index.html, style.css, script.js
+- 同时在代码块中输出代码内容，供前端解析和展示
 
-**输出要求**：
-- 使用标准的代码块格式（```html、```css、```javascript等）包裹代码
-- 生成的代码必须能在浏览器中直接运行
-- 包含完整的HTML结构、CSS样式和JavaScript逻辑
-- 代码风格现代化，用户体验友好
-- 适当的注释说明关键功能
-- 不要输出“我来为你创建...”等说明性文字
+**代码质量要求**：
+- **生成的代码必须完全可运行**：所有按钮、输入框、交互功能都要正常工作
+- **事件处理完整**：确保所有点击、输入、键盘事件都有正确的处理函数
+- **功能逻辑完善**：游戏规则、计算逻辑、状态管理要准确实现
+- **UI响应正常**：界面更新、状态显示、用户反馈要及时响应
+- **错误处理健全**：包含适当的输入验证和错误提示
 
-请根据用户需求直接生成代码，并通过工具创建文件，无需询问确认。"""
+**重要：文件创建要求**：
+- **每次都必须使用Write工具创建实际的文件**
+- 只使用文件名，不要添加路径前缀
+- 正确示例：index.html, style.css, script.js
+- 错误示例：/tmp/index.html, ./files/style.css, /app/static/generated/script.js
+
+**工作流程**：
+1. 分析用户需求，理解所有功能要求
+2. 设计完整的代码架构，确保所有功能都能实现
+3. **使用Write工具创建文件(关键步骤)**
+4. 在代码块中展示代码内容
+
+**代码实现规范**：
+- 使用标准的代码块格式（```html、```css、```javascript等）
+- 生成完整可运行的HTML应用，包含所有必需的DOM元素
+- 包含现代化的CSS样式，确保界面美观易用
+- JavaScript代码要完整实现所有交互逻辑，不能有未定义的函数或变量
+- 所有事件监听器都要正确绑定，确保用户操作有响应
+- 适当的注释说明关键功能和算法逻辑
+
+**多文件项目处理**：
+- 自动识别并创建多个相关文件
+- HTML文件自动引用CSS和JS文件
+- 确保文件间的依赖关系正确
+- 所有文件协同工作，实现完整功能
+
+**特别注意**：
+- 生成游戏类应用时，确保所有游戏逻辑都完整实现
+- 生成工具类应用时，确保所有计算和操作都正确执行
+- 生成表单类应用时，确保所有验证和提交逻辑都工作正常
+- 测试关键交互路径，确保用户能够正常使用所有功能
+
+请直接开始代码生成，使用Write工具创建文件。"""
 
     def _contains_code(self, text: str) -> bool:
         """判断文本是否包含代码块"""
@@ -244,68 +372,230 @@ class ClaudeCodeProvider(BaseCodeProvider):
         return matches >= 3  # 至少包含3个代码特征才认为是代码
 
     def _extract_files_info(self, code_chunks: list) -> dict:
-        """提取文件信息，返回文件名和内容的映射，自动去除代码块标记"""
+        """改进的文件提取逻辑，支持更好的代码质量和准确提取"""
         if not code_chunks:
             return {}
+        
         import re
         full_content = '\n'.join(code_chunks)
         extracted_files = {}
-        # 提取带文件名的代码块
+        
+        # 🔍 增强的文件模式匹配
         file_patterns = [
-            r'```([\w\-_.]+\.[\w]+)\s*\n(.*?)```',  # ```filename.ext
-            r'```\s*\n([\w\-_.]+\.[\w]+)\s*\n(.*?)```'  # ```\nfilename.ext
+            # 标准文件名格式
+            r'```([\w\-_.]+\.(?:html|css|js|json|md|txt))\s*\n(.*?)```',
+            # 带语言标识但在注释中含文件名
+            r'```(\w+)\s*\n(?:\/\*.*?([\w\-_.]+\.(?:html|css|js)).*?\*\/\s*)?(.*?)```',
+            # Write工具调用模式
+            r'file_path["\']:\s*["\']([^"\']+)["\'].*?content["\']:\s*["\']([^"\']+)["\']',
         ]
+        
         for pattern in file_patterns:
             matches = re.findall(pattern, full_content, re.DOTALL | re.IGNORECASE)
             for match in matches:
-                if isinstance(match, tuple) and len(match) == 2:
-                    filename, content = match
-                    if filename and content.strip():
-                        # 去除所有代码块标记
-                        clean_content = re.sub(r'^```[\w\-_.]*\n?', '', content.strip())
-                        clean_content = re.sub(r'```$', '', clean_content.strip())
-                        extracted_files[filename] = clean_content.strip()
-                        logger.info(f"🔍 提取文件: {filename} ({len(clean_content)} 字符)")
-        # 如果没有找到带文件名的代码块，使用默认文件名
+                if isinstance(match, tuple):
+                    if len(match) == 2:  # 标准格式 (filename, content)
+                        filename, content = match
+                    elif len(match) == 3:  # 带语言标识 (lang, filename, content)
+                        lang, filename, content = match
+                        if not filename:  # 如果没有文件名，根据语言推断
+                            filename = self._get_default_filename(lang)
+                    else:
+                        continue
+                    
+                    if filename and content and content.strip():
+                        # 🧹 深度清理代码内容
+                        clean_content = self._deep_clean_code(content, filename)
+                        if clean_content:
+                            extracted_files[filename] = clean_content
+                            logger.info(f"✅ 提取高质量文件: {filename} ({len(clean_content)} 字符)")
+        
+        # 🎯 智能默认文件检测
         if not extracted_files:
-            detected_filename = None
-            if hasattr(self, '_detected_filenames') and self._detected_filenames:
-                detected_filename = self._detected_filenames[0]
-                logger.info(f"🔍 使用检测到的文件名: {detected_filename}")
-            html_match = re.search(r'```(?:html)?\s*\n(.*?)```', full_content, re.DOTALL)
-            if html_match:
-                filename = detected_filename if detected_filename and detected_filename.endswith('.html') else 'index.html'
-                clean_content = re.sub(r'^```[\w\-_.]*\n?', '', html_match.group(1).strip())
-                clean_content = re.sub(r'```$', '', clean_content.strip())
-                extracted_files[filename] = clean_content.strip()
-            css_match = re.search(r'```css\s*\n(.*?)```', full_content, re.DOTALL)
-            if css_match:
-                filename = detected_filename if detected_filename and detected_filename.endswith('.css') else 'style.css'
-                clean_content = re.sub(r'^```[\w\-_.]*\n?', '', css_match.group(1).strip())
-                clean_content = re.sub(r'```$', '', clean_content.strip())
-                extracted_files[filename] = clean_content.strip()
-            js_match = re.search(r'```(?:javascript|js)\s*\n(.*?)```', full_content, re.DOTALL)
-            if js_match:
-                filename = detected_filename if detected_filename and detected_filename.endswith('.js') else 'script.js'
-                clean_content = re.sub(r'^```[\w\-_.]*\n?', '', js_match.group(1).strip())
-                clean_content = re.sub(r'```$', '', clean_content.strip())
-                extracted_files[filename] = clean_content.strip()
+            extracted_files = self._extract_by_content_analysis(full_content)
+        
+        # 🔧 文件关联和依赖处理
+        extracted_files = self._resolve_file_dependencies(extracted_files)
+        
         return extracted_files
+    
+    def _deep_clean_code(self, content: str, filename: str) -> str:
+        """深度清理代码内容，确保高质量输出"""
+        import re
+        
+        # 基础清理
+        clean_content = content.strip()
+        
+        # 移除代码块标记
+        clean_content = re.sub(r'^```[\w\-_.]*\s*\n?', '', clean_content)
+        clean_content = re.sub(r'\n?```\s*$', '', clean_content)
+        
+        # 移除多余的注释和说明性文字
+        clean_content = re.sub(r'^//\s*文件名?[:：]\s*.*$', '', clean_content, flags=re.MULTILINE)
+        clean_content = re.sub(r'^<!--\s*文件名?[:：]\s*.*?-->', '', clean_content, flags=re.MULTILINE)
+        
+        # 根据文件类型进行特定清理
+        if filename.endswith('.html'):
+            clean_content = self._clean_html_content(clean_content)
+        elif filename.endswith('.css'):
+            clean_content = self._clean_css_content(clean_content)
+        elif filename.endswith('.js'):
+            clean_content = self._clean_js_content(clean_content)
+        
+        return clean_content.strip()
+    
+    def _clean_html_content(self, content: str) -> str:
+        """清理HTML内容"""
+        import re
+        
+        # 确保有完整的HTML结构
+        if not content.startswith('<!DOCTYPE') and not content.startswith('<html'):
+            if '<head>' not in content and '<body>' not in content:
+                # 简单HTML片段，包装为完整结构
+                content = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI生成应用</title>
+</head>
+<body>
+    {content}
+</body>
+</html>"""
+        
+        # 移除重复的DOCTYPE声明
+        content = re.sub(r'(<!DOCTYPE[^>]*>\s*)+', '<!DOCTYPE html>\n', content, flags=re.IGNORECASE)
+        
+        return content
+    
+    def _clean_css_content(self, content: str) -> str:
+        """清理CSS内容"""
+        import re
+        
+        # 移除重复的样式声明
+        content = re.sub(r'(\s*([^{]+\{[^}]*\})\s*)+', r'\2', content)
+        
+        # 格式化CSS
+        content = re.sub(r'\s*{\s*', ' {\n    ', content)
+        content = re.sub(r';\s*', ';\n    ', content)
+        content = re.sub(r'\s*}\s*', '\n}\n\n', content)
+        
+        return content.strip()
+    
+    def _clean_js_content(self, content: str) -> str:
+        """清理JavaScript内容"""
+        import re
+        
+        # 移除重复的函数声明
+        content = re.sub(r'(function\s+(\w+)[^{]*\{[^}]*\})\s*\1+', r'\1', content)
+        
+        # 确保正确的分号使用
+        content = re.sub(r'([^;])\n', r'\1;\n', content)
+        
+        return content
+    
+    def _get_default_filename(self, lang: str) -> str:
+        """根据语言获取默认文件名"""
+        lang_map = {
+            'html': 'index.html',
+            'css': 'style.css', 
+            'javascript': 'script.js',
+            'js': 'script.js',
+            'json': 'data.json'
+        }
+        return lang_map.get(lang.lower(), 'file.txt')
+    
+    def _extract_by_content_analysis(self, content: str) -> dict:
+        """基于内容分析提取文件"""
+        import re
+        extracted_files = {}
+        
+        # HTML内容检测
+        html_patterns = [
+            r'```(?:html)?\s*\n(.*?)```',
+            r'(<!DOCTYPE.*?</html>)',
+            r'(<html.*?</html>)'
+        ]
+        
+        for pattern in html_patterns:
+            match = re.search(pattern, content, re.DOTALL | re.IGNORECASE)
+            if match:
+                html_content = self._deep_clean_code(match.group(1), 'index.html')
+                if html_content:
+                    extracted_files['index.html'] = html_content
+                    break
+        
+        # CSS内容检测
+        css_match = re.search(r'```css\s*\n(.*?)```', content, re.DOTALL)
+        if css_match:
+            css_content = self._deep_clean_code(css_match.group(1), 'style.css')
+            if css_content:
+                extracted_files['style.css'] = css_content
+        
+        # JavaScript内容检测
+        js_match = re.search(r'```(?:javascript|js)\s*\n(.*?)```', content, re.DOTALL)
+        if js_match:
+            js_content = self._deep_clean_code(js_match.group(1), 'script.js')
+            if js_content:
+                extracted_files['script.js'] = js_content
+        
+        return extracted_files
+    
+    def _resolve_file_dependencies(self, files: dict) -> dict:
+        """解析和处理文件依赖关系"""
+        if 'index.html' in files:
+            html_content = files['index.html']
+            
+            # 如果HTML中没有引用CSS和JS，但存在这些文件，自动添加引用
+            if 'style.css' in files and '<link' not in html_content and '<style>' not in html_content:
+                # 在head中添加CSS链接
+                if '<head>' in html_content:
+                    html_content = html_content.replace('<head>', '<head>\n    <link rel="stylesheet" href="style.css">')
+                files['index.html'] = html_content
+            
+            if 'script.js' in files and '<script' not in html_content:
+                # 在body结束前添加JS引用
+                if '</body>' in html_content:
+                    html_content = html_content.replace('</body>', '    <script src="script.js"></script>\n</body>')
+                files['index.html'] = html_content
+        
+        return files
+    
+    def _scan_generated_files(self, generated_dir: str) -> dict:
+        """扫描生成目录中的实际文件（兜底方案）"""
+        files = {}
+        try:
+            if os.path.exists(generated_dir):
+                for filename in os.listdir(generated_dir):
+                    file_path = os.path.join(generated_dir, filename)
+                    if os.path.isfile(file_path):
+                        try:
+                            with open(file_path, 'r', encoding='utf-8') as f:
+                                content = f.read()
+                                files[filename] = content
+                                logger.info(f"📄 扫描到文件: {filename} ({len(content)} 字符)")
+                        except Exception as e:
+                            logger.warning(f"⚠️ 读取文件失败: {filename} - {str(e)}")
+        except Exception as e:
+            logger.error(f"❌ 扫描目录失败: {generated_dir} - {str(e)}")
+        
+        return files
 
     def _extract_and_clean_code(self, code_chunks: list) -> str:
         """提取和清理代码，自动去除代码块标记"""
-        logger.info(f"🔍 DEBUG - _extract_and_clean_code: 输入 {len(code_chunks)} 个代码块")
+        logger.info(f"📝 处理 {len(code_chunks)} 个代码块")
         if not code_chunks:
             logger.warning("⚠️ 没有代码块，返回默认HTML")
             return "<html><head><title>生成失败</title></head><body><h1>未能生成有效代码</h1></body></html>"
         import re
         # 合并所有代码块
         full_content = '\n'.join(code_chunks)
-        logger.info(f"🔍 DEBUG - 合并后内容长度: {len(full_content)}")
-        logger.info(f"🔍 DEBUG - 合并后内容前1000字符: {full_content[:1000]}...")
+        logger.info(f"📝 合并后内容长度: {len(full_content)} 字符")
+        
         # 检查是否包含HTML结构，但需要精确提取
         if '<!DOCTYPE' in full_content or '<html' in full_content:
-            logger.info("✅ 发现完整HTML结构，开始精确提取")
+            logger.info("✅ 发现完整HTML结构，开始提取")
             html_start = full_content.find('<!DOCTYPE')
             if html_start == -1:
                 html_start = full_content.find('<html')
@@ -314,16 +604,15 @@ class ClaudeCodeProvider(BaseCodeProvider):
                 # 移除markdown代码块标记
                 clean_html = re.sub(r'^```[\w\-_.]*\n?', '', clean_html)
                 clean_html = re.sub(r'```$', '', clean_html)
-                logger.info(f"🔍 精确提取HTML，长度: {len(clean_html)}")
-                logger.info(f"🔍 HTML开头: {clean_html[:200]}...")
+                logger.info(f"✅ HTML提取完成，长度: {len(clean_html)} 字符")
                 return clean_html
         
         # 否则尝试提取代码块
         import re
         
-        logger.info("🔍 尝试从代码块中提取HTML/CSS/JS...")
+        logger.info("📝 尝试从代码块中提取HTML/CSS/JS...")
         
-        # 🔍 更强大的代码块提取逻辑
+        # 更强大的代码块提取逻辑
         html_matches = []
         css_matches = []
         js_matches = []
@@ -343,7 +632,6 @@ class ClaudeCodeProvider(BaseCodeProvider):
         
         for pattern in code_block_patterns:
             matches = re.findall(pattern, full_content, re.DOTALL | re.IGNORECASE)
-            logger.info(f"🔍 代码块模式 '{pattern}' 匹配到 {len(matches)} 个结果")
             
             for match in matches:
                 if isinstance(match, tuple) and len(match) == 2:
@@ -356,7 +644,7 @@ class ClaudeCodeProvider(BaseCodeProvider):
                     # 判断第一部分是语言还是文件名
                     if '.' in first_part:  # 包含点号，可能是文件名
                         filename = first_part
-                        logger.info(f"🔍 发现文件: {filename}")
+                        logger.info(f"📁 发现文件: {filename}")
                         extracted_files[filename] = content
                         
                         # 根据文件扩展名分类
@@ -370,51 +658,33 @@ class ClaudeCodeProvider(BaseCodeProvider):
                         language = first_part.lower()
                         if language in ['html', 'htm']:
                             html_matches.append(content)
-                            logger.info(f"🔍 HTML代码块: {content[:100]}...")
                         elif language in ['css']:
                             css_matches.append(content)
-                            logger.info(f"🔍 CSS代码块: {content[:100]}...")
                         elif language in ['javascript', 'js']:
                             js_matches.append(content)
-                            logger.info(f"🔍 JS代码块: {content[:100]}...")
                         else:
                             # 未知语言，尝试根据内容判断
                             if any(tag in content for tag in ['<html', '<body', '<div', '<!DOCTYPE']):
                                 html_matches.append(content)
-                                logger.info(f"🔍 根据内容判断为HTML: {content[:100]}...")
                             elif any(prop in content for prop in ['background:', 'color:', 'font-size:']):
                                 css_matches.append(content)
-                                logger.info(f"🔍 根据内容判断为CSS: {content[:100]}...")
                             elif any(keyword in content for keyword in ['function', 'const', 'let', 'document.']):
                                 js_matches.append(content)
-                                logger.info(f"🔍 根据内容判断为JS: {content[:100]}...")
                 elif isinstance(match, str):  # 简单代码块，没有语言标识
                     content = match.strip()
                     if content:
                         # 根据内容特征判断类型
                         if any(tag in content for tag in ['<html', '<body', '<div', '<!DOCTYPE']):
                             html_matches.append(content)
-                            logger.info(f"🔍 无标识HTML代码块: {content[:100]}...")
                         elif any(prop in content for prop in ['background:', 'color:', 'font-size:']):
                             css_matches.append(content)
-                            logger.info(f"🔍 无标识CSS代码块: {content[:100]}...")
                         elif any(keyword in content for keyword in ['function', 'const', 'let', 'document.']):
                             js_matches.append(content)
-                            logger.info(f"🔍 无标识JS代码块: {content[:100]}...")
                         else:
                             # 默认当作HTML处理
                             html_matches.append(content)
-                            logger.info(f"🔍 默认HTML代码块: {content[:100]}...")
         
-        logger.info(f"🔍 提取结果: HTML={len(html_matches)}, CSS={len(css_matches)}, JS={len(js_matches)}")
-        
-        # 打印提取到的内容
-        for i, html in enumerate(html_matches):
-            logger.info(f"🔍 HTML块 {i+1} 前200字符: {html[:200]}...")
-        for i, css in enumerate(css_matches):
-            logger.info(f"🔍 CSS块 {i+1} 前200字符: {css[:200]}...")
-        for i, js in enumerate(js_matches):
-            logger.info(f"🔍 JS块 {i+1} 前200字符: {js[:200]}...")
+        logger.info(f"📊 提取结果: HTML={len(html_matches)}, CSS={len(css_matches)}, JS={len(js_matches)}")
         
         # 组装完整的HTML文档
         html_content = html_matches[0] if html_matches else ""
@@ -455,6 +725,43 @@ class ClaudeCodeProvider(BaseCodeProvider):
         
         # 兜底：返回原始内容
         return full_content
+
+    def _ensure_file_in_target_path(self, filename: str, content: str, target_dir: str):
+        """
+        强制确保文件在目标路径存在，支持网页预览
+        这是确保文件正确放置的关键方法
+        """
+        
+        target_file_path = os.path.join(target_dir, filename)
+        
+        try:
+            # 确保目标目录存在
+            os.makedirs(target_dir, exist_ok=True)
+            
+            # 强制写入文件内容到目标路径
+            with open(target_file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            # 验证文件存在和内容正确
+            if os.path.exists(target_file_path):
+                with open(target_file_path, 'r', encoding='utf-8') as f:
+                    verify_content = f.read()
+                    if len(verify_content) == len(content):
+                        logger.info(f"✅ 文件确保成功: {target_file_path} ({len(content)} 字符)")
+                        
+                        # 设置文件权限确保可读
+                        os.chmod(target_file_path, 0o644)
+                        
+                        return True
+                    else:
+                        logger.error(f"❌ 文件内容验证失败: {target_file_path}")
+            else:
+                logger.error(f"❌ 文件创建失败: {target_file_path}")
+                
+        except Exception as e:
+            logger.error(f"❌ 确保文件存在时出错: {filename} -> {target_file_path} - {str(e)}")
+            
+        return False
 
     def _build_coding_prompt(self, user_prompt: str) -> str:
         """构建编码提示"""

@@ -49,8 +49,8 @@
       
       <div class="preview-area" v-if="tab==='preview'">
         <iframe 
-          v-if="getMainHtmlContent()" 
-          :srcdoc="getMainHtmlContent()" 
+          v-if="hasMainHtmlFile()" 
+          :src="getPreviewUrl()" 
           class="preview-frame"
           sandbox="allow-scripts"
         ></iframe>
@@ -90,7 +90,9 @@
           <CodeView 
             v-if="getSelectedFileContent()" 
             :code="getSelectedFileContent()" 
-            :lang="getFileLanguage(selectedFile)" 
+            :lang="getFileLanguage(selectedFile)"
+            :enableTyping="true"
+            :autoStart="false"
           />
           <div v-else class="placeholder">
             <div class="placeholder-icon">📝</div>
@@ -118,10 +120,21 @@ const chatListRef = ref(null)
 const wsConnected = ref(false)
 let currentWs = null
 
-// 获取主HTML文件内容（用于预览）
-const getMainHtmlContent = () => {
-  if (!projectFiles || projectFiles.length === 0) return null
+// 检查是否有主HTML文件
+const hasMainHtmlFile = () => {
+  if (!projectFiles || projectFiles.length === 0) return false
   
+  return projectFiles.some(f => 
+    f && f.name && (
+      f.name.toLowerCase().includes('index.html') || 
+      f.name.toLowerCase().includes('main.html') ||
+      f.name.endsWith('.html')
+    )
+  )
+}
+
+// 获取预览URL - 直接使用后端生成的文件
+const getPreviewUrl = () => {
   const mainFile = projectFiles.find(f => 
     f && f.name && (
       f.name.toLowerCase().includes('index.html') || 
@@ -129,7 +142,11 @@ const getMainHtmlContent = () => {
       f.name.endsWith('.html')
     )
   )
-  return mainFile?.content || null
+  
+  if (!mainFile?.name) return ''
+  
+  // 使用后端的generated目录直接访问文件
+  return `/generated/${mainFile.name}?t=${Date.now()}`
 }
 
 // 获取选中文件内容
@@ -195,6 +212,8 @@ const updateProjectFile = (filename, content, generating = false) => {
   if (!filename || typeof filename !== 'string') return
   
   const existingIndex = projectFiles.findIndex(f => f && f.name === filename)
+  const isNewFile = existingIndex < 0
+  
   if (existingIndex >= 0) {
     projectFiles[existingIndex].content = content || ''
     projectFiles[existingIndex].generating = generating
@@ -204,10 +223,39 @@ const updateProjectFile = (filename, content, generating = false) => {
       content: content || '',
       generating: generating
     })
-    // 自动选择第一个文件
-    if (!selectedFile.value) {
-      selectedFile.value = filename
+  }
+  
+  // 🎯 智能文件自动选择逻辑
+  if (isNewFile && !generating) {
+    // 新文件且生成完成时，自动跳转
+    selectedFile.value = filename
+    console.log(`🎯 自动切换到新文件: ${filename}`)
+    
+    // 如果在预览模式且是HTML文件，自动刷新预览
+    if (tab.value === 'preview' && filename.toLowerCase().includes('.html')) {
+      nextTick(() => {
+        console.log('🔄 检测到新HTML文件，准备刷新预览')
+      })
     }
+  } else if (!selectedFile.value) {
+    // 如果没有选中文件，选择第一个
+    selectedFile.value = filename
+  }
+}
+
+// 从服务器获取生成的文件内容
+const fetchGeneratedFile = async (filename) => {
+  try {
+    const response = await fetch(`/generated/${filename}`)
+    if (response.ok) {
+      const content = await response.text()
+      updateProjectFile(filename, content, false)
+      console.log(`✅ 成功获取文件: ${filename}, 内容长度: ${content.length}`)
+    } else {
+      console.warn(`⚠️ 获取文件失败: ${filename}, 状态: ${response.status}`)
+    }
+  } catch (error) {
+    console.error(`❌ 获取文件异常: ${filename}`, error)
   }
 }
 
@@ -315,12 +363,56 @@ const onSend = async () => {
       // 处理不同类型的消息
       if (data.type === 'markdown') {
         addMessage('markdown', data.content)
+      } else if (data.type === 'markdown_stream') {
+        // 流式markdown内容
+        addMessage('markdown', data.content)
       } else if (data.type === 'code' || data.type === 'code_chunk') {
         // 流式代码内容，尝试解析多文件
         const files = parseCodeContent(data.content || '')
         files.forEach(file => {
           updateProjectFile(file.filename, file.content, true)
         })
+      } else if (data.type === 'code_stream') {
+        // 实时流式代码生成
+        addMessage('markdown', `💻 ${data.content}`)
+        
+        // 自动切换到代码预览
+        if (tab.value !== 'code') {
+          tab.value = 'code'
+        }
+        
+        // 处理实时文件更新
+        if (data.partial_files && Object.keys(data.partial_files).length > 0) {
+          Object.entries(data.partial_files).forEach(([filename, content]) => {
+            updateProjectFile(filename, content, true)
+          })
+        } else {
+          // fallback: 解析代码内容
+          const files = parseCodeContent(data.content || '')
+          files.forEach(file => {
+            updateProjectFile(file.filename, file.content, true)
+          })
+        }
+      } else if (data.type === 'tool_result') {
+        // 处理工具执行结果
+        if (data.file_name) {
+          addMessage('status', `📁 ${data.content}`)
+          // 尝试从服务器读取文件内容
+          fetchGeneratedFile(data.file_name)
+        }
+      } else if (data.type === 'file_created') {
+        // 处理文件创建完成事件，直接使用文件内容
+        if (data.file_name && data.file_content) {
+          addMessage('status', `📁 ${data.content}`)
+          updateProjectFile(data.file_name, data.file_content, false)
+          
+          // 暂时不自动切换tab，等代码生成完成后再切换
+          // 只在代码预览模式下显示文件
+          if (tab.value !== 'code') {
+            tab.value = 'code'
+            console.log(`🎯 检测到新文件，切换到代码模式: ${data.file_name}`)
+          }
+        }
       } else if (data.type === 'error') {
         addMessage('error', data.content)
         generating.value = false
@@ -341,6 +433,16 @@ const onSend = async () => {
           })
         }
         addMessage('status', '✅ 代码生成完成！')
+        
+        // 🎯 所有代码完成后才自动跳转到网页预览
+        const hasHtmlFile = projectFiles.some(file => 
+          file && file.name && file.name.toLowerCase().includes('.html')
+        )
+        if (hasHtmlFile && tab.value !== 'preview') {
+          tab.value = 'preview'
+          console.log('🎯 代码生成完成，自动切换到网页预览')
+        }
+        
         if (data.metadata) {
           const meta = data.metadata
           addMessage('markdown', `**生成统计：**\n- 模型: ${meta.model_used}\n- 耗时: ${meta.duration_ms}ms\n- 总Token: ${meta.total_tokens}\n- 成本: $${meta.cost_usd}`)

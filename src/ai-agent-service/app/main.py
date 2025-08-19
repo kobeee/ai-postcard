@@ -96,38 +96,65 @@ app.include_router(
     tags=["AI代码生成"]
 )
 
-# 添加静态文件服务，用于托管前端构建产物
+# 添加静态文件服务，用于托管前端构建产物和AI生成的文件
 import os
 static_dir = os.path.join(os.path.dirname(__file__), "static")
-if os.path.exists(static_dir):
-    # 先定义路由，再挂载静态文件（避免路由冲突）
-    
-    # 托管前端应用的根路由
-    @app.get("/")
-    async def serve_frontend():
-        """托管前端应用"""
-        from fastapi.responses import FileResponse
-        index_file = os.path.join(static_dir, "index.html")
-        if os.path.exists(index_file):
-            return FileResponse(index_file)
-        else:
-            return {"message": "AI Agent Service is running", "service": "ai-agent-service", "status": "healthy", "note": "前端未构建"}
-    
-    # 兼容旧的lovart-sim路由
-    @app.get("/lovart-sim")
-    async def lovart_simulator():
-        """重定向到lovart.ai模拟器页面"""
-        from fastapi.responses import FileResponse
-        index_file = os.path.join(static_dir, "index.html")
-        if os.path.exists(index_file):
-            return FileResponse(index_file)
-        else:
-            return {"error": "前端文件未找到，请先构建前端: cd app/frontend && npm run build"}
-    
-    # 挂载静态文件，这样 /assets/xxx.js 可以直接访问
-    app.mount("/assets", StaticFiles(directory=os.path.join(static_dir, "assets")), name="assets")
+
+# 确保AI生成文件的static目录存在
+os.makedirs(static_dir, exist_ok=True)
+
+# 托管前端应用的根路由
+@app.get("/")
+async def serve_frontend():
+    """托管前端应用"""
+    from fastapi.responses import FileResponse
+    # 前端构建后直接到static目录
+    index_file = os.path.join(static_dir, "index.html")
+    if os.path.exists(index_file):
+        return FileResponse(index_file)
+    return {"message": "AI Agent Service is running", "service": "ai-agent-service", "status": "healthy", "note": "前端未构建，请运行: cd app/frontend && npm run build"}
+
+# 兼容旧的lovart-sim路由
+@app.get("/lovart-sim")
+async def lovart_simulator():
+    """Lovart.ai模拟器页面"""
+    from fastapi.responses import FileResponse
+    index_file = os.path.join(static_dir, "index.html")
+    if os.path.exists(index_file):
+        return FileResponse(index_file)
+    return {"error": "前端文件未找到，请先构建前端: cd app/frontend && npm run build"}
+
+# 挂载前端静态资源（CSS, JS等）
+assets_dir = os.path.join(static_dir, "assets")
+if os.path.exists(assets_dir):
+    app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+    main_logger.info(f"✅ 前端资源已挂载: {assets_dir}")
 else:
-    main_logger.warning("静态文件目录不存在，前端可能未构建")
+    main_logger.warning("前端assets目录不存在，请先构建前端")
+
+# 挂载AI生成的文件（用于预览，需要避免与前端文件冲突）
+generated_dir = os.path.join(static_dir, "generated")
+os.makedirs(generated_dir, exist_ok=True)
+app.mount("/generated", StaticFiles(directory=generated_dir), name="generated")
+
+# 添加根路径静态文件处理，用于AI生成的文件引用
+@app.get("/script.js")
+async def serve_generated_script():
+    """处理AI生成页面中的script.js请求"""
+    from fastapi.responses import FileResponse
+    script_file = os.path.join(generated_dir, "script.js")
+    if os.path.exists(script_file):
+        return FileResponse(script_file, media_type="application/javascript")
+    return {"error": "script.js not found"}
+
+@app.get("/style.css")
+async def serve_generated_style():
+    """处理AI生成页面中的style.css请求"""
+    from fastapi.responses import FileResponse
+    css_file = os.path.join(generated_dir, "style.css")
+    if os.path.exists(css_file):
+        return FileResponse(css_file, media_type="text/css")
+    return {"error": "style.css not found"}
 
 class HealthResponse(BaseModel):
     status: str
