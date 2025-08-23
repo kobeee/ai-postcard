@@ -80,6 +80,7 @@ services:
       dockerfile: Dockerfile.dev
     volumes:
       - ./src/user-service/app:/app/app  # 只挂载源代码，不挂载虚拟环境
+      - ./src/user-service/logs:/app/logs  # 挂载日志目录
     ports:
       - "8081:8000"
     profiles:
@@ -109,6 +110,7 @@ services:
       dockerfile: Dockerfile.dev
     volumes:
       - ./src/postcard-service/app:/app/app  # 只挂载源代码，不挂载虚拟环境
+      - ./src/postcard-service/logs:/app/logs  # 挂载日志目录
     ports:
       - "8082:8000"
     profiles:
@@ -138,6 +140,7 @@ services:
       dockerfile: Dockerfile.dev
     volumes:
       - ./src/gateway-service/app:/app/app  # 只挂载源代码，不挂载虚拟环境
+      - ./src/gateway-service/logs:/app/logs  # 挂载日志目录
     ports:
       - "8083:8000"
     profiles:

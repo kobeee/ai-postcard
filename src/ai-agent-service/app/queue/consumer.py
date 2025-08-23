@@ -1,5 +1,6 @@
 import asyncio
 import redis.asyncio as redis
+from redis.exceptions import ResponseError
 import logging
 import os
 import json
@@ -55,7 +56,7 @@ class TaskConsumer:
                 mkstream=True
             )
             self.logger.info(f"✅ 消费者组创建成功: {self.consumer_group}")
-        except redis.exceptions.ResponseError as e:
+        except ResponseError as e:
             if "BUSYGROUP" in str(e):
                 self.logger.info(f"✅ 消费者组已存在: {self.consumer_group}")
             else:
@@ -86,8 +87,10 @@ class TaskConsumer:
                             await self.process_task(msg_id, fields)
                 
             except asyncio.CancelledError:
-                self.logger.info("🔄 消费者被取消")
-                break
+                # 不让整个消费者退出，记录并继续循环，防止单次任务取消导致进程退出
+                self.logger.warning("⚠️ 捕获到 CancelledError，忽略并继续监听")
+                await asyncio.sleep(0.1)
+                continue
             except Exception as e:
                 self.logger.error(f"❌ 消费任务失败: {e}")
                 await asyncio.sleep(5)  # 错误后等待5秒
@@ -97,7 +100,14 @@ class TaskConsumer:
         try:
             self.logger.info(f"📨 收到任务: {msg_id}")
             
-            # 解析任务数据
+            # 解析任务数据：将可能为 JSON 字符串的字段转换为原生类型
+            if "metadata" in task_data and isinstance(task_data["metadata"], str):
+                try:
+                    task_data["metadata"] = json.loads(task_data["metadata"]) if task_data["metadata"].strip() else {}
+                except Exception:
+                    task_data["metadata"] = {}
+
+            # 构建任务模型
             task = PostcardGenerationTask(**task_data)
             self.logger.info(f"📋 任务详情: {task.task_id} - {task.user_input[:50]}...")
             
@@ -110,6 +120,13 @@ class TaskConsumer:
             
         except Exception as e:
             self.logger.error(f"❌ 处理任务失败: {msg_id} - {e}")
+            # 更新任务状态为失败（如果能解析到 task_id）
+            try:
+                task_id = task_data.get("task_id") if isinstance(task_data, dict) else None
+                if task_id:
+                    await self.workflow.update_task_status(task_id, "failed", str(e))
+            except Exception:
+                pass
             # 这里可以实现重试逻辑或死信队列
     
     async def stop_consuming(self):

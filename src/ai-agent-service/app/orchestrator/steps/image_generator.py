@@ -8,6 +8,7 @@ class ImageGenerator:
     """图片生成器 - 第3步：基于概念和内容生成明信片配图"""
     
     def __init__(self):
+        # 图片生成使用 Gemini
         self.provider = ProviderFactory.create_image_provider("gemini")
         self.logger = logging.getLogger(self.__class__.__name__)
     

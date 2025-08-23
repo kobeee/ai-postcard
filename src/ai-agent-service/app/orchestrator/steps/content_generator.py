@@ -8,6 +8,7 @@ class ContentGenerator:
     """内容生成器 - 第2步：基于概念生成明信片文案"""
     
     def __init__(self):
+        # 文本生成使用 Gemini
         self.provider = ProviderFactory.create_text_provider("gemini")
         self.logger = logging.getLogger(self.__class__.__name__)
     

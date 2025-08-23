@@ -3,50 +3,68 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>贪吃蛇游戏</title>
+    <title>温馨祝福明信片</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="game-container">
-        <div class="game-header">
-            <h1>贪吃蛇游戏</h1>
-            <div class="game-info">
-                <div class="score">得分: <span id="score">0</span></div>
-                <div class="high-score">最高分: <span id="highScore">0</span></div>
-            </div>
-        </div>
-        
-        <div class="game-area">
-            <canvas id="gameCanvas" width="400" height="400"></canvas>
-            <div id="gameOver" class="game-over hidden">
-                <h2>游戏结束!</h2>
-                <p>最终得分: <span id="finalScore">0</span></p>
-                <button id="restartBtn">重新开始</button>
-            </div>
-        </div>
-        
-        <div class="controls">
-            <div class="control-buttons">
-                <button id="upBtn" class="control-btn">↑</button>
-                <div class="control-row">
-                    <button id="leftBtn" class="control-btn">←</button>
-                    <button id="downBtn" class="control-btn">↓</button>
-                    <button id="rightBtn" class="control-btn">→</button>
+    <!-- 粒子背景 -->
+    <div class="particles" id="particles"></div>
+    
+    <!-- 明信片容器 -->
+    <div class="postcard-container">
+        <div class="postcard" id="postcard">
+            <!-- 正面 -->
+            <div class="postcard-front">
+                <div class="background-overlay"></div>
+                <div class="content-wrapper">
+                    <h1 class="main-title">生日快乐，阳光相伴</h1>
+                    <h2 class="sub-title">愿快乐与你常在</h2>
+                    <div class="message-content">
+                        <p>亲爱的朋友，生日快乐！</p>
+                        <p>愿这特别的一天，将喜悦化作一捧温暖的阳光，洒满你未来的每一天。</p>
+                        <p>愿你天天开心，精彩人生！</p>
+                    </div>
+                    <div class="signature">致亲爱的你</div>
                 </div>
+                <div class="flip-hint">点击翻转明信片 ✨</div>
             </div>
-            <div class="game-controls">
-                <button id="pauseBtn">暂停</button>
-                <button id="startBtn">开始游戏</button>
+            
+            <!-- 背面 -->
+            <div class="postcard-back">
+                <div class="postcard-lines"></div>
+                <div class="back-content">
+                    <div class="back-header">
+                        <h3>温馨祝福</h3>
+                        <p>来自心底的真诚</p>
+                    </div>
+                    <div class="back-message">
+                        <p>愿每一个美好的时刻都伴随着你，</p>
+                        <p>愿每一份快乐都在你身边绽放。</p>
+                        <p>生日快乐，我的朋友！</p>
+                    </div>
+                    <div class="back-signature">
+                        <p>来自爱你的朋友</p>
+                        <div class="date"></div>
+                    </div>
+                </div>
+                <div class="flip-hint">点击返回正面 🎂</div>
             </div>
         </div>
         
-        <div class="instructions">
-            <h3>游戏说明:</h3>
-            <p>• 使用方向键或屏幕按钮控制蛇的移动</p>
-            <p>• 吃到红色食物可以增长并得分</p>
-            <p>• 不要撞到墙壁或自己的身体</p>
-            <p>• 空格键可以暂停/继续游戏</p>
+        <!-- 装饰元素 -->
+        <div class="decorations">
+            <div class="heart heart-1">❤️</div>
+            <div class="heart heart-2">💝</div>
+            <div class="heart heart-3">🎈</div>
+            <div class="star star-1">⭐</div>
+            <div class="star star-2">✨</div>
+            <div class="star star-3">🌟</div>
         </div>
+    </div>
+    
+    <!-- 音效按钮 -->
+    <div class="sound-control" id="soundControl">
+        <span class="sound-icon">🔊</span>
     </div>
     
     <script src="script.js"></script>

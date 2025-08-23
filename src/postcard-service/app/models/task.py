@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional
 from enum import Enum
 from datetime import datetime
@@ -20,7 +20,7 @@ class PostcardGenerationTask(BaseModel):
     theme: Optional[str] = None
     user_id: Optional[str] = None
     created_at: str
-    metadata: Dict[str, Any] = {}
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 class PostcardRequest(BaseModel):
     user_input: str
@@ -46,3 +46,17 @@ class TaskStatusResponse(BaseModel):
     preview_url: Optional[str] = None
     error_message: Optional[str] = None
     retry_count: int = 0
+
+class UpdateStatusRequest(BaseModel):
+    status: TaskStatus
+    error_message: Optional[str] = None
+    # 可选：在更新状态时一并写入最终结果
+    concept: Optional[str] = None
+    content: Optional[str] = None
+    image_url: Optional[str] = None
+    frontend_code: Optional[str] = None
+    preview_url: Optional[str] = None
+
+class StatusUpdateRequest(BaseModel):
+    status: TaskStatus
+    error_message: Optional[str] = None

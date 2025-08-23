@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import httpx
 import os
@@ -22,8 +23,8 @@ class PostcardWorkflow:
         context = {"task": task_data, "results": {}}
         
         try:
-            # 更新任务状态为处理中
-            await self.update_task_status(task_id, "processing")
+            # 更新任务状态为处理中（屏蔽取消影响）
+            await asyncio.shield(self.update_task_status(task_id, "processing"))
             
             # 导入步骤类（避免循环导入）
             from .steps.concept_generator import ConceptGenerator
@@ -55,36 +56,51 @@ class PostcardWorkflow:
                     self.logger.error(f"❌ 步骤 {i}/4 失败: {step_name} - {e}")
                     raise
             
-            # 保存最终结果
-            await self.save_final_result(task_id, context["results"])
-            await self.update_task_status(task_id, "completed")
+            # 保存最终结果（屏蔽取消影响）
+            await asyncio.shield(self.save_final_result(task_id, context["results"]))
+            await asyncio.shield(self.update_task_status(task_id, "completed"))
             
             self.logger.info(f"🎉 工作流执行完成: {task_id}")
             
         except Exception as e:
             self.logger.error(f"❌ 工作流执行失败: {task_id} - {e}")
-            await self.update_task_status(task_id, "failed", str(e))
+            try:
+                await asyncio.shield(self.update_task_status(task_id, "failed", str(e)))
+            except Exception:
+                pass
             raise
     
     async def update_task_status(self, task_id: str, status: str, error_message: str = None):
         """更新任务状态"""
         try:
-            async with httpx.AsyncClient() as client:
-                url = f"{self.postcard_service_url}/api/v1/postcards/status/{task_id}"
-                
-                data = {"status": status}
-                if error_message:
-                    data["error_message"] = error_message
-                
-                response = await client.post(url, json=data)
-                
-                if response.status_code == 200:
-                    self.logger.info(f"✅ 任务状态更新成功: {task_id} -> {status}")
-                else:
-                    self.logger.error(f"❌ 任务状态更新失败: {task_id} - {response.status_code}")
-                    
+            url = f"{self.postcard_service_url}/api/v1/postcards/status/{task_id}"
+            data = {"status": status}
+            if error_message:
+                data["error_message"] = error_message
+
+            # 增加重试，提升可靠性
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                for attempt in range(3):
+                    try:
+                        response = await client.post(url, json=data)
+                        if response.status_code == 200:
+                            self.logger.info(f"✅ 任务状态更新成功: {task_id} -> {status}")
+                            return True
+                        else:
+                            body = None
+                            try:
+                                body = response.text
+                            except Exception:
+                                pass
+                            self.logger.error(f"❌ 任务状态更新失败: {task_id} - {response.status_code} - {body}")
+                    except Exception as req_err:
+                        self.logger.error(f"⚠️ 状态更新请求异常(第{attempt+1}次): {task_id} - {req_err}")
+                    await asyncio.sleep(1)
+            return False
+
         except Exception as e:
             self.logger.error(f"❌ 更新任务状态异常: {task_id} - {e}")
+            return False
     
     async def save_intermediate_result(self, task_id: str, step_name: str, results: Dict[str, Any]):
         """保存中间结果"""
@@ -99,9 +115,23 @@ class PostcardWorkflow:
     async def save_final_result(self, task_id: str, results: Dict[str, Any]):
         """保存最终结果"""
         try:
-            # 调用明信片服务保存最终结果
+            # 通过状态更新接口一并提交最终结果
             self.logger.info(f"💾 保存最终结果: {task_id}")
             self.logger.info(f"📊 结果摘要: {list(results.keys())}")
-            
+
+            payload: Dict[str, Any] = {"status": "completed"}
+            # 允许的字段
+            for key in ["concept", "content", "image_url", "frontend_code", "preview_url"]:
+                if key in results and results[key] is not None:
+                    payload[key] = results[key]
+
+            url = f"{self.postcard_service_url}/api/v1/postcards/status/{task_id}"
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(url, json=payload)
+                if resp.status_code == 200:
+                    self.logger.info("✅ 最终结果提交成功")
+                else:
+                    self.logger.error(f"❌ 最终结果提交失败: {resp.status_code} - {resp.text}")
+
         except Exception as e:
             self.logger.error(f"❌ 保存最终结果失败: {task_id} - {e}")

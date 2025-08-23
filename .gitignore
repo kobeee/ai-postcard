@@ -394,3 +394,12 @@ local_config.json
 PROJECT_SETUP_REPORT.md
 SETUP_*.md
 *_REPORT.md
+
+# AI生成的测试文件
+test_*.py
+generated_postcard_image.png
+preview_*.html
+
+# Redis 持久化文件
+dump.rdb
+appendonly.aof

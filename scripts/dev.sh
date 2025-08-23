@@ -218,7 +218,7 @@ stop_services() {
     log_info "停止所有服务..."
     
     # 首先尝试停止所有可能的 profiles
-    docker-compose --profile gateway --profile user --profile postcard --profile agent down 2>/dev/null || true
+    docker-compose --profile gateway --profile user --profile postcard --profile agent --profile worker down 2>/dev/null || true
     
     # 然后执行标准的 down 命令
     docker-compose down
@@ -317,13 +317,16 @@ show_help() {
     echo "  postcard       - 明信片服务"
     echo "  postcard-tests - 明信片服务测试"
     echo "  agent          - AI Agent 服务"
+    echo "  worker         - AI Agent Worker (异步任务处理)"
     echo "  agent-tests    - AI Agent 测试"
     echo "  agent-script   - AI Agent 脚本执行"
+    echo "  all            - 所有主要服务 (gateway + user + postcard + agent + worker)"
     echo ""
     echo "示例："
     echo "  sh scripts/dev.sh up gateway user           # 启动网关和用户服务"
-    echo "  sh scripts/dev.sh up agent                  # 启动 AI Agent 服务"
-    echo "  sh scripts/dev.sh logs gateway-service      # 查看网关服务日志"
+    echo "  sh scripts/dev.sh up postcard agent worker  # 启动异步工作流系统"
+    echo "  sh scripts/dev.sh up all                    # 启动所有主要服务"
+    echo "  sh scripts/dev.sh logs ai-postcard-ai-agent-worker  # 查看Worker日志"
     echo "  sh scripts/dev.sh exec ai-agent-service bash # 进入 AI Agent 容器"
     echo "  SCRIPT_COMMAND='python manage.py migrate' sh scripts/dev.sh up agent-script"
 }

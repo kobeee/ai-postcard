@@ -2,7 +2,7 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.pool import NullPool
 import logging
 from dotenv import load_dotenv
 
@@ -23,9 +23,10 @@ logger = logging.getLogger(__name__)
 # 创建数据库引擎
 engine = create_engine(
     DATABASE_URL,
-    poolclass=StaticPool,
     pool_pre_ping=True,
     pool_recycle=300,
+    pool_size=int(os.getenv("DB_POOL_SIZE", "5")),
+    max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "10")),
     echo=os.getenv("SQL_ECHO", "false").lower() == "true"
 )
 

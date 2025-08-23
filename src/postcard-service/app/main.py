@@ -1,5 +1,6 @@
 import os
 import logging
+from logging.handlers import RotatingFileHandler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -12,12 +13,31 @@ from .api.postcards import router as postcards_router
 # 加载环境变量
 load_dotenv()
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+# 配置日志（文件 + 控制台）
+log_dir = os.path.join(os.path.dirname(__file__), "..", "logs")
+log_dir = os.path.abspath(log_dir)
+os.makedirs(log_dir, exist_ok=True)
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+# 文件日志（旋转）
+file_handler = RotatingFileHandler(os.path.join(log_dir, 'postcard-service.log'), maxBytes=10*1024*1024, backupCount=5)
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(formatter)
+
+# 控制台日志
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(formatter)
+
+# 防止重复添加 handler
+if not any(isinstance(h, RotatingFileHandler) for h in logger.handlers):
+    logger.addHandler(file_handler)
+if not any(isinstance(h, logging.StreamHandler) for h in logger.handlers):
+    logger.addHandler(console_handler)
 
 # 生命周期管理
 @asynccontextmanager

@@ -1,4 +1,4 @@
-import google.generativeai as genai
+from google import genai
 from typing import Dict, Any, Optional
 from .base_provider import BaseTextProvider
 import os
@@ -15,22 +15,15 @@ class GeminiTextProvider(BaseTextProvider):
         if not api_key:
             raise ValueError("GEMINI_API_KEY环境变量未配置")
             
-        genai.configure(api_key=api_key)
+        # 使用新SDK创建客户端
+        self.client = genai.Client(api_key=api_key)
         
         # 配置模型参数
         self.model_name = os.getenv("GEMINI_TEXT_MODEL", "gemini-2.5-flash-lite")
         self.default_config = {
             "temperature": float(os.getenv("GEMINI_TEXT_TEMPERATURE", "0.7")),
             "max_output_tokens": int(os.getenv("GEMINI_TEXT_MAX_TOKENS", "2048")),
-            "top_p": 0.8,
-            "top_k": 40
         }
-        
-        # 初始化模型
-        self.model = genai.GenerativeModel(
-            model_name=self.model_name,
-            generation_config=genai.GenerationConfig(**self.default_config)
-        )
         
         self.logger.info(f"✅ Gemini文本提供商初始化成功: {self.model_name}")
     
@@ -43,35 +36,35 @@ class GeminiTextProvider(BaseTextProvider):
     ) -> str:
         """生成文本内容"""
         try:
-            # 动态配置生成参数
-            config = self.default_config.copy()
-            if max_tokens:
-                config["max_output_tokens"] = max_tokens
-            if temperature is not None:
-                config["temperature"] = temperature
-            
-            # 重新配置模型
-            model = genai.GenerativeModel(
-                model_name=self.model_name,
-                generation_config=genai.GenerationConfig(**config)
-            )
-            
-            # 生成内容 - 使用同步调用然后包装为异步
             self.logger.info(f"📝 开始生成文本，模型: {self.model_name}")
             
-            # Gemini Python SDK 目前主要是同步的，我们在线程池中运行
+            # 使用新SDK在线程池中运行
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
-                None, 
-                lambda: model.generate_content(prompt)
+                None,
+                lambda: self.client.models.generate_content(
+                    model=self.model_name,
+                    contents=prompt
+                )
             )
             
-            if response.parts:
-                result = response.text
-                self.logger.info(f"✅ 文本生成成功，长度: {len(result)} 字符")
-                return result
+            if response.candidates and len(response.candidates) > 0:
+                content_parts = response.candidates[0].content.parts
+                
+                # 提取文本内容
+                text_parts = []
+                for part in content_parts:
+                    if part.text is not None:
+                        text_parts.append(part.text)
+                
+                if text_parts:
+                    result = "".join(text_parts)
+                    self.logger.info(f"✅ 文本生成成功，长度: {len(result)} 字符")
+                    return result
+                else:
+                    raise Exception("Gemini返回的响应中没有文本内容")
             else:
-                raise Exception("Gemini返回空响应")
+                raise Exception("Gemini文本生成返回空响应或无候选结果")
                 
         except Exception as e:
             self.logger.error(f"❌ Gemini文本生成失败: {e}")

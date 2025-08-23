@@ -32,10 +32,15 @@ alwaysApply: true
 
 **核心原则**：所有运行和测试必须在容器化环境中自动进行，确保环境一致性。
 
-- **自动容器化执行**：
-  - 任何代码运行、测试、脚本执行都必须通过 `sh scripts/dev.sh` 在容器中进行。
-  - 禁止在主机直接运行业务代码，除非是 `setup-dev-env.sh` 等环境初始化脚本。
-  - **示例**: `sh scripts/dev.sh up agent-tests` 而不是在主机运行 `pytest`。
+- **默认策略（重要）**：
+  - 开发完成后，**默认不执行测试验证操作**。
+  - 测试相关的代码、容器入口与脚本仍须存在并保持可用。
+  - 将测试验证步骤**单独文档化**，保存到 `docs/tests/validation/` 下，以便需要时手动执行验证。
+
+- **按需执行测试（可选）**：
+  - 需要执行测试时，仍必须通过容器运行：`sh scripts/dev.sh up <service>-tests`。
+  - 示例：`sh scripts/dev.sh up agent-tests`、`sh scripts/dev.sh up postcard-tests`。
+  - 测试结束后，执行 `sh scripts/dev.sh down` 进行资源回收。
 
 - **热重载与实时同步**：
   - **源代码**的修改通过卷挂载（例如 `src/user-service/app:/app/app`）实现实时同步。
@@ -51,7 +56,7 @@ alwaysApply: true
 - **日常开发循环**：
   1. 修改代码 (`.py` 文件) → `uvicorn` 在容器内自动热重载。
   2. 添加依赖 (`requirements.txt` 文件) → 在主机修改文件 → 运行 `docker-compose build <service>` → 重启服务。
-  3. 运行测试 → `sh scripts/dev.sh up <service>-tests`。
+  3. （可选）运行测试 → `sh scripts/dev.sh up <service>-tests`。
   4. 查看日志 → `sh scripts/dev.sh logs <service>`。
 
 ## 6. 自动化环境资源管理
@@ -80,7 +85,7 @@ alwaysApply: true
 - **环境准备**：在执行任何开发任务前，确保容器环境已启动。
 - **依赖管理**：新增依赖时，在主机更新 `requirements.txt`，然后指导进行镜像重建。
 - **代码执行**：所有业务代码运行必须在容器中进行。
-- **测试执行**：使用 `sh scripts/dev.sh up <service>-tests` 运行测试。
+- **测试策略**：默认不执行测试；将验证步骤文档化保存到 `docs/tests/validation/`；如需执行测试使用 `sh scripts/dev.sh up <service>-tests`。
 - **构建更新**：当 `requirements.txt` 发生变更后，使用 `docker-compose build <service-name>` 重新构建镜像。
 - **环境一致性**：确保开发、测试、生产环境的一致性。
 - **自动清理**：任务完成后必须自动执行 `sh scripts/dev.sh down` 关闭环境。

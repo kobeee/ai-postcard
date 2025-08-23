@@ -84,6 +84,7 @@ class FrontendCoder:
             # 使用Claude Code SDK生成前端代码
             # 注意：这里需要适配现有的Claude Code Provider
             from ...coding_service.providers.claude_provider import ClaudeCodeProvider
+            import asyncio
             
             # 创建一个会话ID
             session_id = f"postcard_{task.get('task_id', 'unknown')}"
@@ -91,12 +92,33 @@ class FrontendCoder:
             # 创建Claude提供商实例
             claude_provider = ClaudeCodeProvider()
             
-            # 生成代码
+            # 生成代码，添加超时保护
             frontend_code = ""
-            async for message in claude_provider.generate(coding_prompt, session_id):
-                if message.get("type") == "complete":
-                    frontend_code = message.get("final_code", "")
-                    break
+            try:
+                # 设置60秒超时，防止无限等待
+                async_generator = claude_provider.generate(coding_prompt, session_id)
+                timeout_task = asyncio.create_task(asyncio.sleep(60))
+                
+                async for message in async_generator:
+                    if timeout_task.done():
+                        self.logger.warning("⚠️ Claude 代码生成超时，使用默认代码")
+                        break
+                    if message.get("type") == "complete":
+                        frontend_code = message.get("final_code", "")
+                        timeout_task.cancel()
+                        break
+                    elif message.get("type") == "error":
+                        self.logger.error(f"❌ Claude 代码生成错误: {message.get('error', 'Unknown error')}")
+                        timeout_task.cancel()
+                        break
+                        
+                if not timeout_task.cancelled():
+                    timeout_task.cancel()
+                            
+            except asyncio.CancelledError:
+                self.logger.warning("⚠️ Claude 代码生成被取消，使用默认代码")
+                # 重要：不要重新抛出 CancelledError，而是优雅降级
+                pass
             
             if not frontend_code:
                 frontend_code = self._get_default_frontend_code(content_data, image_url)

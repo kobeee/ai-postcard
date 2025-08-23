@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from ..database.connection import get_db
-from ..models.task import PostcardRequest, PostcardResponse, TaskStatusResponse, TaskStatus
+from ..models.task import PostcardRequest, PostcardResponse, TaskStatusResponse, TaskStatus, UpdateStatusRequest
 from ..services.postcard_service import PostcardService
 
 router = APIRouter()
@@ -48,14 +48,23 @@ async def get_postcard_status(
 @router.post("/status/{task_id}")
 async def update_postcard_status(
     task_id: str,
-    status: TaskStatus,
-    error_message: Optional[str] = None,
+    body: UpdateStatusRequest,
     db: Session = Depends(get_db)
 ):
     """更新明信片任务状态（内部API）"""
     try:
         service = PostcardService(db)
-        success = await service.update_task_status(task_id, status, error_message)
+        # 允许在更新状态时同时写入最终结果字段
+        extra_fields = {
+            k: v for k, v in {
+                "concept": body.concept,
+                "content": body.content,
+                "image_url": body.image_url,
+                "frontend_code": body.frontend_code,
+                "preview_url": body.preview_url,
+            }.items() if v is not None
+        }
+        success = await service.update_task_status(task_id, body.status, body.error_message, extra_fields)
         
         if not success:
             raise HTTPException(status_code=404, detail="任务不存在")

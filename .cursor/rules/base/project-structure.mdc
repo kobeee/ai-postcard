@@ -43,6 +43,8 @@ ai-postcard/
     design/
     ideas/
     prd/
+    tests/
+      validation/
   README.md
   env.example
   .env

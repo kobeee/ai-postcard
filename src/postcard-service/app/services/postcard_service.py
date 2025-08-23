@@ -94,7 +94,7 @@ class PostcardService:
             logger.error(f"❌ 获取任务状态失败: {task_id} - {e}")
             raise
 
-    async def update_task_status(self, task_id: str, status: TaskStatus, error_message: Optional[str] = None):
+    async def update_task_status(self, task_id: str, status: TaskStatus, error_message: Optional[str] = None, extra: Optional[Dict[str, Any]] = None):
         """更新任务状态"""
         try:
             postcard = self.db.query(Postcard).filter(Postcard.task_id == task_id).first()
@@ -106,6 +106,18 @@ class PostcardService:
             postcard.status = status.value
             if error_message:
                 postcard.error_message = error_message
+            # 如果传入了需要写入的最终结果字段，一并写入
+            if extra:
+                if 'concept' in extra:
+                    postcard.concept = extra['concept']
+                if 'content' in extra:
+                    postcard.content = extra['content']
+                if 'image_url' in extra:
+                    postcard.image_url = extra['image_url']
+                if 'frontend_code' in extra:
+                    postcard.frontend_code = extra['frontend_code']
+                if 'preview_url' in extra:
+                    postcard.preview_url = extra['preview_url']
             
             if status == TaskStatus.COMPLETED:
                 postcard.completed_at = datetime.now()

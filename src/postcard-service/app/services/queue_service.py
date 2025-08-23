@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import redis.asyncio as redis
+from redis.exceptions import ResponseError
 from typing import Dict, Any
 from ..models.task import PostcardGenerationTask
 
@@ -38,7 +39,25 @@ class QueueService:
             client = await self.get_redis_client()
             
             # 将任务序列化为字典
-            task_data = task.dict()
+            raw_data = task.dict()
+
+            # 清洗字典：移除 None，统一为字符串/数值
+            def _to_redis_value(value: Any):
+                if value is None:
+                    return None
+                if isinstance(value, (str, int, float)):
+                    return value
+                # 其余类型转 JSON 字符串，确保可写入
+                try:
+                    return json.dumps(value, ensure_ascii=False)
+                except Exception:
+                    return str(value)
+
+            task_data: Dict[str, Any] = {}
+            for k, v in raw_data.items():
+                rv = _to_redis_value(v)
+                if rv is not None:
+                    task_data[str(k)] = rv
             
             # 发布到Redis Stream
             message_id = await client.xadd(self.stream_name, task_data)
@@ -63,7 +82,7 @@ class QueueService:
                     mkstream=True
                 )
                 logger.info(f"✅ 消费者组创建成功: {self.consumer_group}")
-            except redis.exceptions.ResponseError as e:
+            except ResponseError as e:
                 if "BUSYGROUP" in str(e):
                     logger.info(f"✅ 消费者组已存在: {self.consumer_group}")
                 else:

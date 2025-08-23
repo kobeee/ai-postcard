@@ -271,6 +271,10 @@ class ClaudeCodeProvider(BaseCodeProvider):
                         logger.info("🎉 代码生成任务完成")
                         return
                         
+        except asyncio.CancelledError:
+            # 任务已完成或上层取消，视为正常结束，避免进程异常退出
+            logger.warning("⚠️ 生成过程被取消（CancelledError），已安全忽略")
+            return
         except GeneratorExit:
             # WebSocket连接断开时的正常清理，不是错误
             logger.info("🔌 WebSocket连接已断开，停止代码生成")

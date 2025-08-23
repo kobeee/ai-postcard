@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional
 from enum import Enum
 
@@ -19,4 +19,4 @@ class PostcardGenerationTask(BaseModel):
     theme: Optional[str] = None
     user_id: Optional[str] = None
     created_at: str
-    metadata: Dict[str, Any] = {}
+    metadata: Dict[str, Any] = Field(default_factory=dict)
