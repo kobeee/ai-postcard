@@ -45,6 +45,16 @@ services:
       - agent
       - all
 
+  # --- AI Agent Worker (独立工作进程) ---
+  ai-agent-worker:
+    <<: *ai-agent-base
+    container_name: ai-postcard-ai-agent-worker
+    command: ["python", "-m", "app.worker"]
+    profiles:
+      - agent
+      - worker
+      - all
+
   # --- AI Agent Service Tests ---
   ai-agent-service-tests:
     <<: *ai-agent-base
@@ -52,6 +62,14 @@ services:
     command: ["pytest"]
     profiles:
       - agent-tests
+
+  # --- 异步工作流测试 ---
+  async-workflow-tests:
+    <<: *ai-agent-base
+    container_name: ai-postcard-async-workflow-tests
+    command: ["python", "-m", "pytest", "tests/test_async_workflow.py", "-v"]
+    profiles:
+      - workflow-tests
 
   # --- User Service (Python/FastAPI) ---
   user-service:

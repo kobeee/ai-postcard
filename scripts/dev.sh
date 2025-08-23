@@ -200,10 +200,10 @@ start_services() {
     
     if [ "$need_rebuild" = "true" ]; then
         log_info "检测到需要重建，正在构建镜像..."
-        docker-compose --profile $(echo $profiles | tr ' ' ' --profile ') up --build -d
+        docker-compose $(echo $profiles | sed 's/[^ ]* */--profile &/g') up --build -d
     else
         log_info "使用现有镜像启动服务..."
-        docker-compose --profile $(echo $profiles | tr ' ' ' --profile ') up -d
+        docker-compose $(echo $profiles | sed 's/[^ ]* */--profile &/g') up -d
     fi
     
     log_success "服务启动完成"
