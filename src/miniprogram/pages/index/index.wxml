@@ -1,0 +1,168 @@
+<!-- index.wxml - 情绪罗盘首页 -->
+<view class="page">
+<view class="compass-container">
+  <!-- 背景装饰 -->
+  <view class="bg-decoration">
+    <view class="floating-particle" wx:for="{{particles}}" wx:key="id" style="--delay: {{item.delay}}s; --x: {{item.x}}%; --y: {{item.y}};"></view>
+  </view>
+
+  <!-- 用户状态区域 -->
+  <view class="user-status" wx:if="{{hasUserInfo}}">
+    <view class="avatar-ring">
+      <image class="user-avatar" src="{{userInfo.avatar_url || userInfo.avatarUrl}}" mode="aspectFill"></image>
+      <view class="ring-glow"></view>
+    </view>
+    <text class="greeting-text">{{greetingText}}</text>
+    <text class="date-info">{{currentDate}} · {{weatherInfo}}</text>
+  </view>
+
+  <!-- 登录界面 -->
+  <view class="login-container" wx:if="{{!hasUserInfo}}">
+    <view class="compass-logo">
+      <view class="compass-ring">
+        <view class="compass-needle"></view>
+        <view class="compass-dot"></view>
+      </view>
+    </view>
+    <view class="brand-text">
+      <text class="brand-title">情绪罗盘</text>
+      <text class="brand-subtitle">每一天，都值得被温柔记录</text>
+    </view>
+    <button class="login-btn" bindtap="handleLogin" hover-class="login-btn-hover">
+      <text class="login-text">开始你的旅程</text>
+    </button>
+  </view>
+
+  <!-- 核心卡片区域 -->
+  <view class="card-container" wx:if="{{hasUserInfo}}">
+    <!-- 今日卡片 -->
+    <view class="daily-card {{cardFlipped ? 'flipped' : ''}}" wx:if="{{todayCard}}" bindtap="flipCard">
+      <!-- 正面 -->
+      <view class="card-front">
+        <view class="card-date">{{todayCard.date}}</view>
+        <view class="card-keyword">{{todayCard.keyword}}</view>
+        <view class="card-quote">{{todayCard.quote}}</view>
+        <view class="card-english">{{todayCard.english}}</view>
+        
+        <view class="card-recommendations">
+          <view class="rec-item" wx:if="{{todayCard.music}}" bindtap="playMusic" data-url="{{todayCard.music.url}}">
+            <text class="rec-icon">🎵</text>
+            <text class="rec-text">{{todayCard.music.title}}</text>
+          </view>
+          
+          <view class="rec-item" wx:if="{{todayCard.movie}}">
+            <text class="rec-icon">🎬</text>
+            <text class="rec-text">{{todayCard.movie}}</text>
+          </view>
+          
+          <view class="rec-item" wx:if="{{todayCard.book}}">
+            <text class="rec-icon">📚</text>
+            <text class="rec-text">{{todayCard.book}}</text>
+          </view>
+        </view>
+        
+        <view class="flip-hint">
+          <text class="hint-icon">🔍</text>
+          <text class="hint-text">轻触揭秘</text>
+        </view>
+      </view>
+      
+      <!-- 背面 -->
+      <view class="card-back">
+        <view class="back-title">创作灵感</view>
+        <view class="inspiration-list">
+          <view class="inspiration-item" wx:for="{{todayCard.inspirations}}" wx:key="*this">
+            <text class="ins-icon">{{item.icon}}</text>
+            <text class="ins-text">{{item.text}}</text>
+          </view>
+        </view>
+        <view class="back-footer">
+          <text class="compass-signature">—— 情绪罗盘</text>
+        </view>
+      </view>
+    </view>
+    
+    <!-- 情绪墨迹区域 -->
+    <view class="emotion-ink" wx:if="{{!todayCard || needEmotionInput}}">
+      <view class="ink-title">
+        <text class="title-main">今日情绪墨迹</text>
+        <text class="title-sub">用你的直觉，在屏幕上画下此刻的感受</text>
+      </view>
+      
+      <canvas 
+        class="ink-canvas" 
+        canvas-id="emotionCanvas"
+        bind:touchstart="onInkStart"
+        bind:touchmove="onInkMove"
+        bind:touchend="onInkEnd"
+        disable-scroll="true"
+      ></canvas>
+      
+      <view class="ink-actions">
+        <button class="ink-btn clear" bindtap="clearInk">清空</button>
+        <button class="ink-btn generate {{isGenerating ? 'loading' : ''}}" bindtap="generateDailyCard" disabled="{{isGenerating}}">
+          <text wx:if="{{!isGenerating}}">✨ 生成卡片</text>
+          <text wx:else>🌟 AI感知中</text>
+        </button>
+      </view>
+    </view>
+  </view>
+  
+  <!-- 记忆回廊 -->
+  <view class="memory-gallery" wx:if="{{hasUserInfo && userCards.length > 0}}">
+    <view class="gallery-header">
+      <text class="gallery-title">记忆回廊</text>
+      <text class="gallery-count">{{userCards.length}} 张回忆</text>
+    </view>
+    
+    <scroll-view class="gallery-scroll" scroll-x>
+      <view 
+        class="memory-card"
+        wx:for="{{userCards}}"
+        wx:key="id"
+        bindtap="viewCard"
+        data-card-id="{{item.id}}"
+      >
+        <view class="memory-date">{{item.date}}</view>
+        <view class="memory-keyword">{{item.keyword}}</view>
+        <view class="memory-mood" style="background: {{item.moodColor}}"></view>
+      </view>
+    </scroll-view>
+  </view>
+  
+  <!-- 空状态 -->
+  <view class="empty-state" wx:if="{{hasUserInfo && !todayCard && !isGenerating}}">
+    <view class="empty-compass">
+      <view class="compass-ring empty">
+        <view class="compass-needle inactive"></view>
+      </view>
+    </view>
+    <text class="empty-title">今天还没有创建卡片</text>
+    <text class="empty-subtitle">通过情绪墨迹，让我感知你的今天</text>
+  </view>
+
+  <!-- 加载状态 -->
+  <view class="loading-overlay" wx:if="{{isGenerating}}">
+    <view class="loading-compass">
+      <view class="compass-ring loading">
+        <view class="compass-needle spinning"></view>
+      </view>
+    </view>
+    <text class="loading-text">{{loadingText}}</text>
+    <view class="loading-steps">
+      <view class="step {{currentStep >= 1 ? 'active' : ''}}">
+        <text class="step-icon">🌍</text>
+        <text class="step-text">感知环境</text>
+      </view>
+      <view class="step {{currentStep >= 2 ? 'active' : ''}}">
+        <text class="step-icon">🎨</text>
+        <text class="step-text">创意构思</text>
+      </view>
+      <view class="step {{currentStep >= 3 ? 'active' : ''}}">
+        <text class="step-icon">✨</text>
+        <text class="step-text">魔法生成</text>
+      </view>
+    </view>
+  </view>
+</view>
+</view>

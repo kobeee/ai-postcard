@@ -1,0 +1,16 @@
+{
+  "compileType": "miniprogram",
+  "libVersion": "3.9.2",
+  "projectType": "miniprogram",
+  "isGameTourist": false,
+  "appid": "wx4d0320c030b73680",
+  "projectname": "emotion-compass-miniprogram",
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "enhance": false,
+    "compileHotReLoad": false,
+    "minified": false,
+    "autoAudits": false
+  }
+}

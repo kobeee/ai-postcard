@@ -1,0 +1,14 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/postcard/postcard",
+    "pages/logs/logs"
+  ],
+  "window": {
+    "navigationBarTextStyle": "white",
+    "navigationBarTitleText": "情绪罗盘",
+    "navigationBarBackgroundColor": "#667eea",
+    "backgroundColor": "#667eea"
+  },
+  "sitemapLocation": "sitemap.json"
+}

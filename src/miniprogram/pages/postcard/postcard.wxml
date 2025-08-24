@@ -1,0 +1,95 @@
+<!-- postcard.wxml - 明信片详情页 -->
+<view class="container">
+  <!-- 加载状态 -->
+  <view class="loading-container" wx:if="{{loading}}">
+    <view class="loading-spinner"></view>
+    <text class="loading-text">加载中...</text>
+  </view>
+
+  <!-- 错误状态 -->
+  <view class="error-container" wx:elif="{{error}}">
+    <text class="error-icon">😕</text>
+    <text class="error-text">{{error}}</text>
+    <button class="retry-btn" type="primary" bindtap="handleRetry">重试</button>
+  </view>
+
+  <!-- 明信片内容 -->
+  <view class="postcard-container" wx:else>
+    <!-- 明信片图片 -->
+    <view class="image-section" wx:if="{{postcard.image_url}}">
+      <image 
+        class="postcard-image" 
+        src="{{postcard.image_url}}" 
+        mode="aspectFit"
+        show-menu-by-longpress="{{true}}"
+      ></image>
+    </view>
+
+    <!-- 明信片信息 -->
+    <view class="info-section">
+      <view class="content-card">
+        <view class="card-header">
+          <text class="card-title">明信片内容</text>
+          <text class="copy-btn" bindtap="copyContent">📋</text>
+        </view>
+        <text class="postcard-content">{{postcard.content || '暂无内容'}}</text>
+      </view>
+
+      <!-- 创作信息 -->
+      <view class="meta-card">
+        <view class="meta-item">
+          <text class="meta-label">创建时间：</text>
+          <text class="meta-value">{{postcard.created_at}}</text>
+        </view>
+        <view class="meta-item" wx:if="{{postcard.ai_model}}">
+          <text class="meta-label">AI模型：</text>
+          <text class="meta-value">{{postcard.ai_model}}</text>
+        </view>
+        <view class="meta-item" wx:if="{{postcard.generation_time}}">
+          <text class="meta-label">生成耗时：</text>
+          <text class="meta-value">{{postcard.generation_time}}秒</text>
+        </view>
+      </view>
+
+      <!-- 交互预览 -->
+      <view class="interactive-card" wx:if="{{postcard.frontend_code}}">
+        <view class="card-header">
+          <text class="card-title">交互效果</text>
+          <text class="preview-btn" bindtap="previewCode">🎭</text>
+        </view>
+        <text class="interactive-desc">这张明信片包含了动态交互效果</text>
+      </view>
+    </view>
+
+    <!-- 操作按钮 -->
+    <view class="actions-section">
+      <view class="action-row">
+        <button class="action-btn primary" open-type="share">
+          <text class="btn-icon">📤</text>
+          <text class="btn-text">分享给好友</text>
+        </button>
+        <button class="action-btn secondary" bindtap="saveImage">
+          <text class="btn-icon">💾</text>
+          <text class="btn-text">保存图片</text>
+        </button>
+      </view>
+
+      <view class="action-row">
+        <button class="action-btn secondary" bindtap="previewCode" wx:if="{{postcard.frontend_code}}">
+          <text class="btn-icon">🌐</text>
+          <text class="btn-text">查看交互</text>
+        </button>
+        <button class="action-btn danger" bindtap="handleDelete">
+          <text class="btn-icon">🗑️</text>
+          <text class="btn-text">删除明信片</text>
+        </button>
+      </view>
+    </view>
+
+    <!-- 底部信息 -->
+    <view class="footer-section">
+      <text class="footer-text">由 AI明信片 创作生成</text>
+      <text class="footer-link" bindtap="goHome">创建更多明信片 ></text>
+    </view>
+  </view>
+</view>

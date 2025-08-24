@@ -4,12 +4,12 @@ import logging
 from logging.handlers import RotatingFileHandler
 
 app = FastAPI(
-    title="User Service",
-    description="Handles user authentication, profile management, and related operations.",
-    version="0.1.0"
+    title="User Service", 
+    description="用户认证服务，处理微信小程序登录和用户管理",
+    version="1.0.0"
 )
 
-# 日志到 /app/logs
+# 日志配置
 log_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "logs"))
 os.makedirs(log_dir, exist_ok=True)
 
@@ -25,8 +25,14 @@ if not any(isinstance(h, RotatingFileHandler) for h in root_logger.handlers):
 
 @app.get("/")
 async def read_root():
-    return {"message": "Welcome to the User Service"}
+    return {"message": "用户服务运行正常"}
 
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
+
+# 包含API路由
+from .api import miniprogram
+
+# 注册小程序API路由
+app.include_router(miniprogram.router, prefix="/api/v1")

@@ -11,6 +11,7 @@ python-jose[cryptography]
 passlib[bcrypt]
 python-multipart
 httpx
+requests
 
 # Testing
 pytest

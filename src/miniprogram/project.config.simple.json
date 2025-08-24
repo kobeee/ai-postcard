@@ -1,0 +1,40 @@
+{
+  "description": "情绪罗盘小程序项目配置",
+  "compileType": "miniprogram",
+  "libVersion": "3.9.2",
+  "projectType": "miniprogram",
+  "appid": "wx932370c92853122e",
+  "projectname": "emotion-compass-miniprogram",
+  "setting": {
+    "urlCheck": false,
+    "ignoreHttpReqCheck": true,
+    "ignoreHttpsCheck": true,
+    "es6": true,
+    "postcss": true,
+    "compileHotReLoad": true,
+    "minified": true,
+    "autoAudits": false,
+    "uploadWithSourceMap": true,
+    "useIsolateContext": true,
+    "enhance": true,
+    "minifyWXSS": true,
+    "minifyWXML": true
+  },
+  "condition": {
+    "miniprogram": {
+      "list": [
+        {
+          "name": "首页",
+          "pathName": "pages/index/index",
+          "query": "",
+          "scene": null,
+          "launchMode": "default"
+        }
+      ]
+    }
+  },
+  "editorSetting": {
+    "tabIndent": "auto",
+    "tabSize": 2
+  }
+}

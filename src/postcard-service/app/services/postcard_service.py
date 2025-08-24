@@ -194,3 +194,62 @@ class PostcardService:
             self.db.rollback()
             logger.error(f"❌ 保存最终结果失败: {task_id} - {e}")
             raise
+
+    async def get_task_result(self, task_id: str) -> Optional[Postcard]:
+        """获取任务最终结果"""
+        try:
+            postcard = self.db.query(Postcard).filter(
+                Postcard.task_id == task_id,
+                Postcard.status == TaskStatus.COMPLETED.value
+            ).first()
+            
+            return postcard
+            
+        except Exception as e:
+            logger.error(f"❌ 获取任务结果失败: {task_id} - {e}")
+            raise
+
+    async def get_user_postcards(self, user_id: str, page: int = 1, limit: int = 10):
+        """获取用户的明信片列表"""
+        try:
+            offset = (page - 1) * limit
+            
+            postcards = self.db.query(Postcard).filter(
+                Postcard.user_id == user_id,
+                Postcard.status == TaskStatus.COMPLETED.value
+            ).order_by(Postcard.created_at.desc()).offset(offset).limit(limit).all()
+            
+            return postcards
+            
+        except Exception as e:
+            logger.error(f"❌ 获取用户作品失败: {user_id} - {e}")
+            raise
+
+    async def delete_postcard(self, postcard_id: str) -> bool:
+        """删除明信片"""
+        try:
+            postcard = self.db.query(Postcard).filter(Postcard.id == postcard_id).first()
+            
+            if not postcard:
+                return False
+            
+            self.db.delete(postcard)
+            self.db.commit()
+            
+            logger.info(f"✅ 明信片删除成功: {postcard_id}")
+            return True
+            
+        except SQLAlchemyError as e:
+            self.db.rollback()
+            logger.error(f"❌ 删除明信片失败: {postcard_id} - {e}")
+            raise
+
+    async def get_postcard_by_id(self, postcard_id: str) -> Optional[Postcard]:
+        """根据ID获取明信片"""
+        try:
+            postcard = self.db.query(Postcard).filter(Postcard.id == postcard_id).first()
+            return postcard
+            
+        except Exception as e:
+            logger.error(f"❌ 获取明信片失败: {postcard_id} - {e}")
+            raise

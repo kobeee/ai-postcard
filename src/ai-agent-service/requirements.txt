@@ -7,7 +7,7 @@ fastapi==0.116.1
 h11==0.16.0
 httptools==0.6.4
 idna==3.10
-httpx==0.27.2
+httpx>=0.28.1
 psycopg2-binary==2.9.10
 pydantic==2.11.7
 pydantic_core==2.33.2
@@ -22,7 +22,7 @@ urllib3==2.5.0
 uvicorn==0.35.0
 uvloop==0.21.0
 watchfiles==1.1.0
-websockets==15.0.1
+websockets>=13.0,<15.0
 
 # AI编码服务依赖
 # PyPI当前可用最新稳定版为0.0.20（容器内构建失败即由版本约束导致）

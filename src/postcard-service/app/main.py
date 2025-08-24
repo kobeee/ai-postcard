@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from .database.connection import init_database
 from .services.queue_service import QueueService
 from .api.postcards import router as postcards_router
+from .api.miniprogram import router as miniprogram_router
 
 # 加载环境变量
 load_dotenv()
@@ -89,6 +90,13 @@ app.include_router(
     postcards_router,
     prefix="/api/v1/postcards",
     tags=["明信片任务"]
+)
+
+# 注册小程序专用路由
+app.include_router(
+    miniprogram_router,
+    prefix="/api/v1",
+    tags=["小程序接口"]
 )
 
 @app.get("/")

@@ -15,6 +15,9 @@ from dotenv import load_dotenv
 from .coding_service.api import router as coding_router
 from .coding_service.config import settings
 
+# 导入小程序API
+from .api.miniprogram import router as miniprogram_router
+
 # 加载环境变量
 load_dotenv()
 
@@ -94,6 +97,13 @@ app.include_router(
     coding_router,
     prefix="/api/v1/coding",
     tags=["AI代码生成"]
+)
+
+# 集成小程序API路由
+app.include_router(
+    miniprogram_router,
+    prefix="/api/v1/miniprogram/ai",
+    tags=["小程序AI服务"]
 )
 
 # 添加静态文件服务，用于托管前端构建产物和AI生成的文件
