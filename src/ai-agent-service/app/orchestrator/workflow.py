@@ -78,8 +78,8 @@ class PostcardWorkflow:
             if error_message:
                 data["error_message"] = error_message
 
-            # 增加重试，提升可靠性
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            # 增加重试，提升可靠性，延长超时时间适应大模型响应
+            async with httpx.AsyncClient(timeout=30.0) as client:
                 for attempt in range(3):
                     try:
                         response = await client.post(url, json=data)
@@ -126,7 +126,7 @@ class PostcardWorkflow:
                     payload[key] = results[key]
 
             url = f"{self.postcard_service_url}/api/v1/postcards/status/{task_id}"
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post(url, json=payload)
                 if resp.status_code == 200:
                     self.logger.info("✅ 最终结果提交成功")

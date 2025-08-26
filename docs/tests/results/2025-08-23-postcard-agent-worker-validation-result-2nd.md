@@ -97,7 +97,6 @@
 
 ### Claude 代码生成详细日志
 ```
-2025-08-23 10:39:28,621 - app.coding_service.providers.claude_provider - INFO - ✅ 环境变量配置完成 - Token: sk-acw-6...b265
 2025-08-23 10:39:28,621 - app.coding_service.providers.claude_provider - INFO - ✅ 使用自定义Base URL: https://api.aicodewith.com
 2025-08-23 10:39:28,621 - app.coding_service.providers.claude_provider - INFO - 📤 开始代码生成任务 - 会话ID: postcard_f4acf92b-ea9f-4cb7-a3b3-ab47548a0a77, 模型: claude-sonnet-4-20250514
 2025-08-23 10:39:28,629 - app.coding_service.providers.claude_provider - INFO - ✅ Claude SDK客户端初始化成功

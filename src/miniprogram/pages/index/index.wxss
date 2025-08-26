@@ -126,7 +126,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: compassRotate 20s linear infinite;
+  /* 只让底盘微弱呼吸，避免公转导致针位移错觉 */
+  animation: none;
 }
 
 @keyframes compassRotate {
@@ -140,13 +141,18 @@
   height: 80rpx;
   background: linear-gradient(to top, transparent, #fff, #ff6b6b);
   border-radius: 2rpx;
+  /* 确保针位于圆盘正中心 */
+  left: 50%;
+  bottom: 50%;
   transform-origin: bottom center;
+  transform: translateX(-50%);
+  /* 自转：轻微摆动；不跟随底盘旋转 */
   animation: needleSwing 4s ease-in-out infinite;
 }
 
 @keyframes needleSwing {
-  0%, 100% { transform: rotate(-5deg); }
-  50% { transform: rotate(5deg); }
+  0%, 100% { transform: translateX(-50%) rotate(-5deg); }
+  50% { transform: translateX(-50%) rotate(5deg); }
 }
 
 .compass-dot {
@@ -670,6 +676,56 @@
   color: #fff;
 }
 
+/* 环境状态显示 */
+.date-info-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.env-status {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 4rpx 12rpx;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 20rpx;
+  backdrop-filter: blur(10rpx);
+}
+
+.status-dot {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  background: #4ecdc4;
+}
+
+.status-dot.loading {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+.status-text {
+  font-size: 20rpx;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* 生成按钮等待状态 */
+.generate.waiting {
+  background: linear-gradient(135deg, #95a5a6, #7f8c8d);
+  cursor: not-allowed;
+}
+
+.generate.waiting:hover {
+  background: linear-gradient(135deg, #95a5a6, #7f8c8d);
+  transform: none;
+}
+
 /* 响应式适配 */
 @media screen and (max-width: 750rpx) {
   .compass-container {
@@ -686,5 +742,13 @@
   
   .loading-steps {
     gap: 40rpx;
+  }
+  
+  .date-info-container {
+    gap: 6rpx;
+  }
+  
+  .status-text {
+    font-size: 18rpx;
   }
 }

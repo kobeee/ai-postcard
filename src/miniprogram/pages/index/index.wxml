@@ -13,7 +13,17 @@
       <view class="ring-glow"></view>
     </view>
     <text class="greeting-text">{{greetingText}}</text>
-    <text class="date-info">{{currentDate}} · {{weatherInfo}}</text>
+    <view class="date-info-container">
+      <text class="date-info">{{currentDate}} · {{weatherInfo}}</text>
+      <view class="env-status" wx:if="{{!environmentReady}}">
+        <text class="status-dot loading"></text>
+        <text class="status-text">环境信息获取中</text>
+      </view>
+      <view class="env-status" wx:elif="{{environmentReady}}">
+        <text class="status-dot"></text>
+        <text class="status-text">环境信息已获取</text>
+      </view>
+    </view>
   </view>
 
   <!-- 登录界面 -->
@@ -100,8 +110,9 @@
       
       <view class="ink-actions">
         <button class="ink-btn clear" bindtap="clearInk">清空</button>
-        <button class="ink-btn generate {{isGenerating ? 'loading' : ''}}" bindtap="generateDailyCard" disabled="{{isGenerating}}">
-          <text wx:if="{{!isGenerating}}">✨ 生成卡片</text>
+        <button class="ink-btn generate {{isGenerating ? 'loading' : ''}} {{!environmentReady ? 'waiting' : ''}}" bindtap="generateDailyCard" disabled="{{isGenerating || !environmentReady}}">
+          <text wx:if="{{!environmentReady && !isGenerating}}">🌍 获取环境信息中...</text>
+          <text wx:elif="{{!isGenerating}}">✨ 生成卡片</text>
           <text wx:else>🌟 AI感知中</text>
         </button>
       </view>

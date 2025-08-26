@@ -230,5 +230,20 @@ module.exports = {
     
     // 获取用户信息
     getUserInfo: () => requestManager.get(envConfig.getApiUrl('/miniprogram/auth/userinfo'))
+  },
+
+  // 环境与位置相关API - 大模型调用需要更长超时时间
+  envAPI: {
+    // 逆地理解析 -> 城市信息（首次查询较慢，缓存后秒级响应）
+    reverseGeocode: (latitude, longitude, language = 'zh') =>
+      requestManager.get(envConfig.getApiUrl('/miniprogram/location/reverse'), { latitude, longitude, language }, { timeout: 55000 }),
+    
+    // 天气查询（当前）- 准确性优先，实时数据查询
+    getWeather: (latitude, longitude) =>
+      requestManager.get(envConfig.getApiUrl('/miniprogram/environment/weather'), { latitude, longitude }, { timeout: 50000 }),
+
+    // 城市热点 - 综合查询，优雅降级保证可用性
+    getTrending: (city, lang = 'zh') =>
+      requestManager.get(envConfig.getApiUrl('/miniprogram/trending'), { city, lang }, { timeout: 50000 })
   }
 };

@@ -18,6 +18,12 @@ from .coding_service.config import settings
 # 导入小程序API
 from .api.miniprogram import router as miniprogram_router
 
+# 导入环境感知API
+from .api.environment import router as environment_router
+
+# 导入WebSearch测试服务
+from .services.claude_websearch_test import ClaudeWebSearchTest
+
 # 加载环境变量
 load_dotenv()
 
@@ -105,6 +111,27 @@ app.include_router(
     prefix="/api/v1/miniprogram/ai",
     tags=["小程序AI服务"]
 )
+
+# 集成环境感知API路由
+app.include_router(
+    environment_router,
+    prefix="/api/v1/environment",
+    tags=["环境感知服务"]
+)
+
+# 初始化WebSearch测试服务
+websearch_test = ClaudeWebSearchTest()
+
+# WebSearch测试API端点
+@app.get("/api/v1/test/websearch")
+async def test_websearch(query: str, city: str = None):
+    """测试Claude Code SDK WebSearch功能"""
+    return await websearch_test.test_websearch(query, city)
+
+@app.get("/api/v1/test/trending")  
+async def test_trending_news(city: str):
+    """测试热点新闻搜索功能"""
+    return await websearch_test.test_trending_news(city)
 
 # 添加静态文件服务，用于托管前端构建产物和AI生成的文件
 import os
@@ -199,7 +226,11 @@ async def service_info():
         "features": [
             "AI代码生成 (lovart.ai模拟器)",
             "实时代码预览",
-            "多AI模型支持"
+            "多AI模型支持",
+            "地理位置查询 (Claude WebSearch)",
+            "天气信息查询 (Claude WebSearch)",
+            "热点新闻查询 (Claude WebSearch)",
+            "社交媒体趋势 (Claude WebSearch)"
         ],
         "endpoints": [
             "/",
@@ -209,7 +240,13 @@ async def service_info():
             "/lovart-sim",  # lovart.ai模拟器入口
             "/api/v1/coding/generate-code",
             "/api/v1/coding/status/{task_id}",
-            "/api/v1/coding/tasks/{task_id}/status"
+            "/api/v1/coding/tasks/{task_id}/status",
+            "/api/v1/environment/location/reverse",  # 地理位置查询
+            "/api/v1/environment/weather",  # 天气查询
+            "/api/v1/environment/trending/news",  # 热点新闻
+            "/api/v1/environment/trending/social",  # 社交热点
+            "/api/v1/environment/trending/comprehensive",  # 综合热点
+            "/api/v1/environment/complete"  # 完整环境信息
         ],
         "websocket_endpoints": [
             "/api/v1/coding/status/{task_id}"

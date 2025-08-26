@@ -36,20 +36,23 @@ class ClaudeCodeProvider(BaseCodeProvider):
             logger.error("❌ ANTHROPIC_AUTH_TOKEN 环境变量未设置")
             raise ValueError("ANTHROPIC_AUTH_TOKEN 环境变量未设置")
         
-        logger.info(f"✅ 环境变量配置完成 - Token: {auth_token[:8]}...{auth_token[-4:]}")
         if base_url:
             logger.info(f"✅ 使用自定义Base URL: {base_url}")
 
     async def generate(self, prompt: str, session_id: str, model: str | None = None) -> AsyncGenerator[Dict[str, Any], None]:
         """
-        生成代码 - 简化版本，基于acceptEdits模式
+        生成代码 - 优化版本，基于Claude Code SDK最佳实践
         """
         # 使用传入的model参数，如果没有则使用默认模型
         target_model = model or self.model
         
+        # 【性能优化】记录开始时间用于性能监控
+        generation_start_time = time.time()
+        
         try:
-            yield {"type": "status", "content": "🚀 初始化AI代码生成器..."}
-            logger.info(f"📤 开始代码生成任务 - 会话ID: {session_id}, 模型: {target_model}")
+            yield {"type": "status", "content": "🚀 初始化AI代码生成器（优化模式）..."}
+            logger.info(f"📤 开始优化代码生成任务 - 会话ID: {session_id}, 模型: {target_model}")
+            logger.info(f"🔧 启用优化特性: skip_permissions=True, max_turns=5")
 
             # 构建系统提示 - 非交互式模式
             system_prompt = self._build_system_prompt()
@@ -62,9 +65,9 @@ class ClaudeCodeProvider(BaseCodeProvider):
             
             options = ClaudeCodeOptions(
                 system_prompt=system_prompt,
-                max_turns=3,
+                max_turns=5,  # 增加轮次以获得更好的结果
                 allowed_tools=["Write", "Read", "Edit"],  # 使用Write、Read、Edit工具用于文件生成
-                permission_mode="acceptEdits",  # 接受编辑模式，允许代码生成
+                permission_mode="bypassPermissions",  # 允许所有工具而不提示，实现完全自动化
                 cwd=generated_dir  # 设置为AI生成文件专用目录
             )
             
@@ -256,6 +259,9 @@ class ClaudeCodeProvider(BaseCodeProvider):
                         
                         logger.info(f"📁 最终文件列表: {list(extracted_files.keys())}")
                         
+                        # 【性能监控】计算总耗时
+                        total_generation_time = time.time() - generation_start_time
+                        
                         yield {
                             "type": "complete",
                             "final_code": final_code,
@@ -265,10 +271,15 @@ class ClaudeCodeProvider(BaseCodeProvider):
                                 "session_id": session_id,
                                 "cost_usd": getattr(message, 'total_cost_usd', 0),
                                 "duration_ms": getattr(message, 'duration_ms', 0),
-                                "total_tokens": getattr(message, 'total_tokens', 0)
+                                "total_tokens": getattr(message, 'total_tokens', 0),
+                                # 【优化监控】性能指标
+                                "total_generation_time": round(total_generation_time, 2),
+                                "files_generated": len(extracted_files),
+                                "code_length": len(final_code),
+                                "optimization_enabled": True
                             }
                         }
-                        logger.info("🎉 代码生成任务完成")
+                        logger.info(f"🎉 优化代码生成完成 - 耗时: {total_generation_time:.2f}s, 文件: {len(extracted_files)}, 代码: {len(final_code)} 字符")
                         return
                         
         except asyncio.CancelledError:
@@ -293,56 +304,51 @@ class ClaudeCodeProvider(BaseCodeProvider):
             yield {"type": "error", "content": f"代码生成失败: {str(e)}"}
     
     def _build_system_prompt(self) -> str:
-        """构建系统提示 - 非交互式模式，强调生成高质量可运行代码"""
+        """构建优化的系统提示 - 基于Claude Code最佳实践"""
         return """
-你是一个专业的前端代码生成助手。当前工作目录已设置为/app/static/generated。
+You are an expert frontend code generator specializing in creating interactive web applications. Your workspace is set to /app/static/generated.
 
-**核心工作模式**：
-- 根据用户需求生成完整可运行、可交互的前端代码
-- **必须使用Write工具将代码写入文件到当前工作目录**
-- 使用相对路径创建文件，如: index.html, style.css, script.js
-- 同时在代码块中输出代码内容，供前端解析和展示
+# Your Mission
+Create complete, functional, interactive web applications that users can immediately run and enjoy. Focus on building working software, not just code examples.
 
-**代码质量要求**：
-- **生成的代码必须完全可运行**：所有按钮、输入框、交互功能都要正常工作
-- **事件处理完整**：确保所有点击、输入、键盘事件都有正确的处理函数
-- **功能逻辑完善**：游戏规则、计算逻辑、状态管理要准确实现
-- **UI响应正常**：界面更新、状态显示、用户反馈要及时响应
-- **错误处理健全**：包含适当的输入验证和错误提示
+# Core Workflow
+1. **Analyze the requirements** thoroughly to understand all needed features
+2. **Design the application architecture** ensuring all components work together
+3. **Generate working files** using the Write tool for each file (critical step)
+4. **Create polished, production-ready code** that users will love
 
-**重要：文件创建要求**：
-- **每次都必须使用Write工具创建实际的文件**
-- 只使用文件名，不要添加路径前缀
-- 正确示例：index.html, style.css, script.js
-- 错误示例：/tmp/index.html, ./files/style.css, /app/static/generated/script.js
+# File Creation Rules
+- **Always use Write tool** to create actual files - this is mandatory
+- **Use simple filenames only**: index.html, style.css, script.js
+- **Never use paths**: avoid /tmp/, ./files/, or /app/static/generated/ prefixes
+- **Create multiple files** when the project needs them
 
-**工作流程**：
-1. 分析用户需求，理解所有功能要求
-2. 设计完整的代码架构，确保所有功能都能实现
-3. **使用Write工具创建文件(关键步骤)**
-4. 在代码块中展示代码内容
+# Code Quality Standards
+Your generated applications must be:
+- **Completely functional**: Every button, input, and feature works perfectly
+- **Fully interactive**: All user actions produce appropriate responses  
+- **Visually polished**: Modern, attractive CSS styling
+- **Well-structured**: Clean, organized, maintainable code
+- **Error-resistant**: Proper input validation and error handling
 
-**代码实现规范**：
-- 使用标准的代码块格式（```html、```css、```javascript等）
-- 生成完整可运行的HTML应用，包含所有必需的DOM元素
-- 包含现代化的CSS样式，确保界面美观易用
-- JavaScript代码要完整实现所有交互逻辑，不能有未定义的函数或变量
-- 所有事件监听器都要正确绑定，确保用户操作有响应
-- 适当的注释说明关键功能和算法逻辑
+# Technical Requirements
+- Generate complete HTML documents with proper structure
+- Use modern CSS for styling (flexbox, grid, animations where appropriate)
+- Write complete JavaScript with all functions implemented
+- Ensure all event listeners are properly bound
+- Include responsive design considerations
+- Add helpful comments for complex logic
 
-**多文件项目处理**：
-- 自动识别并创建多个相关文件
-- HTML文件自动引用CSS和JS文件
-- 确保文件间的依赖关系正确
-- 所有文件协同工作，实现完整功能
+# Application Types
+For any type of application (games, tools, forms, etc.):
+- Implement ALL required logic completely
+- Test critical user interaction paths mentally
+- Ensure the user experience is smooth and intuitive
+- Make it something users will actually want to use
 
-**特别注意**：
-- 生成游戏类应用时，确保所有游戏逻辑都完整实现
-- 生成工具类应用时，确保所有计算和操作都正确执行
-- 生成表单类应用时，确保所有验证和提交逻辑都工作正常
-- 测试关键交互路径，确保用户能够正常使用所有功能
+Remember: You're not just generating code - you're building working applications that should delight users. Focus on creating something genuinely useful and enjoyable.
 
-请直接开始代码生成，使用Write工具创建文件。"""
+Start generating the application files now using the Write tool."""
 
     def _contains_code(self, text: str) -> bool:
         """判断文本是否包含代码块"""

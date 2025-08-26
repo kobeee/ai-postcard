@@ -1,5 +1,5 @@
 // pages/index/index.js - 情绪罗盘首页
-const { postcardAPI, authAPI } = require('../../utils/request.js');
+const { postcardAPI, authAPI, envAPI } = require('../../utils/request.js');
 const authUtil = require('../../utils/auth.js');
 const { startPolling, POLLING_CONFIGS } = require('../../utils/task-polling.js');
 const envConfig = require('../../config/env.js');
@@ -17,6 +17,10 @@ Page({
     greetingText: '',
     currentDate: '',
     weatherInfo: '获取中...',
+    
+    // 环境信息获取状态
+    environmentReady: false,
+    locationPermissionGranted: false,
     
     // 今日卡片
     todayCard: null,
@@ -56,6 +60,20 @@ Page({
     }
   },
 
+  onHide() {
+    // 页面隐藏时停止所有轮询任务
+    const { stopAllPolling } = require('../../utils/task-polling.js');
+    stopAllPolling();
+    envConfig.log('页面隐藏，停止所有轮询任务');
+  },
+
+  onUnload() {
+    // 页面卸载时停止所有轮询任务
+    const { stopAllPolling } = require('../../utils/task-polling.js');
+    stopAllPolling();
+    envConfig.log('页面卸载，停止所有轮询任务');
+  },
+
   /**
    * 初始化页面
    */
@@ -71,6 +89,19 @@ Page({
     
     // 获取位置和天气
     this.getLocationAndWeather();
+    
+    // 取消30秒降级：准确性优先，仅在拿到真实数据后置为就绪
+    // 同时尝试读取预取缓存以缩短等待
+    try {
+      const cache = wx.getStorageSync('envCache');
+      if (cache && cache.ts && (Date.now() - cache.ts) < 5 * 60 * 1000) {
+        this.setData({
+          userLocation: cache.location,
+          cityName: cache.cityName || this.data.cityName,
+          weatherInfo: cache.weatherInfo || this.data.weatherInfo
+        });
+      }
+    } catch (e) {}
     
     // 检查用户状态
     this.checkUserStatus();
@@ -97,8 +128,9 @@ Page({
    */
   initCanvas() {
     try {
-      // 获取Canvas上下文
+      // 获取并缓存Canvas上下文，避免反复创建
       const ctx = wx.createCanvasContext('emotionCanvas');
+      this.ctx = ctx;
       
       // 设置Canvas背景
       ctx.setFillStyle('#fafafa');
@@ -203,32 +235,78 @@ Page({
    */
   async doGetLocation() {
     try {
-      const location = await new Promise((resolve, reject) => {
-        wx.getLocation({
-          type: 'gcj02',
-          success: resolve,
-          fail: reject
-        });
-      });
+      // 为提升成功率：开启高精度并添加手动超时兜底（8秒）
+      const location = await Promise.race([
+        new Promise((resolve, reject) => {
+          wx.getLocation({
+            type: 'gcj02',
+            isHighAccuracy: true,
+            highAccuracyExpireTime: 3000,
+            success: resolve,
+            fail: reject
+          });
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('LOCATION_TIMEOUT')), 8000))
+      ]);
 
       envConfig.log('获取位置成功:', location);
       
-      // 这里可以调用天气API获取天气信息
-      // 模拟天气数据
-      const weatherConditions = ['晴朗', '多云', '微风', '细雨', '暖阳', '清风'];
-      const randomWeather = weatherConditions[Math.floor(Math.random() * weatherConditions.length)];
-      
+      // 保存位置信息
+      const latitude = location.latitude;
+      const longitude = location.longitude;
       this.setData({
-        weatherInfo: randomWeather,
-        userLocation: {
-          latitude: location.latitude,
-          longitude: location.longitude
-        }
+        userLocation: { latitude, longitude }
       });
+
+      // 并行获取城市与天气
+      const { envAPI } = require('../../utils/request.js');
+      const [cityRes, weatherRes] = await Promise.all([
+        envAPI.reverseGeocode(latitude, longitude, 'zh'),
+        envAPI.getWeather(latitude, longitude)
+      ]);
+
+      const cityName = (cityRes && (cityRes.city || cityRes.name)) || '';
+      const weatherText = (weatherRes && weatherRes.weather_text) || this.data.weatherInfo;
+      const temperature = weatherRes && weatherRes.temperature;
+      const weatherInfo = typeof temperature === 'number' ? `${weatherText} · ${temperature}°C` : weatherText;
+
+      this.setData({
+        cityName,
+        weatherInfo,
+        environmentReady: true,  // 仅在真实数据返回后置为就绪
+        locationPermissionGranted: true
+      });
+
+      envConfig.log('✅ 环境信息获取完成:', { cityName, weatherInfo });
+
+      // 获取城市热点并写入灵感文案第一条
+      try {
+        const trendingRes = await envAPI.getTrending(cityName || '本地');
+        const items = (trendingRes && trendingRes.items) || [];
+        if (items.length > 0) {
+          // 将最热标题插入 inspirations 第一位
+          const inspirations = this.data.todayCard?.inspirations || [
+            { icon: '🌍', text: `因为今天是${this.data.weatherInfo}` },
+            { icon: '🎨', text: '你的情绪很独特' },
+            { icon: '✨', text: '基于当下的热点话题' },
+            { icon: '💫', text: '来自你的情绪墨迹' }
+          ];
+          inspirations[2] = { icon: '📰', text: items[0].title || '今日热点' };
+          this.setData({
+            todayCard: this.data.todayCard ? { ...this.data.todayCard, inspirations } : this.data.todayCard
+          });
+        }
+      } catch (e) {
+        // 静默降级
+      }
 
     } catch (error) {
       envConfig.error('获取位置失败:', error);
-      this.setDefaultWeather();
+      // 不降级：保持等待，由用户决定是否继续
+      this.setData({
+        environmentReady: false,
+        locationPermissionGranted: false
+      });
     }
   },
 
@@ -236,12 +314,11 @@ Page({
    * 设置默认天气信息
    */
   setDefaultWeather() {
-    const defaultWeatherConditions = ['微风', '晴朗', '温和'];
-    const randomWeather = defaultWeatherConditions[Math.floor(Math.random() * defaultWeatherConditions.length)];
-    
+    // 移除默认环境就绪逻辑：准确性优先，不设置为就绪
     this.setData({
-      weatherInfo: randomWeather + '（基于默认设置）'
+      environmentReady: false
     });
+    envConfig.log('保持等待真实环境信息，不使用默认降级');
   },
 
   /**
@@ -452,14 +529,17 @@ Page({
     
     this.setData({ isDrawing: true });
     
-    const ctx = wx.createCanvasContext('emotionCanvas');
+    const ctx = this.ctx || wx.createCanvasContext('emotionCanvas');
+    this.ctx = ctx; // 缓存context以便后续使用
     const point = e.touches[0];
     
-    ctx.setStrokeStyle('#667eea');
+    // 使用黑色画笔，提升对比度并符合"黑色笔画"的需求
+    ctx.setStrokeStyle('#000000');
     ctx.setLineWidth(4);
     ctx.setLineCap('round');
     ctx.setLineJoin('round');
     
+    // 开始新的路径并移动到起始点
     ctx.beginPath();
     ctx.moveTo(point.x, point.y);
     
@@ -468,6 +548,11 @@ Page({
       y: point.y,
       time: Date.now()
     }];
+    
+    // 绘制起始点
+    ctx.arc(point.x, point.y, 2, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.draw(true);
     
     envConfig.log('开始绘制情绪墨迹:', point);
   },
@@ -485,12 +570,28 @@ Page({
       return;
     }
     
-    const ctx = wx.createCanvasContext('emotionCanvas');
+    if (!this.ctx) {
+      this.ctx = wx.createCanvasContext('emotionCanvas');
+      // 重新设置画笔属性
+      this.ctx.setStrokeStyle('#000000');
+      this.ctx.setLineWidth(4);
+      this.ctx.setLineCap('round');
+      this.ctx.setLineJoin('round');
+    }
+    
+    const ctx = this.ctx;
     const point = e.touches[0];
     
-    ctx.lineTo(point.x, point.y);
-    ctx.stroke();
-    ctx.draw(true);
+    // 连续绘制：画线到当前点
+    if (this.emotionPath && this.emotionPath.length > 0) {
+      ctx.lineTo(point.x, point.y);
+      ctx.stroke();
+      ctx.draw(true);
+      
+      // 重新开始路径以便继续绘制
+      ctx.beginPath();
+      ctx.moveTo(point.x, point.y);
+    }
     
     // 记录路径数据
     if (this.emotionPath) {
@@ -508,12 +609,18 @@ Page({
   onInkEnd(e) {
     console.log('Canvas touch end', e);
     
+    if (this.data.isDrawing && this.ctx) {
+      // 完成最后的绘制
+      this.ctx.stroke();
+      this.ctx.draw(true);
+    }
+    
     this.setData({ isDrawing: false });
     
     // 分析情绪墨迹
     this.analyzeEmotion();
     
-    envConfig.log('结束绘制情绪墨迹');
+    envConfig.log('结束绘制情绪墨迹，路径点数:', this.emotionPath ? this.emotionPath.length : 0);
   },
 
   /**
@@ -577,6 +684,62 @@ Page({
       return;
     }
 
+    // 检查环境信息是否已获取完成
+    if (!this.data.environmentReady) {
+      // 显示等待提示
+      wx.showLoading({
+        title: '正在获取环境信息...',
+        mask: true
+      });
+      
+      try {
+        // 等待环境信息获取完成，最多等待55秒（与后端/网关超时策略匹配）
+        const maxWaitTime = 55000; // 55秒
+        const checkInterval = 500;  // 500毫秒检查一次
+        const startTime = Date.now();
+        
+        while (!this.data.environmentReady && (Date.now() - startTime) < maxWaitTime) {
+          await new Promise(resolve => setTimeout(resolve, checkInterval));
+        }
+        
+        wx.hideLoading();
+        
+        if (!this.data.environmentReady) {
+          // 超时仍未获取到环境信息，询问用户是否继续
+          const shouldContinue = await new Promise(resolve => {
+            wx.showModal({
+              title: '环境信息获取中',
+              content: '位置和天气信息正在获取中，是否使用基础信息继续生成？',
+              confirmText: '继续生成',
+              cancelText: '等待完成',
+              success: (res) => resolve(res.confirm),
+              fail: () => resolve(false)
+            });
+          });
+          
+          if (!shouldContinue) {
+            return; // 用户选择等待，退出生成
+          }
+        }
+      } catch (error) {
+        wx.hideLoading();
+        envConfig.error('等待环境信息时出错:', error);
+        // 发生错误时也询问用户是否继续
+        const shouldContinue = await new Promise(resolve => {
+          wx.showModal({
+            title: '提示',
+            content: '环境信息获取遇到问题，是否使用基础信息生成卡片？',
+            success: (res) => resolve(res.confirm),
+            fail: () => resolve(false)
+          });
+        });
+        
+        if (!shouldContinue) {
+          return;
+        }
+      }
+    }
+
     try {
       this.setData({ 
         isGenerating: true,
@@ -606,29 +769,78 @@ Page({
         });
       }, 3000);
 
-      // 构建请求数据
+      // 构建请求数据 - 智能环境感知与情绪分析
+      // 获取热点话题用于AI创意生成
+      let trendingTopics = '';
+      try {
+        const { envAPI } = require('../../utils/request.js');
+        const cityName = this.data.cityName || '本地';
+        const trendingRes = await envAPI.getTrending(cityName);
+        const items = (trendingRes && trendingRes.items) || [];
+        if (items.length > 0) {
+          trendingTopics = items.slice(0, 3).map(item => item.title).join('、');
+        }
+      } catch (e) {
+        // 热点获取失败，静默降级
+        envConfig.log('热点获取失败，使用基础信息', e);
+      }
+      
+      // 增强的环境感知信息
+      const locationInfo = {
+        city: this.data.cityName || '本地',
+        weather: this.data.weatherInfo || '温和',
+        coordinates: this.data.userLocation ? `${this.data.userLocation.latitude.toFixed(3)}, ${this.data.userLocation.longitude.toFixed(3)}` : '当前位置'
+      };
+      
+      // 深度情绪分析
+      const emotionAnalysis = this.emotionAnalysis || {};
+      const emotionInfo = {
+        type: emotionAnalysis.type || 'calm', // 情绪类型：energetic/calm/thoughtful
+        intensity: this.getEmotionIntensity(emotionAnalysis), // 情绪强度：low/medium/high
+        pattern: this.getEmotionPattern(emotionAnalysis), // 情绪模式：flowing/jagged/circular
+        duration: emotionAnalysis.duration || 0, // 绘制时长
+        complexity: this.getEmotionComplexity(emotionAnalysis) // 复杂度：simple/moderate/complex
+      };
+      
+      // 时间上下文
+      const now = new Date();
+      const timeContext = {
+        period: this.getTimePeriod(now.getHours()), // 时段：dawn/morning/afternoon/evening/night
+        weekday: now.toLocaleDateString('zh-CN', { weekday: 'long' }),
+        season: this.getSeason(now.getMonth() + 1)
+      };
+      
+      // 构建丰富的AI提示
+      const userInput = this.buildEnhancedPrompt(locationInfo, emotionInfo, timeContext, trendingTopics);
+
       const requestData = {
-        content: '今日情绪卡片生成',
+        user_input: userInput,
         user_id: this.data.userInfo.id,
-        emotion_analysis: this.emotionAnalysis,
-        location: this.data.userLocation,
-        weather: this.data.weatherInfo,
-        timestamp: Date.now()
+        // 增强的主题信息，便于后端AI理解
+        theme: emotionInfo.type,
+        style: `emotion-compass-${emotionInfo.intensity}-${timeContext.period}`
       };
 
       // 发送生成请求
       const result = await postcardAPI.create(requestData);
       const { task_id } = result;
+      
+      // 保存任务ID以便错误处理时清理
+      this.currentTaskId = task_id;
+      envConfig.log('开始明信片生成任务:', task_id);
 
-      // 开始轮询任务状态
+      // 开始轮询任务状态 - 使用AI生成专用配置，支持长时间任务
       const finalResult = await startPolling(task_id, {
-        ...POLLING_CONFIGS.NORMAL,
+        ...POLLING_CONFIGS.AI_GENERATION,
         onProgress: (progress) => {
           this.setData({
             loadingText: `生成进度: ${progress}%`
           });
         }
       });
+      
+      // 任务完成，清理任务ID
+      this.currentTaskId = null;
 
       // 生成成功
       this.setData({
@@ -648,6 +860,14 @@ Page({
 
     } catch (error) {
       envConfig.error('生成卡片失败:', error);
+      
+      // 清理当前任务
+      if (this.currentTaskId) {
+        const { stopPolling } = require('../../utils/task-polling.js');
+        stopPolling(this.currentTaskId);
+        this.currentTaskId = null;
+        envConfig.log('已清理失败的任务轮询');
+      }
       
       this.setData({
         isGenerating: false
@@ -780,6 +1000,148 @@ Page({
     return {
       title: '情绪罗盘 - 每一天，都值得被温柔记录',
       imageUrl: this.data.todayCard?.image || ''
+    };
+  },
+
+  // ==================== 增强情绪分析工具方法 ====================
+
+  /**
+   * 获取情绪强度
+   */
+  getEmotionIntensity(analysis) {
+    if (!analysis || !analysis.speed || !analysis.distance) return 'low';
+    
+    const speed = analysis.speed;
+    const distance = analysis.distance;
+    
+    // 综合考虑速度和距离
+    if (speed > 0.8 || distance > 500) return 'high';
+    if (speed > 0.3 || distance > 150) return 'medium'; 
+    return 'low';
+  },
+
+  /**
+   * 获取情绪模式
+   */
+  getEmotionPattern(analysis) {
+    if (!analysis || !analysis.distance || !analysis.duration) return 'flowing';
+    
+    const speed = analysis.speed || 0;
+    const distance = analysis.distance || 0;
+    const duration = analysis.duration || 1000;
+    
+    // 基于速度变化和轨迹特征判断模式
+    const averageSpeed = distance / duration * 1000; // 像素/秒
+    
+    if (averageSpeed > 100) return 'jagged'; // 急促、锯齿状
+    if (distance > 300 && duration > 3000) return 'circular'; // 长时间画圆
+    return 'flowing'; // 流畅平滑
+  },
+
+  /**
+   * 获取情绪复杂度
+   */
+  getEmotionComplexity(analysis) {
+    if (!analysis || !analysis.distance) return 'simple';
+    
+    const distance = analysis.distance;
+    const duration = analysis.duration || 1000;
+    
+    // 基于轨迹复杂度判断
+    if (distance > 400 && duration > 4000) return 'complex';
+    if (distance > 150 && duration > 2000) return 'moderate';
+    return 'simple';
+  },
+
+  /**
+   * 获取时段
+   */
+  getTimePeriod(hour) {
+    if (hour < 6) return 'dawn'; // 凌晨
+    if (hour < 12) return 'morning'; // 上午
+    if (hour < 18) return 'afternoon'; // 下午
+    if (hour < 22) return 'evening'; // 傍晚
+    return 'night'; // 夜晚
+  },
+
+  /**
+   * 获取季节
+   */
+  getSeason(month) {
+    if (month >= 3 && month <= 5) return 'spring'; // 春天
+    if (month >= 6 && month <= 8) return 'summer'; // 夏天
+    if (month >= 9 && month <= 11) return 'autumn'; // 秋天
+    return 'winter'; // 冬天
+  },
+
+  /**
+   * 构建增强AI提示
+   */
+  buildEnhancedPrompt(locationInfo, emotionInfo, timeContext, trendingTopics) {
+    const prompt = `心绪花开 - 智能情绪明信片生成
+
+环境感知：
+• 地理位置：${locationInfo.city}（${locationInfo.coordinates}）
+• 天气状况：${locationInfo.weather}
+• 时间背景：${timeContext.weekday} ${timeContext.period} (${timeContext.season})
+${trendingTopics ? `• 当地热点：${trendingTopics}` : ''}
+
+情绪分析：
+• 情绪类型：${emotionInfo.type}（${this.getEmotionDescription(emotionInfo.type)}）
+• 情绪强度：${emotionInfo.intensity}
+• 表达模式：${emotionInfo.pattern}
+• 情感复杂度：${emotionInfo.complexity}
+• 表达时长：${Math.round(emotionInfo.duration / 1000)}秒
+
+请基于以上信息生成一张个性化的动态明信片，要求：
+1. 深度融合地理环境、天气状况和当地热点话题
+2. 准确反映用户的情绪状态和表达方式
+3. 结合时间背景营造恰当的氛围
+4. 生成有趣、温暖、具有个人意义的内容
+5. 包含互动元素和动画效果，适合微信小程序展示`;
+
+    return prompt;
+  },
+
+  /**
+   * 获取情绪类型描述
+   */
+  getEmotionDescription(emotionType) {
+    const descriptions = {
+      'energetic': '活跃充满活力',
+      'calm': '平静内敛',
+      'thoughtful': '深思熟虑',
+      'happy': '愉悦开心',
+      'peaceful': '宁静安详'
+    };
+    return descriptions[emotionType] || '独特的情绪状态';
+  },
+
+  /**
+   * 手动重新获取环境信息
+   */
+  retryEnvironmentInfo() {
+    envConfig.log('用户手动重试获取环境信息');
+    
+    // 重置环境状态
+    this.setData({
+      environmentReady: false,
+      weatherInfo: '获取中...'
+    });
+    
+    // 重新获取位置和天气
+    this.getLocationAndWeather();
+  },
+
+  /**
+   * 检查环境信息获取状态
+   */
+  checkEnvironmentStatus() {
+    return {
+      ready: this.data.environmentReady,
+      hasLocation: this.data.locationPermissionGranted,
+      city: this.data.cityName || '未知',
+      weather: this.data.weatherInfo || '未知'
     };
   }
 });

@@ -20,7 +20,7 @@ async def create_miniprogram_postcard(
 ):
     """小程序：创建明信片生成任务"""
     try:
-        logger.info(f"小程序创建明信片任务: {request.content[:50]}...")
+        logger.info(f"小程序创建明信片任务: {request.user_input[:50]}...")
         
         service = PostcardService(db)
         task_id = await service.create_task(request)
@@ -65,8 +65,7 @@ async def get_miniprogram_postcard_status(
             "message": "获取状态成功",
             "data": {
                 "task_id": task_id,
-                "status": status.status.value,
-                "progress": status.progress or 0,
+                "status": status.status,
                 "error": status.error_message,
                 "created_at": status.created_at.isoformat() if status.created_at else None,
                 "updated_at": status.updated_at.isoformat() if status.updated_at else None
@@ -109,9 +108,9 @@ async def get_miniprogram_postcard_result(
                 "image_url": result.image_url,
                 "frontend_code": result.frontend_code,
                 "preview_url": result.preview_url,
-                "status": result.status.value,
+                "status": result.status,
                 "created_at": result.created_at.isoformat() if result.created_at else None,
-                "generation_time": result.generation_time
+                "generation_time": (getattr(result, "generation_time", None) or 0)
             }
         }
     except Exception as e:
@@ -141,7 +140,7 @@ async def get_user_miniprogram_postcards(
                 "id": postcard.id,
                 "content": postcard.content[:100] + "..." if len(postcard.content) > 100 else postcard.content,
                 "image_url": postcard.image_url,
-                "status": postcard.status.value,
+                "status": postcard.status,
                 "created_at": postcard.created_at.strftime("%Y-%m-%d %H:%M") if postcard.created_at else None,
                 "has_interactive": bool(postcard.frontend_code)
             })

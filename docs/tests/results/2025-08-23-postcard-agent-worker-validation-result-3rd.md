@@ -100,7 +100,6 @@
 ```
 2025-08-23 10:56:37,941 - PostcardWorkflow - INFO - 📍 执行步骤 4/4: FrontendCoder
 2025-08-23 10:56:37,941 - FrontendCoder - INFO - 💻 开始生成前端代码: abe241d5-c7a2-41c1-9916-7974c408ec70
-2025-08-23 10:56:37,941 - app.coding_service.providers.claude_provider - INFO - ✅ 环境变量配置完成 - Token: sk-acw-6...b265
 2025-08-23 10:56:37,941 - app.coding_service.providers.claude_provider - INFO - ✅ 使用自定义Base URL: https://api.aicodewith.com
 2025-08-23 10:56:37,948 - app.coding_service.providers.claude_provider - INFO - ✅ Claude SDK客户端初始化成功
 2025-08-23 10:57:44,040 - app.coding_service.providers.claude_provider - INFO - 📄 成功读取文件内容: index.html (17904 字符)

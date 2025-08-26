@@ -16,6 +16,9 @@ App({
     // 检查小程序版本更新
     this.checkForUpdate();
     
+    // 提前预取定位与环境信息（并发触发，减少首页等待）
+    this.prefetchEnvironment();
+
     // 记录启动日志
     this.recordLaunchLog();
   },
@@ -225,6 +228,57 @@ App({
     // 这里可以集成错误监控服务
     // 如：Sentry, Fundebug 等
     envConfig.error('上报错误:', error);
+  },
+
+  /**
+   * 预取定位与环境信息（准确性优先，不降级）
+   */
+  prefetchEnvironment() {
+    try {
+      const { envAPI } = require('./utils/request.js');
+      wx.getSetting({
+        success: (setting) => {
+          const hasAuth = setting.authSetting && setting.authSetting['scope.userLocation'];
+          if (hasAuth === false) {
+            // 未授权则不预取，等待页面引导
+            return;
+          }
+          wx.getLocation({
+            type: 'gcj02',
+            isHighAccuracy: true,
+            highAccuracyExpireTime: 3000,
+            success: async (loc) => {
+              try {
+                const latitude = loc.latitude;
+                const longitude = loc.longitude;
+                // 并行查询城市与天气（长超时由封装保证）
+                const [cityRes, weatherRes] = await Promise.all([
+                  envAPI.reverseGeocode(latitude, longitude, 'zh'),
+                  envAPI.getWeather(latitude, longitude)
+                ]);
+                const cityName = (cityRes && (cityRes.city || cityRes.name)) || '';
+                const weatherText = (weatherRes && weatherRes.weather_text) || '';
+                const temperature = weatherRes && weatherRes.temperature;
+                const weatherInfo = typeof temperature === 'number' ? `${weatherText} · ${temperature}°C` : weatherText;
+                const cache = {
+                  ts: Date.now(),
+                  location: { latitude, longitude },
+                  cityName,
+                  weatherInfo
+                };
+                wx.setStorage({ key: 'envCache', data: cache });
+              } catch (e) {
+                // 静默失败，避免影响启动
+              }
+            },
+            fail: () => {
+              // 静默失败
+            }
+          });
+        },
+        fail: () => {}
+      });
+    } catch (e) {}
   },
   
   /**

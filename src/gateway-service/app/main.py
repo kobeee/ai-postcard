@@ -176,3 +176,173 @@ async def miniprogram_version():
             ]
         }
     }
+
+# -----------------------------
+# 环境感知服务：位置与天气（基于AI Agent Service）
+# -----------------------------
+
+@app.get("/api/v1/miniprogram/location/reverse")
+async def reverse_geocode(latitude: float, longitude: float, language: str = "zh"):
+    """使用 AI Agent Service 的 Claude WebSearch 工具进行逆地理解析
+    替代第三方API，提供更智能和稳定的地理位置查询
+    """
+    try:
+        # 调用AI Agent Service的环境感知API
+        target_url = SERVICES["ai-agent-service"]
+        params = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "language": language
+        }
+        
+        async with httpx.AsyncClient(timeout=60) as client:  # AI环境查询需要更长超时
+            resp = await client.get(
+                f"{target_url}/api/v1/environment/location/reverse",
+                params=params
+            )
+            resp.raise_for_status()
+            result = resp.json()
+            
+            logger.info(f"📍 AI地理位置查询: {latitude}, {longitude} -> {result.get('data', {}).get('city', 'Unknown')}")
+            return result
+            
+    except httpx.TimeoutException:
+        logger.error(f"AI地理位置查询超时: {latitude}, {longitude}")
+        return {"code": -1, "message": "地理位置查询超时", "data": None}
+    except Exception as e:
+        logger.error(f"AI地理位置查询失败: {e}")
+        return {"code": -1, "message": f"地理位置查询失败: {str(e)}", "data": None}
+
+
+@app.get("/api/v1/miniprogram/environment/weather")
+async def get_weather(latitude: float, longitude: float):
+    """使用 AI Agent Service 的 Claude WebSearch 工具查询天气信息
+    替代第三方API，提供更智能和准确的天气查询
+    """
+    try:
+        # 调用AI Agent Service的环境感知API
+        target_url = SERVICES["ai-agent-service"]
+        params = {
+            "latitude": latitude,
+            "longitude": longitude
+        }
+        
+        async with httpx.AsyncClient(timeout=60) as client:  # AI环境查询需要更长超时
+            resp = await client.get(
+                f"{target_url}/api/v1/environment/weather",
+                params=params
+            )
+            resp.raise_for_status()
+            result = resp.json()
+            
+            weather_text = result.get('data', {}).get('weather_text', 'Unknown')
+            temperature = result.get('data', {}).get('temperature', 'N/A')
+            logger.info(f"🌤️ AI天气查询: {latitude}, {longitude} -> {weather_text}, {temperature}°C")
+            return result
+            
+    except httpx.TimeoutException:
+        logger.error(f"AI天气查询超时: {latitude}, {longitude}")
+        return {"code": -1, "message": "天气查询超时", "data": None}
+    except Exception as e:
+        logger.error(f"AI天气查询失败: {e}")
+        return {"code": -1, "message": f"天气查询失败: {str(e)}", "data": None}
+
+
+@app.get("/api/v1/miniprogram/trending")
+async def get_trending(city: str, lang: str = "zh"):
+    """使用Gemini实时热点查询，支持中文城市名，提供快速可靠的推荐类热点内容"""
+    try:
+        # 优先使用Gemini热点推荐API - 快速且专门针对推荐内容优化
+        target_url = SERVICES["ai-agent-service"]
+        params = {"city": city}
+        
+        async with httpx.AsyncClient(timeout=45) as client:
+            resp = await client.get(
+                f"{target_url}/api/v1/environment/trending/gemini",
+                params=params
+            )
+            resp.raise_for_status()
+            result = resp.json()
+            
+            # 转换Gemini响应格式为小程序兼容格式
+            if result.get("code") == 0:
+                data = result.get('data', {})
+                gemini_items = data.get('items', [])
+                
+                # 转换为小程序期望的格式
+                items = []
+                for item in gemini_items:
+                    items.append({
+                        "title": item.get("title", ""),
+                        "url": "",  # Gemini推荐不提供具体URL
+                        "source": item.get("source", "Gemini推荐"),
+                        "publishedAt": item.get("publishedAt", ""),
+                        "type": "recommendation",
+                        "summary": item.get("summary", ""),
+                        "category": item.get("category", ""),
+                        "location": item.get("location", ""),
+                        "mood_tag": item.get("mood_tag", ""),
+                        "highlight": item.get("highlight", "")
+                    })
+                
+                total_count = len(items)
+                elapsed_time = data.get('elapsed_time', 0)
+                logger.info(f"🔍 Gemini热点查询成功: {city} -> {total_count}条推荐, 耗时{elapsed_time}秒")
+                
+                return {
+                    "code": 0,
+                    "message": "热点查询成功", 
+                    "data": {
+                        "city": city,
+                        "items": items,
+                        "total_count": total_count,
+                        "source": "Gemini实时搜索",
+                        "elapsed_time": elapsed_time,
+                        "note": "✅ 基于Google搜索的实时推荐内容"
+                    }
+                }
+            else:
+                # Gemini服务返回错误，使用降级方案
+                logger.warning(f"Gemini热点查询失败: {result.get('message', 'Unknown error')}")
+                raise Exception(f"Gemini API错误: {result.get('message')}")
+            
+    except Exception as e:
+        logger.error(f"Gemini热点查询异常: {e}")
+        # 降级到快速热点API
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.get(
+                    f"{target_url}/api/v1/environment/trending/fast",
+                    params=params
+                )
+                if resp.status_code == 200:
+                    result = resp.json()
+                    if result.get("code") == 0:
+                        data = result.get('data', {})
+                        items = data.get('items', [])
+                        logger.info(f"⚡ 快速热点降级成功: {city} -> {len(items)}条")
+                        return {
+                            "code": 0,
+                            "message": "热点查询成功(降级模式)",
+                            "data": {
+                                "city": city,
+                                "items": items[:5],  # 限制数量
+                                "total_count": len(items),
+                                "source": "快速API降级"
+                            }
+                        }
+        except:
+            pass
+        
+        # 最终降级：返回空结果但不报错，保证小程序正常运行
+        logger.error(f"所有热点查询方案都失败: {city}")
+        return {
+            "code": 0,
+            "message": "热点查询暂时不可用",
+            "data": {
+                "city": city,
+                "items": [],
+                "total_count": 0,
+                "source": "降级模式"
+            }
+        }

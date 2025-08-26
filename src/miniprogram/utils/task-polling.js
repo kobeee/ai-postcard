@@ -9,7 +9,7 @@ class TaskPollingManager {
   constructor() {
     this.pollingTasks = new Map(); // 存储正在轮询的任务
     this.defaultInterval = 2000; // 默认轮询间隔2秒
-    this.maxRetries = 60; // 最大重试次数（2分钟）
+    this.maxRetries = 300; // 最大重试次数（10分钟）- 适合AI生成长任务
   }
   
   /**
@@ -34,6 +34,13 @@ class TaskPollingManager {
     
     envConfig.log(`开始轮询任务: ${taskId}`);
     
+    // 存储轮询任务信息 - 必须在Promise创建前完成，避免竞态条件
+    const taskInfo = {
+      startTime: Date.now(),
+      interval,
+      maxRetries
+    };
+    
     // 创建轮询Promise
     const pollingPromise = new Promise((resolve, reject) => {
       let retryCount = 0;
@@ -50,7 +57,27 @@ class TaskPollingManager {
           
           // 查询任务状态
           const result = await postcardAPI.getStatus(taskId);
-          const { status, progress, error } = result;
+          // 确保正确提取字段，TaskStatusResponse没有progress字段
+          const { status, error_message: error } = result;
+          
+          // 根据状态计算简单进度
+          let progress = 0;
+          switch (status) {
+            case 'pending':
+              progress = 10;
+              break;
+            case 'processing':
+              progress = 50;
+              break;
+            case 'completed':
+              progress = 100;
+              break;
+            case 'failed':
+              progress = 0;
+              break;
+            default:
+              progress = 0;
+          }
           
           envConfig.log(`任务 ${taskId} 状态:`, { status, progress });
           
@@ -124,17 +151,13 @@ class TaskPollingManager {
         }
       };
       
-      // 开始首次轮询
-      poll();
+      // 使用 setTimeout 确保任务信息已存储后再开始轮询
+      setTimeout(poll, 0);
     });
     
-    // 存储轮询任务信息
-    this.pollingTasks.set(taskId, {
-      promise: pollingPromise,
-      startTime: Date.now(),
-      interval,
-      maxRetries
-    });
+    // 将Promise添加到任务信息并存储
+    taskInfo.promise = pollingPromise;
+    this.pollingTasks.set(taskId, taskInfo);
     
     // Promise完成后清理
     pollingPromise.finally(() => {
@@ -241,13 +264,19 @@ module.exports = {
     // 正常轮询（默认）
     NORMAL: {
       interval: 2000,
-      maxRetries: 60
+      maxRetries: 300  // 延长到10分钟
     },
     
     // 慢速轮询（用于长任务）
     SLOW: {
       interval: 5000,
       maxRetries: 120
+    },
+    
+    // AI生成专用轮询（用于代码生成、图片生成等长时间AI任务）
+    AI_GENERATION: {
+      interval: 3000,  // 3秒间隔，减少服务器压力
+      maxRetries: 600  // 30分钟超时，适合复杂AI生成任务
     }
   }
 };

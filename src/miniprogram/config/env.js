@@ -4,7 +4,7 @@ const ENV_CONFIG = {
   development: {
     baseURL: 'http://localhost:8083', // 网关服务端口
     apiPrefix: '/api/v1',
-    timeout: 10000,
+    timeout: 60000, // 延长到60秒，支持大模型调用和准确性优先
     debug: true
   },
   
@@ -12,7 +12,7 @@ const ENV_CONFIG = {
   testing: {
     baseURL: 'https://test-api.your-domain.com', // 测试服务器
     apiPrefix: '/api/v1', 
-    timeout: 10000,
+    timeout: 45000, // 测试环境也延长到45秒
     debug: true
   },
   
@@ -20,7 +20,7 @@ const ENV_CONFIG = {
   production: {
     baseURL: 'https://api.your-domain.com', // 生产服务器
     apiPrefix: '/api/v1',
-    timeout: 8000,
+    timeout: 30000, // 生产环境延长到30秒，平衡体验和准确性
     debug: false
   }
 };

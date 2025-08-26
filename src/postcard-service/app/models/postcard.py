@@ -42,6 +42,9 @@ class Postcard(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     completed_at = Column(DateTime(timezone=True), nullable=True)
     
+    # 生成耗时（秒）
+    generation_time = Column(Integer, nullable=True)
+    
     # 错误信息
     error_message = Column(Text, nullable=True)
     retry_count = Column(Integer, default=0)

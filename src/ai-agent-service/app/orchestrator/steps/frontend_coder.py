@@ -39,46 +39,10 @@ class FrontendCoder:
                 "署名建议": "致亲爱的你"
             }
         
-        # 构建前端代码生成提示词
-        coding_prompt = f"""
-请生成一个交互式明信片的完整前端代码，要求：
-
-明信片内容：
-- 主标题：{content_data.get('主标题', '温馨祝福')}
-- 副标题：{content_data.get('副标题', '来自心底的真诚')}
-- 正文：{content_data.get('正文内容', '愿美好与你同在')}
-- 署名：{content_data.get('署名建议', '致亲爱的你')}
-- 背景图片：{image_url}
-
-技术要求：
-1. 纯HTML/CSS/JS实现，无需外部框架
-2. 适配移动端（微信小程序webview）
-3. 添加精美的CSS动画效果
-4. 实现交互功能（点击、滑动等）
-5. 响应式设计，适应不同屏幕尺寸
-
-设计要求：
-1. 明信片风格的卡片设计
-2. 背景图片作为卡片背景或装饰元素
-3. 文字层次分明，易于阅读
-4. 色彩搭配和谐，符合明信片的温馨感
-5. 考虑文字与背景的对比度
-
-动画效果建议：
-- 页面加载时的渐入动画
-- 文字逐层显示动画
-- 背景图片的轻微缩放或移动效果
-- 鼠标悬停或点击的交互反馈
-- 卡片翻转或3D效果
-
-互动功能：
-- 点击卡片可以翻转或展开更多内容
-- 简单的粒子效果或背景动效
-- 音效提示（可选）
-
-请生成完整可运行的HTML代码，包含内联的CSS和JavaScript。
-确保代码在移动设备上运行流畅，并且具有良好的用户体验。
-"""
+        # 构建个性化前端代码生成提示词
+        coding_prompt = self._build_personalized_prompt(
+            task, concept, content_data, image_url
+        )
         
         try:
             # 使用Claude Code SDK生成前端代码
@@ -92,33 +56,43 @@ class FrontendCoder:
             # 创建Claude提供商实例
             claude_provider = ClaudeCodeProvider()
             
-            # 生成代码，添加超时保护
+            # 生成代码，使用正确的超时保护机制
             frontend_code = ""
             try:
-                # 设置60秒超时，防止无限等待
-                async_generator = claude_provider.generate(coding_prompt, session_id)
-                timeout_task = asyncio.create_task(asyncio.sleep(60))
+                async def consume_claude_generator():
+                    """消费Claude生成器并返回结果"""
+                    async_generator = claude_provider.generate(coding_prompt, session_id)
+                    async for message in async_generator:
+                        if message.get("type") == "complete":
+                            return message.get("final_code", "")
+                        elif message.get("type") == "error":
+                            self.logger.error(f"❌ Claude 代码生成错误: {message.get('content', 'Unknown error')}")
+                            return None
+                    return None
                 
-                async for message in async_generator:
-                    if timeout_task.done():
-                        self.logger.warning("⚠️ Claude 代码生成超时，使用默认代码")
-                        break
-                    if message.get("type") == "complete":
-                        frontend_code = message.get("final_code", "")
-                        timeout_task.cancel()
-                        break
-                    elif message.get("type") == "error":
-                        self.logger.error(f"❌ Claude 代码生成错误: {message.get('error', 'Unknown error')}")
-                        timeout_task.cancel()
-                        break
-                        
-                if not timeout_task.cancelled():
-                    timeout_task.cancel()
+                # 使用asyncio.wait_for实现正确的超时处理 - 设置5分钟超时适合复杂代码生成
+                self.logger.info("🚀 开始Claude代码生成，超时设置：5分钟")
+                frontend_code = await asyncio.wait_for(
+                    consume_claude_generator(), 
+                    timeout=300.0  # 5分钟超时，适合复杂AI代码生成任务
+                )
+                
+                if frontend_code:
+                    self.logger.info("✅ Claude代码生成成功")
+                else:
+                    self.logger.warning("⚠️ Claude代码生成完成但无有效代码，使用默认代码")
                             
+            except asyncio.TimeoutError:
+                self.logger.warning("⚠️ Claude代码生成超时（5分钟），使用默认代码")
+                # 超时后优雅降级，不抛出异常
+                frontend_code = None
             except asyncio.CancelledError:
-                self.logger.warning("⚠️ Claude 代码生成被取消，使用默认代码")
-                # 重要：不要重新抛出 CancelledError，而是优雅降级
-                pass
+                self.logger.warning("⚠️ Claude代码生成被取消，使用默认代码")
+                # 正确处理取消：不重新抛出，而是优雅降级
+                frontend_code = None
+            except Exception as e:
+                self.logger.error(f"❌ Claude代码生成异常: {str(e)}")
+                frontend_code = None
             
             if not frontend_code:
                 frontend_code = self._get_default_frontend_code(content_data, image_url)
@@ -292,3 +266,269 @@ class FrontendCoder:
     </script>
 </body>
 </html>"""
+    
+    def _build_personalized_prompt(self, task, concept, content_data, image_url):
+        """构建个性化的前端代码生成提示"""
+        
+        # 解析环境信息和情绪信息
+        environment_info = self._parse_environment_info(task)
+        emotion_info = self._parse_emotion_info(task) 
+        
+        # 构建基础内容信息
+        base_content = f"""
+明信片内容：
+- 主标题：{content_data.get('主标题', '温馨祝福')}
+- 副标题：{content_data.get('副标题', '来自心底的真诚')}
+- 正文：{content_data.get('正文内容', '愿美好与你同在')}
+- 署名：{content_data.get('署名建议', '致亲爱的你')}
+- 背景图片：{image_url}"""
+        
+        # 构建个性化设计指导
+        personalized_design = self._build_design_guidance(environment_info, emotion_info)
+        
+        # 构建完整提示
+        prompt = f"""
+请生成一个个性化交互式明信片的完整前端代码。这不是普通的明信片，而是基于用户真实情绪和环境的情感表达。
+
+{base_content}
+
+🌍 环境背景信息：
+{environment_info.get('context_description', '温馨的日常时刻')}
+
+💫 用户情绪状态：
+{emotion_info.get('emotion_description', '平静温和的心境')}
+
+🎨 个性化设计要求：
+{personalized_design}
+
+💻 技术要求：
+1. 纯HTML/CSS/JS实现，无需外部框架
+2. 适配移动端（微信小程序webview）
+3. 响应式设计，适应不同屏幕尺寸
+4. 优秀的性能表现，流畅的动画效果
+
+🎯 创意重点：
+1. 必须体现环境元素的视觉化表达
+2. 情绪状态要通过色彩、动画、交互来传达
+3. 融入当地特色和时事热点的设计元素
+4. 创造独特的视觉体验，避免千篇一律
+
+🌟 交互创新：
+1. 根据情绪强度设计不同的交互反馈
+2. 融入环境元素的动画效果（如天气、时间）
+3. 添加惊喜元素和细节彩蛋
+4. 支持多种交互方式（点击、滑动、长按）
+
+请生成完整可运行的HTML代码，包含内联的CSS和JavaScript。
+确保代码充满创意和个性，让用户感受到这张明信片是专门为他们的此时此刻而创作的。
+"""
+        
+        return prompt
+    
+    def _parse_environment_info(self, task):
+        """解析环境信息"""
+        try:
+            # 从task中获取原始用户输入，通常包含环境信息
+            user_input = task.get('user_input', '')
+            
+            environment_info = {
+                'city': '未知城市',
+                'weather': '温和',
+                'time_period': 'day',
+                'season': 'spring',
+                'trending': '生活美好',
+                'context_description': '在这个美好的时刻'
+            }
+            
+            # 从用户输入中提取环境信息 - 更智能的解析
+            import re
+            
+            # 提取城市信息 - 匹配更多城市名格式
+            city_patterns = [
+                r'城市[：:]\s*([^，,。\s]+)',
+                r'(?:在|位于)\s*([^，,。\s]{2,6}(?:市|县|区|镇)?)(?:[，,。\s]|$)',
+                r'(北京|上海|广州|深圳|杭州|南京|武汉|成都|重庆|西安|天津|苏州|青岛|大连|厦门|宁波|无锡|长沙|郑州|沈阳|哈尔滨)'
+            ]
+            
+            for pattern in city_patterns:
+                city_match = re.search(pattern, user_input)
+                if city_match:
+                    environment_info['city'] = city_match.group(1)
+                    break
+            
+            # 提取天气信息 - 匹配温度和天气描述
+            temp_match = re.search(r'(\d+)°?[CcFf]?', user_input)
+            if temp_match:
+                temp = int(temp_match.group(1))
+                if temp > 28:
+                    environment_info['weather'] = '炎热'
+                elif temp > 20:
+                    environment_info['weather'] = '温暖'
+                else:
+                    environment_info['weather'] = '凉爽'
+            
+            # 提取天气描述词
+            weather_patterns = [
+                r'天气[：:]\s*([^，,。\s]+)',
+                r'(晴朗|多云|阴天|雨天|雪天|雾霾|微风|大风|炎热|温暖|凉爽|寒冷)'
+            ]
+            
+            for pattern in weather_patterns:
+                weather_match = re.search(pattern, user_input)
+                if weather_match:
+                    environment_info['weather'] = weather_match.group(1)
+                    break
+            
+            # 判断时间段
+            import datetime
+            hour = datetime.datetime.now().hour
+            if 5 <= hour < 12:
+                environment_info['time_period'] = 'morning'
+            elif 12 <= hour < 18:
+                environment_info['time_period'] = 'afternoon'  
+            elif 18 <= hour < 22:
+                environment_info['time_period'] = 'evening'
+            else:
+                environment_info['time_period'] = 'night'
+            
+            # 判断季节
+            month = datetime.datetime.now().month
+            if 3 <= month <= 5:
+                environment_info['season'] = 'spring'
+            elif 6 <= month <= 8:
+                environment_info['season'] = 'summer'
+            elif 9 <= month <= 11:
+                environment_info['season'] = 'autumn'
+            else:
+                environment_info['season'] = 'winter'
+            
+            # 构建上下文描述
+            city_desc = f"在{environment_info['city']}"
+            weather_desc = f"这个{environment_info['weather']}的{self._get_time_description(environment_info['time_period'])}"
+            season_desc = f"正值{self._get_season_description(environment_info['season'])}"
+            
+            environment_info['context_description'] = f"{city_desc}，{weather_desc}，{season_desc}，这是一个值得纪念的时刻"
+            
+            return environment_info
+            
+        except Exception as e:
+            self.logger.warning(f"解析环境信息失败: {e}")
+            return {
+                'context_description': '在这个温馨的时刻',
+                'city': '本地',
+                'weather': '宜人',
+                'time_period': 'day',
+                'season': 'spring'
+            }
+    
+    def _parse_emotion_info(self, task):
+        """解析情绪信息"""
+        try:
+            user_input = task.get('user_input', '')
+            
+            emotion_info = {
+                'type': 'calm',
+                'intensity': 'medium',
+                'pattern': 'flowing',
+                'emotion_description': '平静而温和的心境'
+            }
+            
+            # 从用户输入中分析情绪
+            if '活跃' in user_input or 'energetic' in user_input:
+                emotion_info['type'] = 'energetic'
+                emotion_info['emotion_description'] = '充满活力和激情的状态'
+            elif '深思' in user_input or 'thoughtful' in user_input:
+                emotion_info['type'] = 'thoughtful'
+                emotion_info['emotion_description'] = '深思熟虑、内省的心境'
+            else:
+                emotion_info['type'] = 'calm'
+                emotion_info['emotion_description'] = '平静安详、温和的情绪'
+            
+            # 分析强度
+            if 'high' in user_input or '强烈' in user_input:
+                emotion_info['intensity'] = 'high'
+            elif 'low' in user_input or '轻微' in user_input:
+                emotion_info['intensity'] = 'low'
+            else:
+                emotion_info['intensity'] = 'medium'
+            
+            return emotion_info
+            
+        except Exception as e:
+            self.logger.warning(f"解析情绪信息失败: {e}")
+            return {
+                'emotion_description': '平静温和的心境',
+                'type': 'calm',
+                'intensity': 'medium'
+            }
+    
+    def _build_design_guidance(self, environment_info, emotion_info):
+        """构建个性化设计指导"""
+        
+        # 基于情绪类型选择设计风格
+        emotion_styles = {
+            'energetic': {
+                'colors': '充满活力的橙红色调、动感的黄色点缀',
+                'animations': '快节奏的动画、跳跃式的过渡效果',
+                'interactions': '响应迅速的点击反馈、震动效果'
+            },
+            'calm': {
+                'colors': '宁静的蓝绿色调、柔和的紫色渐变',
+                'animations': '缓慢流畅的动画、渐现的过渡效果',
+                'interactions': '温和的悬停效果、平滑的切换'
+            },
+            'thoughtful': {
+                'colors': '深沉的蓝色、哲思的灰色调',
+                'animations': '深度的层次动画、思考式的停顿',
+                'interactions': '需要用户深度参与的交互'
+            }
+        }
+        
+        # 基于环境选择设计元素
+        weather_elements = {
+            '炎热': '太阳光芒、热浪波纹、橙红色背景',
+            '温暖': '温润的光晕、舒适的渐变',
+            '凉爽': '清新的微风效果、蓝绿色调'
+        }
+        
+        time_elements = {
+            'morning': '晨光效果、渐亮的动画',
+            'afternoon': '温暖的日光、稳定的光影',
+            'evening': '夕阳色调、温暖的橙色',
+            'night': '星光粒子、深蓝夜空'
+        }
+        
+        # 获取对应的设计元素
+        emotion_style = emotion_styles.get(emotion_info['type'], emotion_styles['calm'])
+        weather_element = weather_elements.get(environment_info.get('weather', '温和'), '舒适的光影效果')
+        time_element = time_elements.get(environment_info.get('time_period', 'day'), '温和的光线')
+        
+        design_guidance = f"""
+1. 色彩方案：{emotion_style['colors']}，融入{weather_element}
+2. 动画风格：{emotion_style['animations']}，体现{time_element}
+3. 交互设计：{emotion_style['interactions']}
+4. 环境融合：体现{environment_info.get('city', '本地')}特色，展现{environment_info.get('season', '春天')}的季节感
+5. 情绪表达：通过视觉元素传达{emotion_info['emotion_description']}
+6. 创意元素：添加与当前时刻相关的独特视觉彩蛋和惊喜效果"""
+        
+        return design_guidance
+    
+    def _get_time_description(self, time_period):
+        """获取时间段描述"""
+        descriptions = {
+            'morning': '清晨',
+            'afternoon': '午后',
+            'evening': '傍晚',
+            'night': '夜晚'
+        }
+        return descriptions.get(time_period, '时刻')
+    
+    def _get_season_description(self, season):
+        """获取季节描述"""
+        descriptions = {
+            'spring': '万物复苏的春天',
+            'summer': '生机勃勃的夏日',
+            'autumn': '收获满满的秋天',
+            'winter': '宁静致远的冬日'
+        }
+        return descriptions.get(season, '美好的季节')
