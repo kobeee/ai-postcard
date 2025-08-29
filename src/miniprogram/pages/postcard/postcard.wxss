@@ -2,7 +2,31 @@
 
 /* 页面基础 */
 page {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  /* 主题色彩变量 */
+  --primary-color: #6366f1;
+  --secondary-color: #8b5cf6;
+  --accent-color: #10b981;
+  --error-color: #ef4444;
+  --warning-color: #f59e0b;
+  --success-color: #10b981;
+  
+  /* 文本色彩 */
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
+  --text-light: rgba(255, 255, 255, 0.9);
+  --text-muted: rgba(255, 255, 255, 0.7);
+  
+  /* 背景色彩 */
+  --bg-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --bg-card: rgba(255, 255, 255, 0.95);
+  --bg-overlay: rgba(0, 0, 0, 0.1);
+  
+  /* 边框和阴影 */
+  --border-radius: 20rpx;
+  --border-radius-large: 24rpx;
+  --box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.1);
+  
+  background: var(--bg-gradient);
   min-height: 100vh;
 }
 
@@ -37,7 +61,7 @@ page {
 }
 
 .loading-text {
-  color: #fff;
+  color: var(--text-light);
   font-size: 32rpx;
 }
 
@@ -57,15 +81,15 @@ page {
 }
 
 .error-text {
-  color: #fff;
+  color: var(--text-light);
   font-size: 32rpx;
   margin-bottom: 48rpx;
   line-height: 1.4;
 }
 
 .retry-btn {
-  background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
-  color: #fff;
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+  color: var(--text-light);
   border: none;
   border-radius: 48rpx;
   padding: 24rpx 48rpx;
@@ -78,6 +102,54 @@ page {
   margin: 0 auto;
 }
 
+/* 动态组件区域 */
+.dynamic-section {
+  position: relative;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 24rpx;
+  padding: 0;
+  margin-bottom: 32rpx;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.component-badge {
+  position: absolute;
+  top: 16rpx;
+  left: 16rpx;
+  display: flex;
+  gap: 8rpx;
+  z-index: 10;
+}
+
+.ai-tag {
+  background: linear-gradient(45deg, #667eea, #764ba2);
+  color: white;
+  padding: 6rpx 12rpx;
+  border-radius: 16rpx;
+  font-size: 20rpx;
+  font-weight: 600;
+}
+
+.animation-tag {
+  background: linear-gradient(45deg, #ff6b6b, #feca57);
+  color: white;
+  padding: 6rpx 12rpx;
+  border-radius: 16rpx;
+  font-size: 20rpx;
+  font-weight: 600;
+}
+
+.interactive-tag {
+  background: linear-gradient(45deg, #48bb78, #38a169);
+  color: white;
+  padding: 6rpx 12rpx;
+  border-radius: 16rpx;
+  font-size: 20rpx;
+  font-weight: 600;
+}
+
 /* 图片区域 */
 .image-section {
   background: rgba(255, 255, 255, 0.95);
@@ -86,6 +158,13 @@ page {
   margin-bottom: 32rpx;
   backdrop-filter: blur(10px);
   box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.1);
+}
+
+.image-badge {
+  position: absolute;
+  top: 40rpx;
+  left: 40rpx;
+  z-index: 5;
 }
 
 .postcard-image {
@@ -101,12 +180,12 @@ page {
 }
 
 .content-card, .meta-card, .interactive-card {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 20rpx;
+  background: var(--bg-card);
+  border-radius: var(--border-radius);
   padding: 32rpx;
   margin-bottom: 24rpx;
   backdrop-filter: blur(10px);
-  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.1);
+  box-shadow: var(--box-shadow);
 }
 
 .card-header {
@@ -116,10 +195,10 @@ page {
   margin-bottom: 24rpx;
 }
 
-.card-title {
+.content-card-title {
   font-size: 32rpx;
   font-weight: 600;
-  color: #2d3748;
+  color: var(--text-primary);
 }
 
 .copy-btn, .preview-btn {
@@ -245,13 +324,345 @@ page {
   cursor: pointer;
 }
 
+/* ===== ✅ 结构化明信片区域 ===== */
+.structured-card-section {
+  margin-bottom: 40rpx;
+}
+
+.success-indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 16rpx;
+  padding: 12rpx 24rpx;
+  background: linear-gradient(135deg, #10b981, #059669);
+  border-radius: 24rpx;
+  max-width: 400rpx;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.success-text, .parse-status {
+  font-size: 24rpx;
+  color: white;
+  font-weight: 500;
+}
+
+/* ===== 🔥 降级方案：全新超简单卡片 ===== */
+.new-simple-card {
+  background: var(--primary-color);
+  margin: 30rpx;
+  padding: 50rpx;
+  border-radius: var(--border-radius);
+  text-align: center;
+  position: relative;
+}
+
+.simple-card-title {
+  display: block;
+  color: var(--text-light);
+  font-size: 40rpx;
+  font-weight: bold;
+  margin-bottom: 30rpx;
+}
+
+.card-content {
+  display: block;
+  color: white;
+  font-size: 32rpx;
+  margin-bottom: 20rpx;
+  line-height: 1.5;
+}
+
+.card-time {
+  display: block;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 24rpx;
+}
+
+/* ===== 🎯 超级简单的固定卡片样式（注释掉） ===== */
+.simple-card {
+  width: 690rpx;
+  margin: 0 auto 40rpx;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 24rpx;
+  padding: 40rpx;
+  box-shadow: 0 16rpx 48rpx rgba(0, 0, 0, 0.2);
+  position: relative;
+  overflow: hidden;
+}
+
+.card-header-section {
+  text-align: center;
+  margin-bottom: 32rpx;
+  position: relative;
+  z-index: 2;
+}
+
+.card-main-title {
+  display: block;
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #fff;
+  margin-bottom: 12rpx;
+  text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.3);
+}
+
+.card-subtitle {
+  display: block;
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.8);
+  letter-spacing: 2rpx;
+}
+
+.card-image-section {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  opacity: 0.3;
+  z-index: 1;
+}
+
+.card-bg-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.card-content-section {
+  position: relative;
+  z-index: 2;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 16rpx;
+  padding: 32rpx;
+  backdrop-filter: blur(10rpx);
+  margin-bottom: 32rpx;
+}
+
+.main-text-area {
+  margin-bottom: 24rpx;
+}
+
+.content-text {
+  display: block;
+  font-size: 30rpx;
+  line-height: 1.6;
+  color: #fff;
+  text-shadow: 0 1rpx 4rpx rgba(0, 0, 0, 0.5);
+  font-weight: 500;
+}
+
+.meta-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1rpx solid rgba(255, 255, 255, 0.2);
+  padding-top: 20rpx;
+}
+
+.location-info, .weather-info {
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.card-decoration {
+  text-align: center;
+  position: relative;
+  z-index: 2;
+}
+
+.deco-text {
+  font-size: 28rpx;
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 600;
+  text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.3);
+}
+
+/* 调试区域 */
+.debug-section {
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 16rpx;
+  margin: 0 auto 40rpx;
+  width: 690rpx;
+  max-height: 300rpx;
+  overflow: hidden;
+}
+
+.debug-header {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 16rpx 24rpx;
+  border-bottom: 1rpx solid rgba(255, 255, 255, 0.2);
+}
+
+.debug-title {
+  font-size: 24rpx;
+  color: #fff;
+  font-weight: bold;
+}
+
+.debug-content {
+  padding: 24rpx;
+  max-height: 240rpx;
+  overflow-y: scroll;
+}
+
+.debug-text {
+  font-size: 22rpx;
+  color: rgba(255, 255, 255, 0.8);
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+/* ===== 新增：结构化明信片样式 ===== */
+.structured-section {
+  position: relative;
+  margin-bottom: 40rpx;
+  border-radius: 24rpx;
+  overflow: hidden;
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+}
+
+.structured-badge {
+  background: linear-gradient(135deg, #10b981, #059669);
+}
+
+.dynamic-badge {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+}
+
+.data-tag {
+  background: rgba(255, 255, 255, 0.25);
+  color: white;
+  padding: 4rpx 12rpx;
+  border-radius: 12rpx;
+  font-size: 22rpx;
+  margin-left: 8rpx;
+}
+
+/* ===== 内容显示优化 ===== */
+.structured-content-summary {
+  padding: 24rpx;
+  background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
+  border-radius: 16rpx;
+  border: 2rpx solid #0284c7;
+  margin-bottom: 16rpx;
+}
+
+.content-title {
+  display: block;
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #0369a1;
+  margin-bottom: 8rpx;
+}
+
+.content-desc {
+  display: block;
+  font-size: 24rpx;
+  color: #0284c7;
+  line-height: 1.4;
+}
+
+.raw-content-display {
+  padding: 24rpx;
+  background: #fef3c7;
+  border-radius: 16rpx;
+  border: 2rpx solid #f59e0b;
+  margin-bottom: 16rpx;
+}
+
+.content-warning {
+  display: block;
+  font-size: 24rpx;
+  color: #d97706;
+  margin-bottom: 12rpx;
+  font-weight: bold;
+}
+
+.fallback-warning {
+  padding: 20rpx;
+  background: #fef2f2;
+  border-radius: 12rpx;
+  border: 2rpx solid #ef4444;
+  margin-bottom: 20rpx;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.warning-icon {
+  font-size: 32rpx;
+}
+
+.warning-text {
+  font-size: 24rpx;
+  color: #dc2626;
+  line-height: 1.4;
+}
+
+/* ===== 调试信息样式 ===== */
+.debug-card {
+  background: #f8fafc;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 24rpx;
+  border: 2rpx dashed #64748b;
+}
+
+.debug-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12rpx;
+  margin-bottom: 12rpx;
+}
+
+.debug-item:last-child {
+  margin-bottom: 0;
+}
+
+.debug-label {
+  font-size: 24rpx;
+  color: #64748b;
+  font-weight: bold;
+  min-width: 140rpx;
+  flex-shrink: 0;
+}
+
+.debug-value {
+  font-size: 24rpx;
+  color: #1e293b;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  line-height: 1.4;
+}
+
+.debug-preview {
+  font-size: 22rpx;
+  color: #64748b;
+  background: #e2e8f0;
+  padding: 8rpx 12rpx;
+  border-radius: 6rpx;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  line-height: 1.4;
+  word-break: break-all;
+  flex: 1;
+}
+
 /* 响应式适配 */
 @media screen and (max-width: 750px) {
   .container {
     padding: 16rpx;
   }
   
-  .content-card, .meta-card, .interactive-card {
+  .content-card, .meta-card, .interactive-card, .debug-card {
     padding: 24rpx;
   }
   
@@ -261,5 +672,18 @@ page {
   
   .btn-icon {
     font-size: 32rpx;
+  }
+  
+  .structured-content-summary, .raw-content-display {
+    padding: 20rpx;
+  }
+  
+  .debug-label {
+    min-width: 120rpx;
+    font-size: 22rpx;
+  }
+  
+  .debug-value, .debug-preview {
+    font-size: 22rpx;
   }
 }

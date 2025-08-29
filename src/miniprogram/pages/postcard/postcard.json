@@ -1,3 +1,6 @@
 {
-  "usingComponents": {}
+  "usingComponents": {
+    "dynamic-postcard": "../../components/dynamic-postcard/dynamic-postcard",
+    "structured-postcard": "../../components/structured-postcard/structured-postcard"
+  }
 }

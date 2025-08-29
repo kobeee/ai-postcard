@@ -38,6 +38,9 @@ class QueueService:
         try:
             client = await self.get_redis_client()
             
+            # 确保消费者组存在（防止Redis数据清理导致的问题）
+            await self.create_consumer_group()
+            
             # 将任务序列化为字典
             raw_data = task.dict()
 

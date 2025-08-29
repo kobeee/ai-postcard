@@ -47,12 +47,104 @@
   <view class="card-container" wx:if="{{hasUserInfo}}">
     <!-- 今日卡片 -->
     <view class="daily-card {{cardFlipped ? 'flipped' : ''}}" wx:if="{{todayCard}}" bindtap="flipCard">
-      <!-- 正面 -->
-      <view class="card-front">
-        <view class="card-date">{{todayCard.date}}</view>
-        <view class="card-keyword">{{todayCard.keyword}}</view>
-        <view class="card-quote">{{todayCard.quote}}</view>
-        <view class="card-english">{{todayCard.english}}</view>
+      <!-- 结构化卡片展示 -->
+      <view class="card-display-area" wx:if="{{todayCard}}">
+        <!-- 使用结构化卡片组件（如果有结构化数据） -->
+        <structured-postcard 
+          wx:if="{{todayCard.structured_data}}"
+          structured-data="{{todayCard.structured_data}}"
+          background-image="{{todayCard.structured_data && todayCard.structured_data.visual && todayCard.structured_data.visual.background_image_url || todayCard.image || todayCard.card_image}}"
+          fallback-english="{{todayCard.english}}"
+          show-animation="{{false}}"
+          size-mode="standard"
+          bind:cardtap="onStructuredCardTap"
+          bind:recommendationtap="onRecommendationTap"
+          bind:share="onStructuredCardShare"
+        ></structured-postcard>
+
+        <!-- 降级显示：美化的卡片布局（结合背景图和文案） -->
+        <view class="beautiful-postcard {{todayCard.layout_mode}}" wx:elif="{{!todayCard.structured_data}}">
+          <!-- 背景图层 -->
+          <view class="postcard-background">
+            <image 
+              class="background-image" 
+              src="{{todayCard.image || todayCard.card_image}}" 
+              mode="aspectFill"
+              lazy-load="true"
+            ></image>
+            <view class="background-overlay"></view>
+          </view>
+          
+          <!-- 内容层 -->
+          <view class="postcard-content">
+            <!-- 顶部标题区 -->
+            <view class="postcard-header">
+              <text class="postcard-title">{{todayCard.keyword}}</text>
+            </view>
+            
+            <!-- 主文案区 -->
+            <view class="postcard-body">
+              <view class="main-quote">
+                <text class="quote-text">{{todayCard.quote}}</text>
+              </view>
+              <view class="english-ribbon" wx:if="{{todayCard.english}}">
+                <text class="english-text">{{todayCard.english}}</text>
+              </view>
+            </view>
+            
+            <!-- 推荐内容区 -->
+            <view class="postcard-recommendations" wx:if="{{todayCard.hasRecommendations}}">
+              <view class="recommendations-title">
+                <text class="rec-title-text">✨ 今日推荐</text>
+              </view>
+              
+              <!-- 音乐推荐 -->
+              <view class="recommendation-item" wx:if="{{todayCard.music}}">
+                <text class="rec-icon">🎵</text>
+                <view class="rec-content">
+                  <text class="rec-name">{{todayCard.music.title}}</text>
+                  <text class="rec-author" wx:if="{{todayCard.music.artist}}">{{todayCard.music.artist}}</text>
+                </view>
+              </view>
+              
+              <!-- 书籍推荐 -->
+              <view class="recommendation-item" wx:if="{{todayCard.book}}">
+                <text class="rec-icon">📚</text>
+                <view class="rec-content">
+                  <text class="rec-name">{{todayCard.book.title}}</text>
+                  <text class="rec-author" wx:if="{{todayCard.book.author}}">{{todayCard.book.author}}</text>
+                </view>
+              </view>
+              
+              <!-- 电影推荐 -->
+              <view class="recommendation-item" wx:if="{{todayCard.movie}}">
+                <text class="rec-icon">🎬</text>
+                <view class="rec-content">
+                  <text class="rec-name">{{todayCard.movie.title}}</text>
+                  <text class="rec-author" wx:if="{{todayCard.movie.director}}">{{todayCard.movie.director}}</text>
+                </view>
+              </view>
+            </view>
+            
+            <!-- 底部装饰区 -->
+            <view class="postcard-footer">
+              <view class="signature">
+                <text class="signature-text">— 情绪罗盘</text>
+              </view>
+            </view>
+          </view>
+
+        </view>
+      </view>
+      
+      <!-- 传统卡片布局（降级方案） -->
+      <view class="traditional-card" wx:else>
+        <!-- 正面 -->
+        <view class="card-front">
+          <view class="card-date">{{todayCard.date}}</view>
+          <view class="card-keyword">{{todayCard.keyword}}</view>
+          <view class="card-quote">{{todayCard.quote}}</view>
+          <view class="card-english">{{todayCard.english}}</view>
         
         <view class="card-recommendations">
           <view class="rec-item" wx:if="{{todayCard.music}}" bindtap="playMusic" data-url="{{todayCard.music.url}}">
@@ -89,6 +181,7 @@
         <view class="back-footer">
           <text class="compass-signature">—— 情绪罗盘</text>
         </view>
+      </view>
       </view>
     </view>
     

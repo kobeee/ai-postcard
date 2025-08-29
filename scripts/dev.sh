@@ -276,6 +276,66 @@ exec_command() {
     docker-compose exec "$service_name" $command
 }
 
+# 执行数据库迁移
+migrate_db() {
+    log_info "执行数据库迁移..."
+    
+    # 检查数据库服务是否运行
+    if ! docker-compose ps | grep -q "ai-postcard-postgres.*Up"; then
+        log_info "启动数据库服务..."
+        docker-compose --profile postgres up -d
+        
+        # 等待数据库准备就绪
+        sleep 5
+    fi
+    
+    # 检查迁移脚本是否存在
+    if [ ! -f "scripts/migrate-db-schema.sql" ]; then
+        log_error "迁移脚本不存在: scripts/migrate-db-schema.sql"
+        exit 1
+    fi
+    
+    # 执行数据库迁移
+    log_info "应用数据库schema更新..."
+    docker exec ai-postcard-postgres psql -U postgres -d ai_postcard -f - < scripts/migrate-db-schema.sql
+    
+    if [ $? -eq 0 ]; then
+        log_success "数据库迁移完成"
+    else
+        log_error "数据库迁移失败"
+        exit 1
+    fi
+}
+
+# 清理数据库中的明信片数据
+clean_data() {
+    log_info "清理明信片数据..."
+    
+    # 检查数据库服务是否运行
+    if ! docker-compose ps | grep -q "ai-postcard-postgres.*Up"; then
+        log_info "启动数据库服务..."
+        docker-compose --profile postgres up -d
+        
+        # 等待数据库准备就绪
+        sleep 5
+    fi
+    
+    # 清理明信片数据
+    log_info "清理postcards表数据..."
+    docker exec ai-postcard-postgres psql -U postgres -d ai_postcard -c "DELETE FROM postcards;"
+    
+    # 安全清理Redis缓存（避免删除基础设施数据）
+    log_info "清理Redis缓存数据..."
+    if docker-compose ps | grep -q "ai-postcard-redis.*Up"; then
+        docker exec ai-postcard-redis sh -c 'redis-cli -a "$REDIS_PASSWORD" --scan --pattern "cache:*" | xargs -r -n 1 redis-cli -a "$REDIS_PASSWORD" DEL' 2>/dev/null || true
+        docker exec ai-postcard-redis sh -c 'redis-cli -a "$REDIS_PASSWORD" --scan --pattern "session:*" | xargs -r -n 1 redis-cli -a "$REDIS_PASSWORD" DEL' 2>/dev/null || true
+        docker exec ai-postcard-redis sh -c 'redis-cli -a "$REDIS_PASSWORD" --scan --pattern "temp:*" | xargs -r -n 1 redis-cli -a "$REDIS_PASSWORD" DEL' 2>/dev/null || true
+        docker exec ai-postcard-redis sh -c 'redis-cli -a "$REDIS_PASSWORD" --scan --pattern "postcard_cache:*" | xargs -r -n 1 redis-cli -a "$REDIS_PASSWORD" DEL' 2>/dev/null || true
+    fi
+    
+    log_success "数据清理完成"
+}
+
 # 清理容器和卷
 clean_all() {
     log_warning "这将删除所有容器、网络和卷，数据将丢失！"
@@ -307,6 +367,8 @@ show_help() {
     echo "  ps                           查看服务状态"
     echo "  exec <service> <command>     在服务容器中执行命令"
     echo "  validate-env                 验证环境配置"
+    echo "  migrate-db                   执行数据库schema迁移"
+    echo "  clean-data                   清理明信片数据（保留容器）"
     echo "  clean                        清理所有容器和卷"
     echo "  help                         显示此帮助信息"
     echo ""
@@ -326,6 +388,8 @@ show_help() {
     echo "  sh scripts/dev.sh up gateway user           # 启动网关和用户服务"
     echo "  sh scripts/dev.sh up postcard agent worker  # 启动异步工作流系统"
     echo "  sh scripts/dev.sh up all                    # 启动所有主要服务"
+    echo "  sh scripts/dev.sh migrate-db                # 升级数据库schema到最新版本"
+    echo "  sh scripts/dev.sh clean-data                # 清理明信片数据，方便测试"
     echo "  sh scripts/dev.sh logs ai-postcard-ai-agent-worker  # 查看Worker日志"
     echo "  sh scripts/dev.sh exec ai-agent-service bash # 进入 AI Agent 容器"
     echo "  SCRIPT_COMMAND='python manage.py migrate' sh scripts/dev.sh up agent-script"
@@ -365,6 +429,12 @@ main() {
             ;;
         "validate-env")
             validate_env
+            ;;
+        "migrate-db")
+            migrate_db
+            ;;
+        "clean-data")
+            clean_data
             ;;
         "clean")
             clean_all

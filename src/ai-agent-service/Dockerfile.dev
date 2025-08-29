@@ -24,6 +24,9 @@ RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
 # 安装Claude Code CLI
 RUN npm install -g @anthropic-ai/claude-code
 
+# 安装 Puppeteer 用于 HTML->Image 转换（下载Chromium，镜像较大）
+RUN npm install -g puppeteer
+
 # 复制前端package.json并安装依赖（利用Docker缓存）
 COPY app/frontend/package.json app/frontend/package-lock.json* /app/app/frontend/
 RUN cd /app/app/frontend && npm install

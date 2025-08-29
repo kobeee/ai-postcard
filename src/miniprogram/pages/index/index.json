@@ -1,4 +1,5 @@
 {
   "usingComponents": {
+    "structured-postcard": "../../components/structured-postcard/structured-postcard"
   }
 }

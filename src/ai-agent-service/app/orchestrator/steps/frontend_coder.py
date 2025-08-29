@@ -1,6 +1,7 @@
 import logging
 import json
 from ...providers.provider_factory import ProviderFactory
+from ...services.html_to_image import HTMLToImageService
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +40,8 @@ class FrontendCoder:
                 "署名建议": "致亲爱的你"
             }
         
-        # 构建个性化前端代码生成提示词
-        coding_prompt = self._build_personalized_prompt(
+        # 构建独立明信片卡片组件生成提示词（强调移动端/小程序环境与图片参考）
+        coding_prompt = self._build_standalone_card_prompt(
             task, concept, content_data, image_url
         )
         
@@ -61,7 +62,7 @@ class FrontendCoder:
             try:
                 async def consume_claude_generator():
                     """消费Claude生成器并返回结果"""
-                    async_generator = claude_provider.generate(coding_prompt, session_id)
+                    async_generator = claude_provider.generate(coding_prompt, session_id, image_url=image_url)
                     async for message in async_generator:
                         if message.get("type") == "complete":
                             return message.get("final_code", "")
@@ -97,8 +98,29 @@ class FrontendCoder:
             if not frontend_code:
                 frontend_code = self._get_default_frontend_code(content_data, image_url)
             
+            # 保存HTML源码（用于持久化）
             context["results"]["frontend_code"] = frontend_code
+            context["results"]["card_html"] = frontend_code
             context["results"]["preview_url"] = f"/generated/postcard_{task.get('task_id')}.html"
+
+            # 将HTML转换为图片，供小程序直接展示
+            try:
+                html2img = HTMLToImageService()
+                convert_result = await html2img.convert_html_to_image(
+                    html_content=frontend_code,
+                    output_filename=f"postcard_{task.get('task_id')}.png",
+                    width=375,
+                    height=600,
+                    format="png"
+                )
+                if convert_result and convert_result.get("success"):
+                    context["results"]["card_image_url"] = convert_result.get("image_url")
+                    self.logger.info(f"✅ 卡片图片生成成功: {convert_result.get('image_url')}")
+                else:
+                    self.logger.warning("⚠️ 卡片图片生成失败，使用原始背景图降级")
+                    # 降级：不设置card_image_url，让前端使用image_url
+            except Exception as e:
+                self.logger.warning(f"⚠️ HTML转图片异常: {e}")
             
             self.logger.info(f"✅ 前端代码生成完成: {len(frontend_code)} 字符")
             
@@ -107,8 +129,24 @@ class FrontendCoder:
         except Exception as e:
             self.logger.error(f"❌ 前端代码生成失败: {e}")
             # 返回默认前端代码
-            context["results"]["frontend_code"] = self._get_default_frontend_code(content_data, image_url)
+            default_html = self._get_default_frontend_code(content_data, image_url)
+            context["results"]["frontend_code"] = default_html
+            context["results"]["card_html"] = default_html
             context["results"]["preview_url"] = f"/generated/postcard_default_{task.get('task_id')}.html"
+            # 兜底尝试转图片
+            try:
+                html2img = HTMLToImageService()
+                convert_result = await html2img.convert_html_to_image(
+                    html_content=default_html,
+                    output_filename=f"postcard_{task.get('task_id')}.png",
+                    width=375,
+                    height=600,
+                    format="png"
+                )
+                if convert_result and convert_result.get("success"):
+                    context["results"]["card_image_url"] = convert_result.get("image_url")
+            except Exception:
+                pass
             return context
     
     def _get_default_frontend_code(self, content_data, image_url):
@@ -138,13 +176,15 @@ class FrontendCoder:
         
         .postcard {{
             background: white;
-            border-radius: 15px;
-            box-shadow: 0 15px 35px rgba(0,0,0,0.1);
-            max-width: 400px;
-            width: 100%;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+            width: 375px;
+            height: 600px;
+            max-width: 100vw;
             overflow: hidden;
-            transform: scale(0.9);
+            transform: scale(0.95);
             animation: cardAppear 1s ease forwards;
+            margin: 0 auto;
         }}
         
         @keyframes cardAppear {{
@@ -154,9 +194,10 @@ class FrontendCoder:
         }}
         
         .postcard-header {{
-            height: 200px;
+            height: 350px;
             background: url('{image_url}') center/cover;
             position: relative;
+            border-radius: 20px 20px 0 0;
         }}
         
         .postcard-header::after {{
@@ -170,8 +211,12 @@ class FrontendCoder:
         }}
         
         .postcard-content {{
-            padding: 30px;
+            padding: 30px 25px;
             text-align: center;
+            height: 250px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
         }}
         
         .main-title {{
@@ -267,60 +312,69 @@ class FrontendCoder:
 </body>
 </html>"""
     
-    def _build_personalized_prompt(self, task, concept, content_data, image_url):
-        """构建个性化的前端代码生成提示"""
+    def _build_standalone_card_prompt(self, task, concept, content_data, image_url):
+        """构建独立明信片卡片组件生成提示"""
         
         # 解析环境信息和情绪信息
         environment_info = self._parse_environment_info(task)
         emotion_info = self._parse_emotion_info(task) 
         
         # 构建基础内容信息
+        concept_info = ""
+        if concept:
+            try:
+                if isinstance(concept, str) and concept.strip().startswith('{'):
+                    concept_data = json.loads(concept)
+                    concept_info = f"\n- 设计概念：{concept_data.get('视觉风格', '现代简约')}"
+            except:
+                pass
+                
         base_content = f"""
 明信片内容：
 - 主标题：{content_data.get('主标题', '温馨祝福')}
 - 副标题：{content_data.get('副标题', '来自心底的真诚')}
 - 正文：{content_data.get('正文内容', '愿美好与你同在')}
-- 署名：{content_data.get('署名建议', '致亲爱的你')}
-- 背景图片：{image_url}"""
+- 署名：{content_data.get('署名建议', '致亲爱的你')}{concept_info}
+- 参考图片：{image_url}"""
         
         # 构建个性化设计指导
         personalized_design = self._build_design_guidance(environment_info, emotion_info)
         
-        # 构建完整提示
+        # 构建专注于独立卡片组件的提示
         prompt = f"""
-请生成一个个性化交互式明信片的完整前端代码。这不是普通的明信片，而是基于用户真实情绪和环境的情感表达。
+请生成一个独立的明信片卡片组件，要求：
 
 {base_content}
 
-🌍 环境背景信息：
-{environment_info.get('context_description', '温馨的日常时刻')}
+🌍 环境背景：{environment_info.get('context_description', '温馨的日常时刻')}
+💫 用户情绪：{emotion_info.get('emotion_description', '平静温和的心境')}
 
-💫 用户情绪状态：
-{emotion_info.get('emotion_description', '平静温和的心境')}
+**卡片特性**：
+- 这是一个独立的卡片组件，不是完整网页应用
+- 卡片采用竖屏友好的长条形设计，宽度375px，高度600px（手机屏幕适配）
+- 适合微信小程序webview展示，支持手机竖屏浏览
+- 使用提供的参考图片作为卡片背景元素
 
-🎨 个性化设计要求：
-{personalized_design}
+**设计要求**：
+- 精美的明信片样式设计，体现用户当前的环境和心境
+- 包含上述内容信息的优雅展示
+- 优雅的卡片边框、阴影和圆角效果
+- 文字要有适当的背景确保可读性
+- 融入环境特色：{personalized_design}
 
-💻 技术要求：
-1. 纯HTML/CSS/JS实现，无需外部框架
-2. 适配移动端（微信小程序webview）
-3. 响应式设计，适应不同屏幕尺寸
-4. 优秀的性能表现，流畅的动画效果
+**技术要求**：
+- 只生成一个HTML文件，包含内联CSS
+- 使用提供的参考图片作为背景（通过image_url参数）
+- 卡片要有固定尺寸，可以嵌入任何容器
+- 移动端友好设计，适配微信小程序webview
+- 悬停和触摸交互效果
 
-🎯 创意重点：
-1. 必须体现环境元素的视觉化表达
-2. 情绪状态要通过色彩、动画、交互来传达
-3. 融入当地特色和时事热点的设计元素
-4. 创造独特的视觉体验，避免千篇一律
+**重要约束**：
+- 只生成卡片组件本身，不要导航栏、按钮等额外元素
+- 不要生成完整的网页结构（head、body等），只要卡片的核心div
+- 专注于创造一个精美的、可嵌入的明信片卡片
 
-🌟 交互创新：
-1. 根据情绪强度设计不同的交互反馈
-2. 融入环境元素的动画效果（如天气、时间）
-3. 添加惊喜元素和细节彩蛋
-4. 支持多种交互方式（点击、滑动、长按）
-
-请生成完整可运行的HTML代码，包含内联的CSS和JavaScript。
-确保代码充满创意和个性，让用户感受到这张明信片是专门为他们的此时此刻而创作的。
+请将参考图片融入卡片设计中，创造一张独特的个性化明信片卡片组件。
 """
         
         return prompt

@@ -21,8 +21,14 @@ from .api.miniprogram import router as miniprogram_router
 # 导入环境感知API
 from .api.environment import router as environment_router
 
+# 导入HTML转图片API
+from .api.html_image import router as html_image_router
+
 # 导入WebSearch测试服务
 from .services.claude_websearch_test import ClaudeWebSearchTest
+
+# 导入队列消费者（用于初始化）
+from .queue.consumer import TaskConsumer
 
 # 加载环境变量
 load_dotenv()
@@ -92,10 +98,25 @@ def setup_logging():
 # 初始化日志系统
 main_logger = setup_logging()
 
+# 应用启动时的初始化函数
+async def initialize_services():
+    """初始化服务依赖"""
+    try:
+        # 初始化Redis消费者组
+        consumer = TaskConsumer()
+        await consumer.connect()
+        await consumer.stop_consuming()  # 仅用于初始化，不开始消费
+        main_logger.info("✅ Redis消费者组初始化完成")
+    except Exception as e:
+        main_logger.error(f"❌ 服务初始化失败: {e}")
+        # 不抛出异常，让服务继续启动，Worker进程会处理这个问题
+
+# 创建应用实例
 app = FastAPI(
     title="AI Agent Service",
     description="AI 明信片项目 - AI Agent 服务",
-    version="1.0.0"
+    version="1.0.0",
+    on_startup=[initialize_services]
 )
 
 # 集成编码服务API路由
@@ -117,6 +138,13 @@ app.include_router(
     environment_router,
     prefix="/api/v1/environment",
     tags=["环境感知服务"]
+)
+
+# 集成HTML转图片API路由
+app.include_router(
+    html_image_router,
+    prefix="/api/v1",
+    tags=["HTML转图片服务"]
 )
 
 # 初始化WebSearch测试服务
@@ -173,6 +201,12 @@ else:
 generated_dir = os.path.join(static_dir, "generated")
 os.makedirs(generated_dir, exist_ok=True)
 app.mount("/generated", StaticFiles(directory=generated_dir), name="generated")
+app.mount("/static/generated", StaticFiles(directory=generated_dir), name="static_generated")
+
+# 挂载HTML转图片生成的图片文件
+images_dir = os.path.join(generated_dir, "images")
+os.makedirs(images_dir, exist_ok=True)
+# 注意：已经包含在/generated中了，不需要单独挂载
 
 # 添加根路径静态文件处理，用于AI生成的文件引用
 @app.get("/script.js")

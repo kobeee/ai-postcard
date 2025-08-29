@@ -190,6 +190,24 @@ docker-compose --profile all up -d      # 所有服务
 - **智能资源管理**：长时间不活跃的容器应自动停止，保留数据卷，只停止运行中的容器
 - **环境状态检查**：在开始新任务前，检查并清理之前的环境
 
+**Redis数据清理安全规则**：
+- **🚨 重要警告**：在清理Redis缓存时，必须避免删除以下关键基础配置数据：
+  - `postcard_tasks` - Redis Stream任务队列，删除后会导致消费者组无法工作
+  - `ai_agent_workers` - 消费者组配置，删除后任务消费会完全失效
+  - 其他以`QUEUE_`开头的环境变量定义的Stream和Group名称
+- **安全清理命令**：使用模式匹配清理缓存，避免误删基础设施数据
+  ```bash
+  # ✅ 安全的缓存清理（仅清理临时缓存数据）
+  redis-cli --scan --pattern "cache:*" | xargs redis-cli DEL
+  redis-cli --scan --pattern "session:*" | xargs redis-cli DEL
+  redis-cli --scan --pattern "temp:*" | xargs redis-cli DEL
+  
+  # ❌ 危险操作 - 切勿执行
+  redis-cli FLUSHALL  # 会删除所有数据，包括Stream和消费者组
+  redis-cli FLUSHDB   # 会删除当前数据库的所有数据
+  ```
+- **恢复机制**：系统已增强容错能力，当检测到Stream或消费者组丢失时会自动重建，但仍应避免不当清理
+
 #### 环境变量管理 (env-management.mdc)
 
 **核心原则**：

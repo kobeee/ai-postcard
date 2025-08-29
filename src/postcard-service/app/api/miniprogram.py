@@ -10,6 +10,98 @@ from ..services.postcard_service import PostcardService
 # 设置日志
 logger = logging.getLogger(__name__)
 
+def flatten_structured_data(structured_data: dict) -> dict:
+    """
+    🔧 统一的结构化数据扁平化处理函数
+    将嵌套的structured_data转换为扁平字段，避免小程序数据传递丢失问题
+    """
+    flattened_data = {}
+    
+    if structured_data and isinstance(structured_data, dict):
+        # 只添加非空字段，不设置默认值
+        mood = structured_data.get('mood', {})
+        if mood.get('primary'):
+            flattened_data["mood_primary"] = mood['primary']
+        if mood.get('intensity'):
+            flattened_data["mood_intensity"] = mood['intensity']
+        if mood.get('secondary'):
+            flattened_data["mood_secondary"] = mood['secondary']
+        if mood.get('color_theme'):
+            flattened_data["mood_color_theme"] = mood['color_theme']
+        
+        # 标题
+        if structured_data.get('title'):
+            flattened_data["card_title"] = structured_data['title']
+        
+        # 视觉样式
+        visual = structured_data.get('visual', {}).get('style_hints', {})
+        if visual.get('color_scheme'):
+            flattened_data["visual_color_scheme"] = visual['color_scheme']
+        if visual.get('layout_style'):
+            flattened_data["visual_layout_style"] = visual['layout_style']
+        if visual.get('animation_type'):
+            flattened_data["visual_animation_type"] = visual['animation_type']
+        
+        bg_url = structured_data.get('visual', {}).get('background_image_url')
+        if bg_url:
+            flattened_data["visual_background_image"] = bg_url
+        
+        # 内容
+        content = structured_data.get('content', {})
+        if content.get('main_text'):
+            flattened_data["content_main_text"] = content['main_text']
+        
+        quote = content.get('quote', {})
+        if quote.get('text'):
+            flattened_data["content_quote_text"] = quote['text']
+        if quote.get('author'):
+            flattened_data["content_quote_author"] = quote['author']
+        if quote.get('translation'):
+            flattened_data["content_quote_translation"] = quote['translation']
+        
+        hot_topics = content.get('hot_topics', {})
+        if hot_topics.get('douyin'):
+            flattened_data["content_hot_topics_douyin"] = hot_topics['douyin']
+        if hot_topics.get('xiaohongshu'):
+            flattened_data["content_hot_topics_xiaohongshu"] = hot_topics['xiaohongshu']
+        
+        # 上下文
+        context = structured_data.get('context', {})
+        if context.get('weather'):
+            flattened_data["context_weather"] = context['weather']
+        if context.get('location'):
+            flattened_data["context_location"] = context['location']  
+        if context.get('time_context'):
+            flattened_data["context_time"] = context['time_context']
+        
+        # 处理推荐内容
+        recommendations = structured_data.get('recommendations', {})
+        if recommendations.get('music') and len(recommendations['music']) > 0:
+            music = recommendations['music'][0]
+            flattened_data.update({
+                "recommendations_music_title": music.get('title', ''),
+                "recommendations_music_artist": music.get('artist', ''),
+                "recommendations_music_reason": music.get('reason', ''),
+            })
+        
+        if recommendations.get('book') and len(recommendations['book']) > 0:
+            book = recommendations['book'][0]
+            flattened_data.update({
+                "recommendations_book_title": book.get('title', ''),
+                "recommendations_book_author": book.get('author', ''),
+                "recommendations_book_reason": book.get('reason', ''),
+            })
+        
+        if recommendations.get('movie') and len(recommendations['movie']) > 0:
+            movie = recommendations['movie'][0]
+            flattened_data.update({
+                "recommendations_movie_title": movie.get('title', ''),
+                "recommendations_movie_director": movie.get('director', ''),
+                "recommendations_movie_reason": movie.get('reason', ''),
+            })
+    
+    return flattened_data
+
 router = APIRouter(prefix="/miniprogram")
 
 @router.post("/postcards/create")
@@ -97,6 +189,38 @@ async def get_miniprogram_postcard_result(
                 "data": None
             }
         
+        # 解析小程序组件代码
+        miniprogram_component = None
+        has_animation = False
+        if result.frontend_code:
+            try:
+                import json
+                # 解析小程序组件代码JSON
+                component_data = json.loads(result.frontend_code)
+                if isinstance(component_data, dict):
+                    miniprogram_component = component_data
+                    
+                    # 检查是否包含动画
+                    wxss_code = component_data.get('wxss', '')
+                    js_code = component_data.get('js', '')
+                    has_animation = any([
+                        'animation' in wxss_code,
+                        'transform' in wxss_code,
+                        'transition' in wxss_code,
+                        'wx.createAnimation' in js_code,
+                        'setData' in js_code and ('scale' in js_code or 'opacity' in js_code)
+                    ])
+                    
+                    logger.info(f"✅ 成功解析小程序组件，包含动画: {has_animation}")
+                
+            except (json.JSONDecodeError, Exception) as e:
+                logger.warning(f"解析小程序组件代码失败: {e}")
+                miniprogram_component = None
+        
+        # 🔧 使用统一的扁平化处理函数
+        structured_data = getattr(result, 'structured_data', None) or {}
+        flattened_data = flatten_structured_data(structured_data)
+
         return {
             "code": 0,
             "message": "获取结果成功",
@@ -105,9 +229,25 @@ async def get_miniprogram_postcard_result(
                 "task_id": task_id,
                 "content": result.content,
                 "concept": result.concept,
-                "image_url": result.image_url,
-                "frontend_code": result.frontend_code,
+                "image_url": result.image_url,  # Gemini生成的原图
+                "card_image_url": getattr(result, 'card_image_url', None),  # HTML转换后的卡片图片
+                "card_html": getattr(result, 'card_html', None),  # HTML源码（可选）
+                "structured_data": structured_data,  # 保留原始结构化数据
+                
+                # 🔧 扁平化的结构化数据字段
+                **flattened_data,
+                
+                # 小程序组件相关信息
+                "miniprogram_component": miniprogram_component,  # 小程序组件代码（wxml, wxss, js）
+                "component_type": getattr(result, "component_type", "postcard"),  # 组件类型
+                "has_animation": has_animation,  # 是否包含动画
+                "has_interactive": bool(miniprogram_component),  # 是否包含交互组件
+                
+                # 兼容性字段（废弃，但暂时保留）
+                "frontend_code": result.frontend_code,  # 原始JSON代码，供调试使用
                 "preview_url": result.preview_url,
+                
+                # 元数据
                 "status": result.status,
                 "created_at": result.created_at.isoformat() if result.created_at else None,
                 "generation_time": (getattr(result, "generation_time", None) or 0)
@@ -136,14 +276,51 @@ async def get_user_miniprogram_postcards(
         
         postcard_list = []
         for postcard in postcards:
-            postcard_list.append({
+            # 检查是否有小程序组件
+            has_miniprogram_component = bool(postcard.frontend_code)
+            has_animation = False
+            
+            # 尝试解析组件中是否包含动画
+            if postcard.frontend_code:
+                try:
+                    import json
+                    component_data = json.loads(postcard.frontend_code)
+                    if isinstance(component_data, dict):
+                        wxss_code = component_data.get('wxss', '')
+                        has_animation = any([
+                            'animation' in wxss_code,
+                            'transform' in wxss_code,
+                            'transition' in wxss_code
+                        ])
+                except:
+                    pass
+            
+            # 🔧 使用统一的扁平化处理函数
+            structured_data = getattr(postcard, 'structured_data', None) or {}
+            flattened_data = flatten_structured_data(structured_data)
+            
+            # 构建明信片数据，包含扁平化字段
+            postcard_data = {
                 "id": postcard.id,
-                "content": postcard.content[:100] + "..." if len(postcard.content) > 100 else postcard.content,
+                # 返回完整内容，避免前端无法从截断文本中解析JSON
+                "content": postcard.content or "",
+                # 另外提供预览字段供前端列表场景使用
+                "content_preview": (postcard.content[:100] + "...") if postcard.content and len(postcard.content) > 100 else (postcard.content or ""),
                 "image_url": postcard.image_url,
+                "card_image_url": getattr(postcard, 'card_image_url', None),
+                "structured_data": structured_data,  # 保留原始结构化数据
+                
+                # 🔧 添加扁平化的结构化数据字段
+                **flattened_data,
+                
                 "status": postcard.status,
                 "created_at": postcard.created_at.strftime("%Y-%m-%d %H:%M") if postcard.created_at else None,
-                "has_interactive": bool(postcard.frontend_code)
-            })
+                "component_type": getattr(postcard, "component_type", "postcard"),
+                "has_interactive": has_miniprogram_component,
+                "has_animation": has_animation
+            }
+            
+            postcard_list.append(postcard_data)
         
         return {
             "code": 0,
@@ -212,6 +389,28 @@ async def get_shared_miniprogram_postcard(
                 "data": None
             }
         
+        # 解析小程序组件代码
+        miniprogram_component = None
+        has_animation = False
+        if postcard.frontend_code:
+            try:
+                import json
+                component_data = json.loads(postcard.frontend_code)
+                if isinstance(component_data, dict):
+                    miniprogram_component = component_data
+                    wxss_code = component_data.get('wxss', '')
+                    has_animation = any([
+                        'animation' in wxss_code,
+                        'transform' in wxss_code,
+                        'transition' in wxss_code
+                    ])
+            except:
+                pass
+        
+        # 🔧 使用统一的扁平化处理函数
+        structured_data = getattr(postcard, 'structured_data', None) or {}
+        flattened_data = flatten_structured_data(structured_data)
+        
         return {
             "code": 0,
             "message": "获取分享明信片成功",
@@ -219,9 +418,23 @@ async def get_shared_miniprogram_postcard(
                 "id": postcard.id,
                 "content": postcard.content,
                 "image_url": postcard.image_url,
-                "frontend_code": postcard.frontend_code,
+                "card_image_url": getattr(postcard, 'card_image_url', None),
+                "structured_data": structured_data,  # 保留原始结构化数据
+                
+                # 🔧 添加扁平化的结构化数据字段
+                **flattened_data,
+                
                 "created_at": postcard.created_at.strftime("%Y-%m-%d %H:%M") if postcard.created_at else None,
-                "is_public": True  # 分享的明信片默认公开
+                "is_public": True,  # 分享的明信片默认公开
+                
+                # 小程序组件相关信息
+                "miniprogram_component": miniprogram_component,
+                "component_type": getattr(postcard, "component_type", "postcard"),
+                "has_animation": has_animation,
+                "has_interactive": bool(miniprogram_component),
+                
+                # 兼容性字段
+                "frontend_code": postcard.frontend_code
             }
         }
     except Exception as e:

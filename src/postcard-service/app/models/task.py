@@ -44,6 +44,9 @@ class TaskStatusResponse(BaseModel):
     image_url: Optional[str] = None
     frontend_code: Optional[str] = None
     preview_url: Optional[str] = None
+    card_image_url: Optional[str] = None
+    card_html: Optional[str] = None
+    structured_data: Optional[Dict[str, Any]] = None  # 新增结构化数据字段
     error_message: Optional[str] = None
     retry_count: int = 0
 
@@ -56,6 +59,9 @@ class UpdateStatusRequest(BaseModel):
     image_url: Optional[str] = None
     frontend_code: Optional[str] = None
     preview_url: Optional[str] = None
+    card_image_url: Optional[str] = None
+    card_html: Optional[str] = None
+    structured_data: Optional[Dict[str, Any]] = None  # 新增结构化数据字段
 
 class StatusUpdateRequest(BaseModel):
     status: TaskStatus

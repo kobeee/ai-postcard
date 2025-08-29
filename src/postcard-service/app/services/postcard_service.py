@@ -40,7 +40,16 @@ class PostcardService:
             )
             
             self.db.add(postcard)
-            self.db.commit()
+            try:
+                self.db.commit()
+            except SQLAlchemyError as e:
+                self.db.rollback()
+                err = str(e)
+                # 友好提示：数据库未迁移时的典型错误
+                if "UndefinedColumn" in err or "card_image_url" in err or "card_html" in err:
+                    logger.error("数据库缺少新列，请先执行迁移: sh scripts/dev.sh migrate-db")
+                    raise Exception("数据库未迁移：缺少 card_image_url/card_html 等新列。请运行: sh scripts/dev.sh migrate-db")
+                raise
             self.db.refresh(postcard)
             
             # 创建任务消息
@@ -86,6 +95,9 @@ class PostcardService:
                 image_url=postcard.image_url,
                 frontend_code=postcard.frontend_code,
                 preview_url=postcard.preview_url,
+                card_image_url=getattr(postcard, 'card_image_url', None),
+                card_html=getattr(postcard, 'card_html', None),
+                structured_data=getattr(postcard, 'structured_data', None),  # 新增结构化数据
                 error_message=postcard.error_message,
                 retry_count=postcard.retry_count
             )
@@ -118,6 +130,12 @@ class PostcardService:
                     postcard.frontend_code = extra['frontend_code']
                 if 'preview_url' in extra:
                     postcard.preview_url = extra['preview_url']
+                if 'card_image_url' in extra:
+                    postcard.card_image_url = extra['card_image_url']
+                if 'card_html' in extra:
+                    postcard.card_html = extra['card_html']
+                if 'structured_data' in extra:
+                    postcard.structured_data = extra['structured_data']
             
             if status == TaskStatus.COMPLETED:
                 postcard.completed_at = datetime.now()
@@ -152,6 +170,8 @@ class PostcardService:
             elif step_name == "FrontendCoder":
                 postcard.frontend_code = result_data.get("frontend_code")
                 postcard.preview_url = result_data.get("preview_url")
+            elif step_name == "StructuredContentGenerator":
+                postcard.structured_data = result_data.get("structured_data")
             
             self.db.commit()
             logger.info(f"✅ 中间结果保存成功: {task_id} - {step_name}")
@@ -182,6 +202,12 @@ class PostcardService:
                 postcard.frontend_code = results["frontend_code"]
             if "preview_url" in results:
                 postcard.preview_url = results["preview_url"]
+            if "card_image_url" in results:
+                postcard.card_image_url = results["card_image_url"]
+            if "card_html" in results:
+                postcard.card_html = results["card_html"]
+            if "structured_data" in results:
+                postcard.structured_data = results["structured_data"]
             
             postcard.status = TaskStatus.COMPLETED.value
             postcard.completed_at = datetime.now()

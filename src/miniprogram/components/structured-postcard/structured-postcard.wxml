@@ -1,0 +1,126 @@
+<!-- 结构化明信片组件模板 -->
+<view class="structured-postcard-container">
+  <!-- 主卡片 -->
+  <view 
+    class="postcard-main {{isAnimating ? 'animated' : ''}}"
+    style="{{dynamicCardStyle}}"
+    animation="{{animationData}}"
+    bindtap="onCardTap"
+  >
+    <!-- 背景图片层 -->
+    <image 
+      class="background-image" 
+      src="{{backgroundImage}}" 
+      mode="aspectFill"
+      lazy-load="true"
+      wx:if="{{backgroundImage}}"
+    ></image>
+    
+    <!-- 内容层 -->
+    <view class="content-layer" style="{{dynamicContentStyle}}">
+      <!-- 标题和情绪 -->
+      <view class="header-section">
+        <text class="card-title">{{structuredData.title || '今日心情'}}</text>
+        <view class="mood-indicator" wx:if="{{structuredData.mood}}">
+          <text class="mood-primary">{{structuredData.mood.primary}}</text>
+          <text class="mood-intensity" wx:if="{{structuredData.mood.intensity}}">
+            {{getMoodIntensityStars(structuredData.mood.intensity)}}
+          </text>
+        </view>
+      </view>
+      
+      <!-- 主要文案 -->
+      <view class="main-content-section">
+        <text class="main-text">{{structuredData.content.main_text}}</text>
+      </view>
+      
+      <!-- 热点话题 -->
+      <view class="hot-topics-section" wx:if="{{structuredData.content.hot_topics}}">
+        <view class="topic-item" wx:if="{{structuredData.content.hot_topics.xiaohongshu}}">
+          <text class="topic-text">{{structuredData.content.hot_topics.xiaohongshu}}</text>
+        </view>
+        <view class="topic-item" wx:if="{{structuredData.content.hot_topics.douyin}}">
+          <text class="topic-text">{{structuredData.content.hot_topics.douyin}}</text>
+        </view>
+      </view>
+      
+      <!-- 英文浮条（多来源兜底） -->
+      <view class="quote-section" wx:if="{{hasQuote}}">
+        <text class="quote-text">{{quoteText}}</text>
+        <text class="quote-author" wx:if="{{quoteAuthor}}">— {{quoteAuthor}}</text>
+        <text class="quote-translation" wx:if="{{quoteTranslation}}">{{quoteTranslation}}</text>
+      </view>
+      
+      <!-- 推荐内容 -->
+      <view class="recommendations-section" wx:if="{{structuredData.recommendations}}">
+        <view class="recommendations-header" bindtap="toggleRecommendations">
+          <text class="recommendations-title">今日推荐</text>
+          <text class="expand-icon {{recommendationsExpanded ? 'expanded' : ''}}">▼</text>
+        </view>
+        
+        <view class="recommendations-content {{recommendationsExpanded ? 'expanded' : ''}}">
+          <!-- 音乐推荐 -->
+          <view 
+            class="recommendation-item music" 
+            wx:if="{{hasMusic}}"
+            data-type="music"
+            data-item="{{recMusic}}"
+            bindtap="onRecommendationTap"
+          >
+            <text class="rec-icon">🎵</text>
+            <view class="rec-content">
+              <text class="rec-title">{{recMusic.title}}</text>
+              <text class="rec-subtitle">{{recMusic.artist}}</text>
+              <text class="rec-reason">{{recMusic.reason}}</text>
+            </view>
+          </view>
+          
+          <!-- 书籍推荐 -->
+          <view 
+            class="recommendation-item book" 
+            wx:if="{{hasBook}}"
+            data-type="book"
+            data-item="{{recBook}}"
+            bindtap="onRecommendationTap"
+          >
+            <text class="rec-icon">📚</text>
+            <view class="rec-content">
+              <text class="rec-title">{{recBook.title}}</text>
+              <text class="rec-subtitle">{{recBook.author}}</text>
+              <text class="rec-reason">{{recBook.reason}}</text>
+            </view>
+          </view>
+          
+          <!-- 电影推荐 -->
+          <view 
+            class="recommendation-item movie" 
+            wx:if="{{hasMovie}}"
+            data-type="movie"
+            data-item="{{recMovie}}"
+            bindtap="onRecommendationTap"
+          >
+            <text class="rec-icon">🎬</text>
+            <view class="rec-content">
+              <text class="rec-title">{{recMovie.title}}</text>
+              <text class="rec-subtitle">{{recMovie.director}}</text>
+              <text class="rec-reason">{{recMovie.reason}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+      
+      <!-- 底部信息：去掉地点/天气，仅保留分享 -->
+      <view class="footer-section">
+        <view class="share-button" bindtap="shareCard">
+          <text class="share-icon">✨</text>
+          <text class="share-text">分享心情</text>
+        </view>
+      </view>
+    </view>
+    
+    <!-- 装饰性动效层 -->
+    <view class="decoration-layer" wx:if="{{showGradientAnimation}}">
+      <view class="gradient-overlay"></view>
+    </view>
+  </view>
+</view>

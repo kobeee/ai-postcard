@@ -120,13 +120,15 @@ Please create a beautiful image that meets these requirements."""
                             image_id = str(uuid.uuid4())[:8]
                             image_filename = f"gemini_generated_{image_id}.png"
                             
-                            # 保存到临时目录（在实际项目中应该保存到对象存储）
-                            temp_dir = "/tmp"
-                            image_path = f"{temp_dir}/{image_filename}"
+                            # 保存到静态文件目录，供HTTP访问
+                            static_dir = "/app/app/static/generated"
+                            os.makedirs(static_dir, exist_ok=True)
+                            image_path = f"{static_dir}/{image_filename}"
                             image.save(image_path)
                             
-                            # 返回图片URL（这里简化为本地路径，实际应该是可访问的URL）
-                            image_url = f"file://{image_path}"
+                            # 构建可通过HTTP访问的URL
+                            base_url = os.getenv("AI_AGENT_PUBLIC_URL", "http://ai-agent-service:8000")
+                            image_url = f"{base_url}/static/generated/{image_filename}"
                             image_saved = True
                             
                             self.logger.info(f"✅ 图片保存成功: {image_path}")

@@ -12,7 +12,10 @@
 .compass-container {
   position: relative;
   min-height: 100vh;
-  padding: 40rpx 32rpx;
+  padding: 40rpx 30rpx;    /* 统一使用30rpx边距，确保总宽度750rpx-60rpx=690rpx */
+  /* 预留底部安全区，防止内容与底栏/记忆区域贴合或被遮挡 */
+  padding-bottom: calc(200rpx + env(safe-area-inset-bottom));
+  padding-bottom: calc(200rpx + constant(safe-area-inset-bottom));
   box-sizing: border-box;
 }
 
@@ -231,14 +234,84 @@
 .card-container {
   z-index: 1;
   position: relative;
-  margin-bottom: 60rpx;
+  margin-bottom: 40rpx;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* AI生成的卡片图片展示区域 */
+.card-image-display {
+  position: relative;
+  width: 100%;
+  border-radius: 32rpx;
+  overflow: hidden;
+  box-shadow: 0 40rpx 80rpx rgba(0,0,0,0.15);
+  transition: transform 0.3s ease;
+  background: none;
+}
+
+.card-image-display:active {
+  transform: scale(0.98);
+}
+
+.generated-card-image {
+  width: 750rpx;
+  height: 1200rpx;
+  max-width: 100%;
+  display: block;
+}
+
+.card-overlay {
+  position: absolute;
+  top: 30rpx;
+  right: 30rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  align-items: flex-end;
+}
+
+.ai-badge {
+  background: rgba(0,0,0,0.8);
+  color: white;
+  padding: 12rpx 24rpx;
+  border-radius: 40rpx;
+  font-size: 24rpx;
+  backdrop-filter: blur(20rpx);
+  font-weight: 500;
+}
+
+.interactive-hint {
+  background: rgba(138, 43, 226, 0.9);
+  color: white;
+  padding: 8rpx 20rpx;
+  border-radius: 30rpx;
+  font-size: 22rpx;
+  backdrop-filter: blur(20rpx);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.05); opacity: 1; }
+}
+
+/* 传统卡片布局（降级方案） */
+.traditional-card {
+  width: 100%;
+  height: 600rpx;
+  border-radius: 32rpx;
+  overflow: hidden;
+  box-shadow: 0 30rpx 70rpx rgba(0,0,0,0.1);
 }
 
 .daily-card {
   position: relative;
-  width: 100%;
-  height: 600rpx;
-  margin-bottom: 40rpx;
+  width: 690rpx;   /* 与美化卡片保持一致的宽度 */
+  height: 920rpx; /* 收短高度，避免与下方区域贴合 */
+  margin: 0 auto 40rpx auto;
   perspective: 1000rpx;
   cursor: pointer;
 }
@@ -497,6 +570,7 @@
 
 /* 记忆回廊 */
 .memory-gallery {
+  margin-top: 20rpx;
   margin-bottom: 60rpx;
   z-index: 1;
   position: relative;
@@ -750,5 +824,322 @@
   
   .status-text {
     font-size: 18rpx;
+  }
+}
+
+/* ==================== 美化卡片组件样式 ==================== */
+.beautiful-postcard {
+  position: relative;
+  width: 690rpx;              /* 微信小程序标准宽度750rpx - 60rpx边距 */
+  height: 920rpx;             /* 稍微矮一些，留出底部安全距离 */
+  margin: 0 auto;
+  border-radius: 32rpx;
+  overflow: hidden;
+  box-shadow: 0 24rpx 80rpx rgba(0, 0, 0, 0.25);
+  background: #fff;
+}
+
+/* 防止与下方记忆回廊重叠，增加底部外边距 */
+.card-container { margin-bottom: 220rpx; }
+
+/* 动态布局：紧凑与丰富模式 */
+.beautiful-postcard.layout-compact .postcard-content {
+  padding: 60rpx 40rpx;
+}
+.beautiful-postcard.layout-compact .postcard-title {
+  font-size: 44rpx;
+}
+.beautiful-postcard.layout-rich .postcard-content {
+  padding: 100rpx 70rpx;
+}
+.beautiful-postcard.layout-rich .quote-text {
+  font-size: 32rpx;
+}
+
+/* 动效类：根据 motion 添加微交互 */
+/* 关闭页面级卡片浮动，避免压盖记忆区域 */
+.beautiful-postcard.motion-float { animation: none; }
+@keyframes floatCard {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8rpx); }
+}
+
+.beautiful-postcard.motion-pulse { animation: none; }
+@keyframes pulseCard {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.01); }
+}
+
+.beautiful-postcard.motion-gradient .background-overlay {
+  background: linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.7) 50%, rgba(255,255,255,0.95) 100%);
+}
+
+/* 背景图层 */
+.postcard-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+.postcard-background .background-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.background-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(255, 255, 255, 0.75) 40%,
+    rgba(255, 255, 255, 0.85) 70%,
+    rgba(255, 255, 255, 0.95) 100%
+  );
+  backdrop-filter: blur(2rpx);
+}
+
+/* 内容层 */
+.postcard-content {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  padding: 70rpx 56rpx; /* 略收紧整体内边距 */
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start; /* 避免上下被强制拉开导致大面积留白 */
+}
+
+/* 顶部标题区 */
+.postcard-header {
+  text-align: center;
+  margin-bottom: 28rpx; /* 减小抬头与正文间距 */
+}
+
+.postcard-date {
+  display: block;
+  font-size: 26rpx;
+  color: #8b5cf6;
+  font-weight: 500;
+  margin-bottom: 20rpx;
+  letter-spacing: 2rpx;
+}
+
+.postcard-title {
+  display: block;
+  font-size: 54rpx;
+  font-weight: bold;
+  color: #1a1a1a;
+  line-height: 1.2;
+  margin-bottom: 16rpx;
+  text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.1);
+}
+
+/* 主文案区 */
+.postcard-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+  margin: 16rpx 0 24rpx 0; /* 收紧正文块上下间距 */
+}
+
+.main-quote {
+  margin-bottom: 40rpx;
+}
+
+.quote-text {
+  display: block;
+  font-size: 30rpx; /* 缩小主文案字号，为更多元素留白 */
+  line-height: 1.6;
+  color: #2d3748;
+  font-weight: 400;
+  text-align: center;
+  padding: 0 20rpx;
+}
+
+.english-quote {
+  margin-top: 30rpx;
+  padding: 30rpx 40rpx;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(99, 102, 241, 0.1));
+  border-radius: 24rpx;
+  border-left: 6rpx solid #8b5cf6;
+}
+
+.english-text {
+  display: block;
+  font-size: 24rpx; /* 略缩小英文引用 */
+  color: #6b7280;
+  font-style: italic;
+  line-height: 1.5;
+  text-align: center;
+  font-family: 'Georgia', serif;
+}
+
+/* 英文浮条 */
+.english-ribbon {
+  margin-top: 24rpx;
+  background: linear-gradient(135deg, rgba(99,102,241,.12), rgba(139,92,246,.12));
+  border: 2rpx solid rgba(99,102,241,.25);
+  border-radius: 20rpx;
+  padding: 16rpx 24rpx;
+}
+
+/* 推荐内容区 */
+.postcard-recommendations {
+  margin: 30rpx 0;
+  padding: 30rpx;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(139, 92, 246, 0.05));
+  border-radius: 20rpx;
+  border: 2rpx solid rgba(139, 92, 246, 0.1);
+}
+
+.recommendations-title {
+  text-align: center;
+  margin-bottom: 20rpx;
+}
+
+.rec-title-text {
+  font-size: 24rpx;
+  color: #8b5cf6;
+  font-weight: 600;
+  letter-spacing: 1rpx;
+}
+
+.postcard-recommendations .recommendation-item {
+  display: flex;
+  align-items: center;
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid rgba(139, 92, 246, 0.1);
+}
+
+.postcard-recommendations .recommendation-item:last-child {
+  border-bottom: none;
+}
+
+.postcard-recommendations .rec-icon {
+  font-size: 28rpx;
+  margin-right: 16rpx;
+  width: 40rpx;
+  text-align: center;
+}
+
+.postcard-recommendations .rec-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.rec-name {
+  font-size: 26rpx;
+  color: #374151;
+  font-weight: 500;
+  margin-bottom: 4rpx;
+  line-height: 1.3;
+}
+
+.rec-author {
+  font-size: 22rpx;
+  color: #6b7280;
+  font-weight: 300;
+}
+
+/* 底部装饰区 */
+.postcard-footer {
+  margin-top: auto;
+  text-align: center;
+}
+
+.weather-info {
+  margin-bottom: 24rpx;
+}
+
+.weather-text {
+  font-size: 24rpx;
+  color: #6b7280;
+  background: rgba(229, 231, 235, 0.8);
+  padding: 12rpx 24rpx;
+  border-radius: 20rpx;
+  display: inline-block;
+}
+
+.signature {
+  margin-top: 20rpx;
+}
+
+.signature-text {
+  font-size: 22rpx;
+  color: #9ca3af;
+  font-weight: 300;
+  letter-spacing: 1rpx;
+}
+
+/* AI生成标识 */
+.ai-badge {
+  position: absolute;
+  top: 24rpx;
+  right: 24rpx;
+  z-index: 3;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  padding: 8rpx 16rpx;
+  border-radius: 16rpx;
+  box-shadow: 0 4rpx 12rpx rgba(102, 126, 234, 0.3);
+}
+
+.ai-text {
+  font-size: 20rpx;
+  font-weight: 500;
+}
+
+/* 响应式调整 - 针对小屏幕优化 */
+@media (max-width: 400px) {
+  .compass-container {
+    padding: 32rpx 20rpx;    /* 小屏幕使用更小的边距 */
+  }
+  
+  .beautiful-postcard {
+    width: 710rpx;           /* 小屏幕使用更大的宽度 750rpx - 40rpx */
+  }
+  
+  .postcard-content {
+    padding: 60rpx 40rpx;
+  }
+  
+  .postcard-title {
+    font-size: 48rpx;
+  }
+  
+  .quote-text {
+    font-size: 32rpx;
+  }
+}
+
+/* 卡片动画效果 */
+.beautiful-postcard {
+  animation: cardFadeIn 0.8s ease-out;
+  transition: transform 0.3s ease;
+}
+
+.beautiful-postcard:active {
+  transform: scale(0.98);
+}
+
+@keyframes cardFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(40rpx) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }

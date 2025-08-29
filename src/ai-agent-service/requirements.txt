@@ -39,4 +39,5 @@ psutil>=5.9.0  # 用于监控资源使用情况
 google-genai  # Gemini API - 官方推荐的新SDK
 Pillow>=10.0.0  # 图片处理库，用于Gemini生成的图片
 aiohttp>=3.8.0  # 异步HTTP客户端
+aiofiles>=0.8.0  # 异步文件操作
 redis>=5.0.0  # Redis消息队列

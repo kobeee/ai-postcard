@@ -15,27 +15,78 @@
 
   <!-- 明信片内容 -->
   <view class="postcard-container" wx:else>
-    <!-- 明信片图片 -->
-    <view class="image-section" wx:if="{{postcard.image_url}}">
-      <image 
-        class="postcard-image" 
-        src="{{postcard.image_url}}" 
-        mode="aspectFit"
-        show-menu-by-longpress="{{true}}"
-      ></image>
+    
+    <!-- 结构化明信片渲染（最高优先级） -->
+    <view class="structured-card-section" wx:if="{{hasStructuredData}}">
+      <structured-postcard 
+        structured-data="{{structuredData}}"
+        background-image="{{structuredData.visual.background_image_url || postcard.image_url}}"
+        fallback-english="{{postcard.english}}"
+        show-animation="{{true}}"
+        size-mode="standard"
+        bind:cardtap="onStructuredCardTap"
+        bind:recommendationtap="onRecommendationTap"
+        bind:share="onShareStructuredCard"
+      ></structured-postcard>
+      
     </view>
+
+    <!-- 🔥 降级方案：全新超简单卡片 -->
+    <view class="new-simple-card" wx:elif="{{postcard}}">
+      <text class="simple-card-title">今日心情</text>
+      <text class="card-content">{{postcard.content ? '内容解析中...' : '杭州夏夜，微风轻拂'}}</text>
+      <text class="card-time">{{postcard.created_at || '2024年8月28日'}}</text>
+      
+      <!-- 降级提示 -->
+      <view class="fallback-warning">
+        <text class="warning-icon">⚠️</text>
+        <text class="warning-text">数据解析失败，显示基础内容</text>
+      </view>
+    </view>
+    
 
     <!-- 明信片信息 -->
     <view class="info-section">
       <view class="content-card">
         <view class="card-header">
-          <text class="card-title">明信片内容</text>
+          <text class="content-card-title">明信片内容</text>
           <text class="copy-btn" bindtap="copyContent">📋</text>
         </view>
-        <text class="postcard-content">{{postcard.content || '暂无内容'}}</text>
+        <!-- 智能内容显示 -->
+        <view wx:if="{{hasStructuredData}}" class="structured-content-summary">
+          <text class="content-title">解析成功的结构化内容</text>
+          <text class="content-desc">已转换为美观的卡片展示</text>
+        </view>
+        <view wx:else class="raw-content-display">
+          <text class="content-warning">⚠️ 原始数据显示（建议优化）</text>
+          <text class="postcard-content">{{postcard.content || '暂无内容'}}</text>
+        </view>
       </view>
 
       <!-- 创作信息 -->
+      <!-- 调试信息（开发时显示） -->
+      <view class="debug-card" wx:if="{{debugInfo}}">
+        <view class="card-header">
+          <text class="content-card-title">🔧 调试信息</text>
+        </view>
+        <view class="debug-item">
+          <text class="debug-label">数据类型：</text>
+          <text class="debug-value">{{debugInfo.contentType}}</text>
+        </view>
+        <view class="debug-item">
+          <text class="debug-label">解析状态：</text>
+          <text class="debug-value">{{debugInfo.parseSuccess ? '✅ 成功' : '❌ 失败'}}</text>
+        </view>
+        <view class="debug-item" wx:if="{{debugInfo.parsedKeys}}">
+          <text class="debug-label">数据字段：</text>
+          <text class="debug-value">{{debugInfo.parsedKeys.join(', ')}}</text>
+        </view>
+        <view class="debug-item">
+          <text class="debug-label">数据预览：</text>
+          <text class="debug-preview">{{debugInfo.originalContent}}</text>
+        </view>
+      </view>
+
       <view class="meta-card">
         <view class="meta-item">
           <text class="meta-label">创建时间：</text>
@@ -54,7 +105,7 @@
       <!-- 交互预览 -->
       <view class="interactive-card" wx:if="{{postcard.frontend_code}}">
         <view class="card-header">
-          <text class="card-title">交互效果</text>
+          <text class="content-card-title">交互效果</text>
           <text class="preview-btn" bindtap="previewCode">🎭</text>
         </view>
         <text class="interactive-desc">这张明信片包含了动态交互效果</text>

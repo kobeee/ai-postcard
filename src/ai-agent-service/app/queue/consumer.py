@@ -91,6 +91,21 @@ class TaskConsumer:
                 self.logger.warning("⚠️ 捕获到 CancelledError，忽略并继续监听")
                 await asyncio.sleep(0.1)
                 continue
+            except ResponseError as e:
+                # 检查是否是消费者组不存在的错误
+                if "NOGROUP" in str(e):
+                    self.logger.warning(f"⚠️ 消费者组不存在，尝试重新创建: {e}")
+                    try:
+                        await self.ensure_consumer_group()
+                        self.logger.info(f"✅ 消费者组重新创建成功: {self.consumer_group}")
+                        continue  # 重新尝试消费
+                    except Exception as recreate_error:
+                        self.logger.error(f"❌ 重新创建消费者组失败: {recreate_error}")
+                        await asyncio.sleep(5)
+                        continue
+                else:
+                    self.logger.error(f"❌ Redis ResponseError: {e}")
+                    await asyncio.sleep(5)
             except Exception as e:
                 self.logger.error(f"❌ 消费任务失败: {e}")
                 await asyncio.sleep(5)  # 错误后等待5秒

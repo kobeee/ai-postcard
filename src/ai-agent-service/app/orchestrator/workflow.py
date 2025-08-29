@@ -30,14 +30,14 @@ class PostcardWorkflow:
             from .steps.concept_generator import ConceptGenerator
             from .steps.content_generator import ContentGenerator
             from .steps.image_generator import ImageGenerator
-            from .steps.frontend_coder import FrontendCoder
+            from .steps.structured_content_generator import StructuredContentGenerator
             
-            # 初始化工作流步骤
+            # 初始化工作流步骤（移除Claude Code SDK，使用结构化内容生成）
             self.steps = [
-                ConceptGenerator(),    # 第1步：概念生成
-                ContentGenerator(),    # 第2步：文案生成  
-                ImageGenerator(),      # 第3步：图片生成
-                FrontendCoder()        # 第4步：前端编码（复用现有能力）
+                ConceptGenerator(),           # 第1步：概念生成
+                ContentGenerator(),           # 第2步：文案生成  
+                ImageGenerator(),             # 第3步：图片生成
+                StructuredContentGenerator()  # 第4步：结构化内容生成（替代前端编码）
             ]
             
             # 依次执行各个步骤
@@ -120,8 +120,8 @@ class PostcardWorkflow:
             self.logger.info(f"📊 结果摘要: {list(results.keys())}")
 
             payload: Dict[str, Any] = {"status": "completed"}
-            # 允许的字段
-            for key in ["concept", "content", "image_url", "frontend_code", "preview_url"]:
+            # 允许的字段（包含结构化数据）
+            for key in ["concept", "content", "image_url", "frontend_code", "preview_url", "card_image_url", "card_html", "structured_data"]:
                 if key in results and results[key] is not None:
                     payload[key] = results[key]
 

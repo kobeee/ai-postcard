@@ -62,6 +62,10 @@ async def update_postcard_status(
                 "image_url": body.image_url,
                 "frontend_code": body.frontend_code,
                 "preview_url": body.preview_url,
+                "card_image_url": getattr(body, 'card_image_url', None),
+                "card_html": getattr(body, 'card_html', None),
+                # 修复：结构化数据字段未透传导致DB为空
+                "structured_data": getattr(body, 'structured_data', None),
             }.items() if v is not None
         }
         success = await service.update_task_status(task_id, body.status, body.error_message, extra_fields)

@@ -30,9 +30,19 @@ class Postcard(Base):
     content = Column(Text, nullable=True)
     image_url = Column(String(500), nullable=True)
     
-    # 最终结果
-    frontend_code = Column(Text, nullable=True)
+    # 最终结果 - 小程序组件代码（JSON格式）
+    frontend_code = Column(Text, nullable=True)  # 存储 {"wxml": "...", "wxss": "...", "js": "..."}
     preview_url = Column(String(500), nullable=True)
+    # HTML转图片相关
+    card_image_url = Column(String(500), nullable=True)  # 转换后的卡片图片URL
+    card_html = Column(Text, nullable=True)  # 保存HTML源码（便于日后修复/重渲染）
+    
+    # 新的结构化数据字段
+    structured_data = Column(JSON, nullable=True)  # 存储结构化的卡片数据
+    
+    # 小程序组件信息
+    component_type = Column(String(100), nullable=True, default="postcard")  # 组件类型
+    has_animation = Column(String(10), nullable=True)  # 是否包含动画：true/false
     
     # 生成参数
     generation_params = Column(JSON, nullable=True)
@@ -41,9 +51,6 @@ class Postcard(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     completed_at = Column(DateTime(timezone=True), nullable=True)
-    
-    # 生成耗时（秒）
-    generation_time = Column(Integer, nullable=True)
     
     # 错误信息
     error_message = Column(Text, nullable=True)

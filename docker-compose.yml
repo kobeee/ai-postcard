@@ -41,6 +41,8 @@ services:
     container_name: ai-postcard-ai-agent-service
     ports:
       - "8080:8000"
+    environment:
+      - AI_AGENT_PUBLIC_URL=${AI_AGENT_PUBLIC_URL}
     profiles:
       - agent
       - all

@@ -2,6 +2,7 @@
 const { postcardAPI, authAPI, envAPI } = require('../../utils/request.js');
 const authUtil = require('../../utils/auth.js');
 const { startPolling, POLLING_CONFIGS } = require('../../utils/task-polling.js');
+const { parseCardData } = require('../../utils/data-parser.js');
 const envConfig = require('../../config/env.js');
 
 Page({
@@ -37,11 +38,16 @@ Page({
     currentStep: 0,
     
     // 用户历史卡片
-    userCards: []
+    userCards: [],
+    // 调试浮层受控开关（默认关闭）
+    envDebug: false,
+    showDebug: false
   },
 
   onLoad(options) {
     envConfig.log('情绪罗盘启动', options);
+    // 初始化调试标志（仅开发环境可开启）
+    this.setData({ envDebug: !!envConfig.debug, showDebug: false });
     
     // 处理分享进入
     this.handleShareOptions(options);
@@ -161,7 +167,7 @@ Page({
 
     let greeting;
     if (hour < 6) {
-      greeting = '夜深了，还在思考吗？';
+      greeting = '夜深了，记录今天的心情。';
     } else if (hour < 12) {
       greeting = '早安，新的一天开始了';
     } else if (hour < 18) {
@@ -409,29 +415,218 @@ Page({
   },
 
   /**
-   * 格式化卡片数据
+   * 格式化卡片数据 - 使用统一的数据解析逻辑
    */
   formatCardData(cardData) {
-    return {
-      id: cardData.id,
-      date: new Date().toLocaleDateString('zh-CN'),
-      keyword: cardData.concept || '今日心境',
-      quote: cardData.content || '每一天都值得被温柔记录',
-      english: 'Every day deserves to be gently remembered',
-      music: {
-        title: '推荐音乐',
-        url: ''
+    try {
+      envConfig.log('开始格式化卡片数据:', cardData);
+      
+      // 确保cardData是对象而不是字符串
+      if (typeof cardData === 'string') {
+        try {
+          cardData = JSON.parse(cardData);
+        } catch (parseError) {
+          envConfig.error('cardData是无效的JSON字符串:', parseError);
+          return this.getDefaultCardData();
+        }
+      }
+      
+      if (!cardData || typeof cardData !== 'object') {
+        envConfig.error('cardData格式无效:', cardData);
+        return this.getDefaultCardData();
+      }
+      
+      // 🔧 使用统一的数据解析逻辑
+      const parseResult = parseCardData(cardData);
+      const structuredData = parseResult.structuredData;
+      
+      // 初始化基础数据，从解析结果中提取
+      let mainText = '每一天都值得被温柔记录';
+      let englishQuote = 'Every day deserves to be gently remembered';
+      let keyword = '今日心境';
+      let recommendations = {};
+      
+      // 如果有结构化数据，使用结构化数据
+      if (structuredData) {
+        // 提取主要内容
+        if (structuredData.content) {
+          if (structuredData.content.main_text) {
+            mainText = structuredData.content.main_text;
+          }
+          // 提取英文引用
+          if (structuredData.content.quote && structuredData.content.quote.text) {
+            englishQuote = structuredData.content.quote.text;
+          }
+        }
+        
+        // 提取标题
+        if (structuredData.title) {
+          keyword = structuredData.title;
+        }
+        
+        // 提取推荐内容
+        if (structuredData.recommendations) {
+          recommendations = structuredData.recommendations;
+        }
+        
+        // 更新原始数据
+        cardData.structured_data = structuredData;
+      } else {
+        // 降级处理：从原始字段提取
+        if (cardData.content && typeof cardData.content === 'string') {
+          mainText = cardData.content;
+        }
+        if (cardData.concept && typeof cardData.concept === 'string') {
+          keyword = cardData.concept;
+        }
+      }
+      
+      // 构建最终数据 - 只包含模板实际使用的字段，提升性能
+      const result = {
+        id: cardData.id || Date.now().toString(),
+        date: new Date().toLocaleDateString('zh-CN', {
+          month: 'long',
+          day: 'numeric',  
+          weekday: 'long'
+        }),
+        keyword: keyword,
+        quote: mainText,
+        english: englishQuote,
+        // 只保留模板中实际使用的图片字段
+        image: cardData.card_image_url || cardData.image_url || '',
+        // 结构化数据用于组件判断
+        structured_data: cardData.structured_data || null,
+        // 预处理推荐内容显示状态
+        hasRecommendations: !!(
+          (recommendations.music && recommendations.music.length > 0) ||
+          (recommendations.book && recommendations.book.length > 0) ||
+          (recommendations.movie && recommendations.movie.length > 0)
+        ),
+        // 动态布局/动效：从结构化里读取提示或根据情绪强度推断
+        layout_mode: (cardData.structured_data && cardData.structured_data.visual && cardData.structured_data.visual.style_hints && (
+          cardData.structured_data.visual.style_hints.layout_style === 'minimal' ? 'layout-compact' : (
+          cardData.structured_data.visual.style_hints.layout_style === 'rich' ? 'layout-rich' : 'layout-standard'
+        ))) || 'layout-standard',
+        motion: (cardData.structured_data && cardData.structured_data.visual && cardData.structured_data.visual.style_hints && cardData.structured_data.visual.style_hints.animation_type) || 'float',
+        
+        // 推荐内容 - 只在有数据时创建对象，减少内存占用
+        music: recommendations.music ? {
+          title: recommendations.music.title || '轻松愉快的音乐',
+          artist: recommendations.music.artist || '推荐歌手'
+        } : null,
+        book: recommendations.book ? {
+          title: recommendations.book.title || '温暖的书籍', 
+          author: recommendations.book.author || '推荐作者'
+        } : null,
+        movie: recommendations.movie ? {
+          title: recommendations.movie.title || '治愈系电影',
+          director: recommendations.movie.director || '推荐导演'
+        } : null
+      };
+      
+      envConfig.log('格式化完成的卡片数据:', result);
+      return result;
+      
+    } catch (error) {
+      envConfig.error('格式化卡片数据时发生错误:', error);
+      return this.getDefaultCardData();
+    }
+  },
+
+  /**
+   * 从混合文本中提取 JSON 对象（支持 ```json 包裹或带前后缀的情况）
+   */
+  extractJsonFromText(text) {
+    if (!text || typeof text !== 'string') return null;
+    try {
+      // 1) 优先解析 ```json ... ``` 代码块
+      const block = text.match(/```json\s*([\s\S]*?)\s*```/i);
+      if (block && block[1]) {
+        return JSON.parse(block[1]);
+      }
+
+      // 2) 退化：在整段文本中寻找首个完整的花括号JSON对象
+      const cleaned = text.replace(/```/g, '');
+      const firstBrace = cleaned.indexOf('{');
+      if (firstBrace !== -1) {
+        // 使用栈匹配，找到与首个 { 对应的 }
+        let depth = 0;
+        for (let i = firstBrace; i < cleaned.length; i++) {
+          const ch = cleaned[i];
+          if (ch === '{') depth++;
+          else if (ch === '}') {
+            depth--;
+            if (depth === 0) {
+              const jsonStr = cleaned.substring(firstBrace, i + 1);
+              return JSON.parse(jsonStr);
+            }
+          }
+        }
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  },
+
+  /**
+   * 将解析出的对象映射为组件可用的结构化数据
+   */
+  buildStructuredFromParsed(parsed) {
+    if (!parsed || typeof parsed !== 'object') return null;
+    const title = parsed['主标题'] || parsed['标题'] || parsed.title || '今日心境';
+    const subtitle = parsed['副标题'] || parsed.subtitle || '';
+    const main = parsed['正文内容'] || parsed['正文'] || parsed.content || '';
+    const english = parsed['英文'] || parsed['英文引用'] || parsed.english || '';
+
+    const structured = {
+      title,
+      content: {
+        main_text: main,
+        subtitle: subtitle || undefined,
+        quote: english ? { text: english } : undefined
       },
-      movie: '推荐电影',
-      book: '推荐书籍',
-      inspirations: [
-        { icon: '🌍', text: `因为今天是${this.data.weatherInfo}` },
-        { icon: '🎨', text: '你的情绪很独特' },
-        { icon: '✨', text: '基于当下的热点话题' },
-        { icon: '💫', text: '来自你的情绪墨迹' }
-      ]
+      visual: {
+        style_hints: {
+          color_scheme: ['#6366f1', '#8b5cf6'],
+          layout_style: 'artistic',
+          animation_type: 'float'
+        }
+      },
+      context: {
+        location: this.data.cityName || '当前位置',
+        weather: this.data.weatherInfo || ''
+      }
+    };
+    return structured;
+  },
+  
+  /**
+   * 获取默认卡片数据 - 性能优化版本
+   */
+  getDefaultCardData() {
+    return {
+      id: Date.now().toString(),
+      date: new Date().toLocaleDateString('zh-CN', {
+        month: 'long',
+        day: 'numeric',
+        weekday: 'long'
+      }),
+      keyword: '今日心境',
+      quote: '每一天都值得被温柔记录',
+      english: 'Every day deserves to be gently remembered',
+      image: '',
+      structured_data: null,
+      // 新增动态布局与动效配置（默认）
+      layout_mode: 'layout-standard', // layout-standard | layout-compact | layout-rich
+      motion: 'float', // float | pulse | gradient
+      // 默认推荐内容设为null，减少不必要的对象创建
+      music: null,
+      book: null,
+      movie: null
     };
   },
+
 
   /**
    * 用户登录 - 必须在用户点击事件中直接调用
@@ -517,13 +712,10 @@ Page({
    * 情绪墨迹 - 开始绘制
    */
   onInkStart(e) {
-    console.log('Canvas touch start', e);
-    
     // 防止事件穿透
     e.preventDefault && e.preventDefault();
     
     if (!e.touches || e.touches.length === 0) {
-      console.error('No touch data available');
       return;
     }
     
@@ -607,8 +799,6 @@ Page({
    * 情绪墨迹 - 结束绘制
    */
   onInkEnd(e) {
-    console.log('Canvas touch end', e);
-    
     if (this.data.isDrawing && this.ctx) {
       // 完成最后的绘制
       this.ctx.stroke();
@@ -842,11 +1032,15 @@ Page({
       // 任务完成，清理任务ID
       this.currentTaskId = null;
 
-      // 生成成功
+      // 生成成功 - 添加详细的调试信息
+      envConfig.log('任务完成，原始结果:', finalResult);
+      const formattedCard = this.formatCardData(finalResult);
+      envConfig.log('格式化后的卡片数据:', formattedCard);
+      
       this.setData({
         isGenerating: false,
         needEmotionInput: false,
-        todayCard: this.formatCardData(finalResult)
+        todayCard: formattedCard
       });
 
       // 清空画布
@@ -1143,5 +1337,115 @@ ${trendingTopics ? `• 当地热点：${trendingTopics}` : ''}
       city: this.data.cityName || '未知',
       weather: this.data.weatherInfo || '未知'
     };
+  },
+
+  // ==================== 结构化卡片事件处理 ====================
+
+  /**
+   * 结构化卡片点击事件
+   */
+  onStructuredCardTap(e) {
+    const { structuredData } = e.detail;
+    envConfig.log('结构化卡片被点击:', structuredData);
+    
+    // 可以在这里添加卡片点击的交互逻辑
+    // 比如展示详细信息、播放动画等
+  },
+
+  /**
+   * 推荐内容点击事件
+   */
+  onRecommendationTap(e) {
+    const { type, item } = e.detail;
+    envConfig.log('推荐内容被点击:', type, item);
+    
+    // 根据推荐类型执行不同操作
+    switch (type) {
+      case 'music':
+        this.handleMusicRecommendation(item);
+        break;
+      case 'book':
+        this.handleBookRecommendation(item);
+        break;
+      case 'movie':
+        this.handleMovieRecommendation(item);
+        break;
+    }
+  },
+
+  /**
+   * 结构化卡片分享事件
+   */
+  onStructuredCardShare(e) {
+    const { structuredData } = e.detail;
+    envConfig.log('分享结构化卡片:', structuredData);
+    
+    // 触发小程序分享
+    wx.showShareMenu({
+      withShareTicket: true
+    });
+  },
+
+  /**
+   * 处理音乐推荐
+   */
+  handleMusicRecommendation(musicItem) {
+    wx.showModal({
+      title: `🎵 ${musicItem.title}`,
+      content: `演唱者：${musicItem.artist}\n\n推荐理由：${musicItem.reason}`,
+      confirmText: '搜索音乐',
+      cancelText: '关闭',
+      success: (res) => {
+        if (res.confirm) {
+          // 这里可以集成音乐搜索功能
+          wx.showToast({
+            title: '音乐搜索功能开发中',
+            icon: 'none'
+          });
+        }
+      }
+    });
+  },
+
+  /**
+   * 处理书籍推荐
+   */
+  handleBookRecommendation(bookItem) {
+    wx.showModal({
+      title: `📚 ${bookItem.title}`,
+      content: `作者：${bookItem.author}\n\n推荐理由：${bookItem.reason}`,
+      confirmText: '了解更多',
+      cancelText: '关闭',
+      success: (res) => {
+        if (res.confirm) {
+          // 这里可以集成图书搜索功能
+          wx.showToast({
+            title: '图书搜索功能开发中',
+            icon: 'none'
+          });
+        }
+      }
+    });
+  },
+
+  /**
+   * 处理电影推荐
+   */
+  handleMovieRecommendation(movieItem) {
+    wx.showModal({
+      title: `🎬 ${movieItem.title}`,
+      content: `导演：${movieItem.director}\n\n推荐理由：${movieItem.reason}`,
+      confirmText: '查看详情',
+      cancelText: '关闭',
+      success: (res) => {
+        if (res.confirm) {
+          // 这里可以集成电影信息查询功能
+          wx.showToast({
+            title: '电影信息功能开发中',
+            icon: 'none'
+          });
+        }
+      }
+    });
   }
 });

@@ -4,6 +4,9 @@ import os
 import time
 import traceback
 from typing import AsyncGenerator, Dict, Any
+import urllib.request
+import urllib.parse
+import mimetypes
 from .base import BaseCodeProvider
 from ..config import settings
 
@@ -39,9 +42,11 @@ class ClaudeCodeProvider(BaseCodeProvider):
         if base_url:
             logger.info(f"✅ 使用自定义Base URL: {base_url}")
 
-    async def generate(self, prompt: str, session_id: str, model: str | None = None) -> AsyncGenerator[Dict[str, Any], None]:
+    async def generate(self, prompt: str, session_id: str, model: str | None = None, image_url: str | None = None) -> AsyncGenerator[Dict[str, Any], None]:
         """
         生成代码 - 优化版本，基于Claude Code SDK最佳实践
+        
+        **重要修复**: 基于官方文档优化图片处理流程，避免超时和无响应问题
         """
         # 使用传入的model参数，如果没有则使用默认模型
         target_model = model or self.model
@@ -52,7 +57,8 @@ class ClaudeCodeProvider(BaseCodeProvider):
         try:
             yield {"type": "status", "content": "🚀 初始化AI代码生成器（优化模式）..."}
             logger.info(f"📤 开始优化代码生成任务 - 会话ID: {session_id}, 模型: {target_model}")
-            logger.info(f"🔧 启用优化特性: skip_permissions=True, max_turns=5")
+            if image_url:
+                logger.info(f"🖼️ 包含图片处理: {image_url[:50]}...")
 
             # 构建系统提示 - 非交互式模式
             system_prompt = self._build_system_prompt()
@@ -63,12 +69,14 @@ class ClaudeCodeProvider(BaseCodeProvider):
             generated_dir = "/app/app/static/generated"
             os.makedirs(generated_dir, exist_ok=True)  # 确保目录存在
             
+            # 【修复】添加超时处理和更合理的工具配置
             options = ClaudeCodeOptions(
                 system_prompt=system_prompt,
-                max_turns=5,  # 增加轮次以获得更好的结果
+                max_turns=3,  # 降低轮次以避免超时，图片处理复杂度较高
                 allowed_tools=["Write", "Read", "Edit"],  # 使用Write、Read、Edit工具用于文件生成
                 permission_mode="bypassPermissions",  # 允许所有工具而不提示，实现完全自动化
-                cwd=generated_dir  # 设置为AI生成文件专用目录
+                cwd=generated_dir,  # 设置为AI生成文件专用目录
+                max_thinking_tokens=4000  # 【修复】限制思考tokens，避免过度分析
             )
             
             logger.info("🔧 创建Claude SDK客户端...")
@@ -77,10 +85,21 @@ class ClaudeCodeProvider(BaseCodeProvider):
             async with ClaudeSDKClient(options=options) as client:
                 logger.info("✅ Claude SDK客户端初始化成功")
                 
+                # 【修复】优化图片处理：按照官方文档建议，直接在提示中引用图片
+                combined_prompt = self._build_optimized_prompt(prompt, image_url, generated_dir)
+                
                 # 发送查询
                 yield {"type": "status", "content": "🧠 分析需求并生成代码..."}
-                await client.query(prompt)
-                logger.info("📨 查询发送成功，开始接收响应...")
+                logger.info(f"📨 发送查询, 长度: {len(combined_prompt)} 字符")
+                
+                # 【修复】添加超时保护的异步任务
+                try:
+                    await asyncio.wait_for(client.query(combined_prompt), timeout=30.0)  # 30秒查询超时
+                    logger.info("📨 查询发送成功，开始接收响应...")
+                except asyncio.TimeoutError:
+                    logger.error("❌ 查询发送超时")
+                    yield {"type": "error", "content": "查询发送超时，请重试"}
+                    return
                 
                 # 收集生成的代码和分析内容
                 generated_code_chunks = []
@@ -88,44 +107,66 @@ class ClaudeCodeProvider(BaseCodeProvider):
                 
                 # 流式接收响应
                 current_stream_buffer = ""  # 用于累积流式内容
+                response_start_time = time.time()  # 响应处理开始时间
                 
-                async for message in client.receive_response():
-                    logger.debug(f"📨 收到消息: {type(message).__name__}")
-                    
-                    # 🔍 DEBUG模式 - 详细消息分析（仅在需要时启用）
-                    debug_mode = logger.isEnabledFor(logging.DEBUG)
-                    if debug_mode:
-                        logger.info(f"🔍 DEBUG - 消息类型: {type(message).__name__}")
-                        logger.info(f"🔍 DEBUG - 消息属性: {[attr for attr in dir(message) if not attr.startswith('_')]}")
-                        if hasattr(message, 'content'):
-                            logger.info(f"🔍 DEBUG - 消息内容: {getattr(message, '__dict__', 'No dict available')}")
-                    
-                    # 处理消息内容
-                    if hasattr(message, 'content') and message.content:
-                        for i, block in enumerate(message.content):
-                            if hasattr(block, 'text') and block.text:
-                                text = block.text
-                                current_stream_buffer += text
-                                
-                                # 实时流式输出文本内容
-                                if self._contains_code(text):
-                                    generated_code_chunks.append(text)
-                                    logger.info(f"✅ 流式代码块: {text[:100]}...")
+                # 【修复】添加响应超时处理和更详细的调试信息
+                response_count = 0
+                last_activity_time = time.time()
+                
+                try:
+                    # 【修复】响应循环处理
+                    async for message in client.receive_response():
+                        response_count += 1
+                        current_time = time.time()
+                        last_activity_time = current_time
+                        
+                        logger.info(f"📨 收到响应 #{response_count}: {type(message).__name__} (耗时: {current_time - response_start_time:.1f}s)")
+                        
+                        # 【修复】增强的DEBUG模式和超时检测
+                        if current_time - response_start_time > 300:  # 5分钟超时检测
+                            logger.error("❌ 响应处理超时，主动终止")
+                            yield {"type": "error", "content": "响应处理超时，请重试"}
+                            return
+                        
+                        # 🔍 DEBUG模式 - 详细消息分析
+                        debug_mode = logger.isEnabledFor(logging.DEBUG)
+                        if debug_mode or response_count <= 3:  # 前3个消息总是记录详细信息
+                            logger.info(f"🔍 消息详情 #{response_count}:")
+                            logger.info(f"   - 类型: {type(message).__name__}")
+                            logger.info(f"   - 属性: {[attr for attr in dir(message) if not attr.startswith('_')]}")
+                            if hasattr(message, 'content') and message.content:
+                                logger.info(f"   - 内容块数量: {len(message.content)}")
+                                for j, block in enumerate(message.content):
+                                    logger.info(f"   - 块 {j}: {type(block).__name__}")
+                                    if hasattr(block, 'text') and block.text:
+                                        logger.info(f"   - 文本长度: {len(block.text)}")
+                        
+                        # 处理消息内容
+                        if hasattr(message, 'content') and message.content:
+                            for i, block in enumerate(message.content):
+                                if hasattr(block, 'text') and block.text:
+                                    text = block.text
+                                    current_stream_buffer += text
                                     
-                                    # 尝试实时提取和更新文件
-                                    partial_files = self._extract_files_info([current_stream_buffer])
-                                    
-                                    yield {
-                                        "type": "code_stream", 
-                                        "content": text, 
-                                        "phase": "coding",
-                                        "partial_files": partial_files,
-                                        "buffer_length": len(current_stream_buffer)
-                                    }
-                                else:
-                                    markdown_content.append(text)
-                                    logger.info(f"📝 流式markdown: {text[:100]}...")
-                                    yield {"type": "markdown_stream", "content": text, "phase": "thinking"}
+                                    # 实时流式输出文本内容
+                                    if self._contains_code(text):
+                                        generated_code_chunks.append(text)
+                                        logger.info(f"✅ 代码块 #{len(generated_code_chunks)}: {text[:100]}...")
+                                        
+                                        # 尝试实时提取和更新文件
+                                        partial_files = self._extract_files_info([current_stream_buffer])
+                                        
+                                        yield {
+                                            "type": "code_stream", 
+                                            "content": text, 
+                                            "phase": "coding",
+                                            "partial_files": partial_files,
+                                            "buffer_length": len(current_stream_buffer)
+                                        }
+                                    else:
+                                        markdown_content.append(text)
+                                        logger.info(f"📝 文本块 #{len(markdown_content)}: {text[:100]}...")
+                                        yield {"type": "markdown_stream", "content": text, "phase": "thinking"}
                     
                     # 处理工具调用和工具结果 - 提取文件名信息
                     if hasattr(message, 'content') and message.content:
@@ -178,12 +219,18 @@ class ClaudeCodeProvider(BaseCodeProvider):
                                         # 读取文件内容并确保复制到预期路径
                                         try:
                                             if os.path.exists(full_file_path):
-                                                with open(full_file_path, 'r', encoding='utf-8') as f:
-                                                    file_content = f.read()
+                                                # 仅对文本类型按utf-8读取，二进制文件跳过内容读取
+                                                is_text = any(full_file_path.lower().endswith(ext) for ext in ['.html', '.css', '.js', '.json', '.txt', '.md', '.wxml', '.wxss'])
+                                                if is_text:
+                                                    with open(full_file_path, 'r', encoding='utf-8') as f:
+                                                        file_content = f.read()
+                                                else:
+                                                    file_content = None
                                                     logger.info(f"📄 成功读取文件内容: {file_name} ({len(file_content)} 字符)")
                                                     
                                                     # 🔧 强制确保文件在预期路径下存在
-                                                    self._ensure_file_in_target_path(file_name, file_content, generated_dir)
+                                                    if file_content is not None:
+                                                        self._ensure_file_in_target_path(file_name, file_content, generated_dir)
                                                     
                                                     yield {
                                                         "type": "file_created",
@@ -282,6 +329,16 @@ class ClaudeCodeProvider(BaseCodeProvider):
                         logger.info(f"🎉 优化代码生成完成 - 耗时: {total_generation_time:.2f}s, 文件: {len(extracted_files)}, 代码: {len(final_code)} 字符")
                         return
                         
+                except asyncio.TimeoutError:
+                    logger.error("❌ 响应接收超时")
+                    yield {"type": "error", "content": "响应接收超时，请重试"}
+                    return
+                except Exception as resp_e:
+                    logger.error(f"❌ 响应处理异常: {str(resp_e)}")
+                    logger.error(f"📋 响应异常详情: {traceback.format_exc()}")
+                    yield {"type": "error", "content": f"响应处理失败: {str(resp_e)}"}
+                    return
+                        
         except asyncio.CancelledError:
             # 任务已完成或上层取消，视为正常结束，避免进程异常退出
             logger.warning("⚠️ 生成过程被取消（CancelledError），已安全忽略")
@@ -303,52 +360,124 @@ class ClaudeCodeProvider(BaseCodeProvider):
             logger.error(f"📋 异常详情: {traceback.format_exc()}")
             yield {"type": "error", "content": f"代码生成失败: {str(e)}"}
     
+    def _build_optimized_prompt(self, prompt: str, image_url: str | None = None, generated_dir: str = None) -> str:
+        """
+        构建优化的提示，基于官方Claude Code SDK最佳实践处理图片
+        
+        **关键修复**: 不下载图片，直接在提示中引用图片URL，让Claude自动处理
+        """
+        # 基础提示构建
+        base_prompt = f"{prompt}\n\n"
+        
+        # 添加运行时约束
+        runtime_constraints = (
+            "[Runtime Constraints]\n"
+            "- 本项目运行于微信小程序的 webview 中，要求移动端优先与完全自适应\n"
+            "- 所有产物须为纯 HTML/CSS/JS，不依赖外部框架\n"
+            "- 动画和交互需在移动端流畅，注意性能与可用性\n"
+        )
+        
+        # 【修复】图片处理：按照官方文档，直接引用图片，让Claude自动使用Read工具
+        if image_url:
+            # 下载图片到本地作为参考（为了稳定性）
+            image_filename = None
+            if generated_dir:
+                try:
+                    image_filename = self._download_image(image_url, generated_dir)
+                    if image_filename:
+                        logger.info(f"🖼️ 图片已下载供参考: {image_filename}")
+                except Exception as e:
+                    logger.warning(f"⚠️ 图片下载失败: {str(e)}")
+            
+            # 【关键修复】简化图片引用，让Claude自动处理
+            if image_filename:
+                image_reference = (
+                    f"\n[Visual Reference]\n"
+                    f"参考图片: {image_filename}\n"
+                    f"请分析图片的配色方案、布局风格和视觉元素，创建风格一致的交互页面。\n"
+                )
+            else:
+                # 如果下载失败，直接引用URL
+                image_reference = (
+                    f"\n[Visual Reference]\n" 
+                    f"参考图片: {image_url}\n"
+                    f"请分析图片的配色方案、布局风格和视觉元素，创建风格一致的交互页面。\n"
+                )
+        else:
+            image_reference = ""
+        
+        # 组合最终提示
+        combined_prompt = base_prompt + runtime_constraints + image_reference
+        
+        logger.info(f"📝 构建优化提示完成, 总长度: {len(combined_prompt)} 字符")
+        if image_url:
+            logger.info(f"🖼️ 包含图片引用: {'本地文件' if image_filename else 'URL引用'}")
+            
+        return combined_prompt
+
     def _build_system_prompt(self) -> str:
-        """构建优化的系统提示 - 基于Claude Code最佳实践"""
+        """构建系统提示 - 生成移动端优先的HTML/CSS/JS单页明信片"""
         return """
-You are an expert frontend code generator specializing in creating interactive web applications. Your workspace is set to /app/static/generated.
+You are an expert mobile web UI developer. Your task is to generate a beautiful, animated postcard as a single mobile-friendly web page.
 
-# Your Mission
-Create complete, functional, interactive web applications that users can immediately run and enjoy. Focus on building working software, not just code examples.
+# Requirements
+- Generate production-ready HTML/CSS/JS for a postcard card sized 375x600px (mobile portrait)
+- Prefer a single HTML file with inline CSS. If you split files, use exactly: index.html, style.css, script.js
+- No external frameworks or CDNs. Pure HTML5/CSS3/vanilla JS only
+- Smooth animations and delightful micro-interactions suitable for mobile
+- Embed provided background image URL elegantly with overlays for text readability
 
-# Core Workflow
-1. **Analyze the requirements** thoroughly to understand all needed features
-2. **Design the application architecture** ensuring all components work together
-3. **Generate working files** using the Write tool for each file (critical step)
-4. **Create polished, production-ready code** that users will love
+# File rules
+- Use the Write tool to create files in the working directory
+- Allowed filenames: index.html, style.css, script.js (no subdirectories)
+- Keep CSS concise; inline CSS inside index.html is preferred
 
-# File Creation Rules
-- **Always use Write tool** to create actual files - this is mandatory
-- **Use simple filenames only**: index.html, style.css, script.js
-- **Never use paths**: avoid /tmp/, ./files/, or /app/static/generated/ prefixes
-- **Create multiple files** when the project needs them
+# Mobile-first constraints
+- The card must be centered with fixed size 375x600 and max-width: 100vw
+- Use modern CSS (flex, transform, transition, keyframes)
+- Avoid heavy computations; ensure 60fps on mobile
 
-# Code Quality Standards
-Your generated applications must be:
-- **Completely functional**: Every button, input, and feature works perfectly
-- **Fully interactive**: All user actions produce appropriate responses  
-- **Visually polished**: Modern, attractive CSS styling
-- **Well-structured**: Clean, organized, maintainable code
-- **Error-resistant**: Proper input validation and error handling
+# Output
+- Create index.html with a complete <!DOCTYPE html> document including meta viewport
+- Optionally create style.css and script.js; link them properly if created
+        """
 
-# Technical Requirements
-- Generate complete HTML documents with proper structure
-- Use modern CSS for styling (flexbox, grid, animations where appropriate)
-- Write complete JavaScript with all functions implemented
-- Ensure all event listeners are properly bound
-- Include responsive design considerations
-- Add helpful comments for complex logic
+    def _download_image(self, image_url: str, target_dir: str) -> str | None:
+        """下载图片到目标目录，返回文件名；失败返回None"""
+        try:
+            os.makedirs(target_dir, exist_ok=True)
 
-# Application Types
-For any type of application (games, tools, forms, etc.):
-- Implement ALL required logic completely
-- Test critical user interaction paths mentally
-- Ensure the user experience is smooth and intuitive
-- Make it something users will actually want to use
+            parsed = urllib.parse.urlparse(image_url)
+            url_path = parsed.path or ""
+            # 从URL推断扩展名
+            ext = os.path.splitext(url_path)[1].lower()
 
-Remember: You're not just generating code - you're building working applications that should delight users. Focus on creating something genuinely useful and enjoyable.
+            req = urllib.request.Request(image_url, headers={"User-Agent": "ai-postcard-bot/1.0"})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = resp.read()
+                if not ext:
+                    content_type = resp.headers.get("Content-Type", "").lower()
+                    if "png" in content_type:
+                        ext = ".png"
+                    elif "jpeg" in content_type or "jpg" in content_type:
+                        ext = ".jpg"
+                    elif "webp" in content_type:
+                        ext = ".webp"
+                    elif "gif" in content_type:
+                        ext = ".gif"
+                    else:
+                        # 兜底
+                        guessed = mimetypes.guess_extension(content_type.split(";")[0]) if content_type else None
+                        ext = guessed or ".jpg"
 
-Start generating the application files now using the Write tool."""
+            filename = f"postcard_image{ext}"
+            file_path = os.path.join(target_dir, filename)
+            with open(file_path, "wb") as f:
+                f.write(data)
+            return filename
+        except Exception as e:
+            logger.warning(f"下载图片失败: {image_url} - {str(e)}")
+            return None
 
     def _contains_code(self, text: str) -> bool:
         """判断文本是否包含代码块"""
@@ -359,16 +488,29 @@ Start generating the application files now using the Write tool."""
         code_indicators = [
             # 代码块标记
             '```',
+            # 微信小程序WXML标签
+            '<view', '<text', '<image', '<button', '<input', '<form', 
+            '<scroll-view', '<swiper', '<picker', '<switch', '<slider',
+            # 微信小程序指令
+            'wx:for', 'wx:if', 'wx:key', 'wx:elif', 'wx:else',
+            'bindtap', 'bindinput', 'bindchange', 'catchtap',
+            # 微信小程序数据绑定
+            '{{', '}}',
             # HTML相关
             '<!DOCTYPE', '<html', '<body', '<div', '<script', '<style',
-            '<button', '<input', '<form', '<canvas', '<svg',
+            '<canvas', '<svg',
             # JavaScript相关
             'function ', 'const ', 'let ', 'var ', '=>',
             'document.', 'window.', 'addEventListener',
             'console.log', 'querySelector',
+            # 微信小程序JavaScript
+            'Component({', 'this.setData', 'this.data', 'wx.', 
+            'properties:', 'methods:', 'lifetimes:', 'attached():', 'ready():',
             # CSS相关
             'background:', 'color:', 'font-size:', 'margin:', 'padding:',
             'display:', 'position:', 'width:', 'height:',
+            # 微信小程序WXSS
+            'rpx', 'view {', '.container {', '.page {',
             # 其他代码特征
             '{', '}', ';', '//', '/*', '*/',
         ]
@@ -382,7 +524,7 @@ Start generating the application files now using the Write tool."""
         return matches >= 3  # 至少包含3个代码特征才认为是代码
 
     def _extract_files_info(self, code_chunks: list) -> dict:
-        """改进的文件提取逻辑，支持更好的代码质量和准确提取"""
+        """改进的文件提取逻辑，专门处理微信小程序组件代码"""
         if not code_chunks:
             return {}
         
@@ -390,12 +532,14 @@ Start generating the application files now using the Write tool."""
         full_content = '\n'.join(code_chunks)
         extracted_files = {}
         
-        # 🔍 增强的文件模式匹配
+        # 🔍 微信小程序文件模式匹配
         file_patterns = [
-            # 标准文件名格式
+            # 标准文件名格式，支持小程序文件扩展名
+            r'```([\w\-_.]+\.(?:wxml|wxss|js|json))\s*\n(.*?)```',
+            # 兼容HTML/CSS格式，转换为小程序格式
             r'```([\w\-_.]+\.(?:html|css|js|json|md|txt))\s*\n(.*?)```',
-            # 带语言标识但在注释中含文件名
-            r'```(\w+)\s*\n(?:\/\*.*?([\w\-_.]+\.(?:html|css|js)).*?\*\/\s*)?(.*?)```',
+            # 带语言标识
+            r'```(\w+)\s*\n(?:\/\*.*?([\w\-_.]+\.(?:wxml|wxss|js)).*?\*\/\s*)?(.*?)```',
             # Write工具调用模式
             r'file_path["\']:\s*["\']([^"\']+)["\'].*?content["\']:\s*["\']([^"\']+)["\']',
         ]
@@ -409,23 +553,20 @@ Start generating the application files now using the Write tool."""
                     elif len(match) == 3:  # 带语言标识 (lang, filename, content)
                         lang, filename, content = match
                         if not filename:  # 如果没有文件名，根据语言推断
-                            filename = self._get_default_filename(lang)
+                            filename = self._get_default_miniprogram_filename(lang)
                     else:
                         continue
                     
                     if filename and content and content.strip():
                         # 🧹 深度清理代码内容
-                        clean_content = self._deep_clean_code(content, filename)
+                        clean_content = self._deep_clean_miniprogram_code(content, filename)
                         if clean_content:
                             extracted_files[filename] = clean_content
-                            logger.info(f"✅ 提取高质量文件: {filename} ({len(clean_content)} 字符)")
+                            logger.info(f"✅ 提取小程序文件: {filename} ({len(clean_content)} 字符)")
         
         # 🎯 智能默认文件检测
         if not extracted_files:
-            extracted_files = self._extract_by_content_analysis(full_content)
-        
-        # 🔧 文件关联和依赖处理
-        extracted_files = self._resolve_file_dependencies(extracted_files)
+            extracted_files = self._extract_miniprogram_by_content_analysis(full_content)
         
         return extracted_files
     
@@ -593,148 +734,43 @@ Start generating the application files now using the Write tool."""
         return files
 
     def _extract_and_clean_code(self, code_chunks: list) -> str:
-        """提取和清理代码，自动去除代码块标记"""
-        logger.info(f"📝 处理 {len(code_chunks)} 个代码块")
+        """提取并返回最终HTML字符串（优先index.html）"""
+        logger.info(f"📝 处理 {len(code_chunks)} 个代码块（HTML模式）")
         if not code_chunks:
-            logger.warning("⚠️ 没有代码块，返回默认HTML")
-            return "<html><head><title>生成失败</title></head><body><h1>未能生成有效代码</h1></body></html>"
-        import re
-        # 合并所有代码块
+            logger.warning("⚠️ 没有代码块，返回默认HTML页面")
+            return "<!DOCTYPE html>\n<html><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><title>AI明信片</title></head><body><div style=\"width:375px;height:600px;margin:20px auto;background:#fafafa;border-radius:20px;display:flex;align-items:center;justify-content:center;box-shadow:0 10px 30px rgba(0,0,0,.1)\">生成中...</div></body></html>"
+
         full_content = '\n'.join(code_chunks)
         logger.info(f"📝 合并后内容长度: {len(full_content)} 字符")
         
-        # 检查是否包含HTML结构，但需要精确提取
-        if '<!DOCTYPE' in full_content or '<html' in full_content:
-            logger.info("✅ 发现完整HTML结构，开始提取")
-            html_start = full_content.find('<!DOCTYPE')
-            if html_start == -1:
-                html_start = full_content.find('<html')
-            if html_start != -1:
-                clean_html = full_content[html_start:].strip()
-                # 移除markdown代码块标记
-                clean_html = re.sub(r'^```[\w\-_.]*\n?', '', clean_html)
-                clean_html = re.sub(r'```$', '', clean_html)
-                logger.info(f"✅ HTML提取完成，长度: {len(clean_html)} 字符")
-                return clean_html
-        
-        # 否则尝试提取代码块
+        # 先用通用HTML提取
+        extracted_files = self._extract_by_content_analysis(full_content)
+
+        # 再合并扫描到的生成目录文件（如有）
+        generated_dir = "/app/app/static/generated"
+        actual_files = self._scan_generated_files(generated_dir)
+        for filename, content in actual_files.items():
+            if filename not in extracted_files:
+                extracted_files[filename] = content
+
+        # 解析依赖，确保index.html正确引用
+        if extracted_files:
+            files_resolved = self._resolve_file_dependencies(extracted_files)
+            if 'index.html' in files_resolved:
+                html = files_resolved['index.html']
+                logger.info("✅ 返回提取到的 index.html 内容")
+                return html
+
+        # 兜底：在流里直接找<html>…</html>片段
         import re
-        
-        logger.info("📝 尝试从代码块中提取HTML/CSS/JS...")
-        
-        # 更强大的代码块提取逻辑
-        html_matches = []
-        css_matches = []
-        js_matches = []
-        extracted_files = {}  # 存储文件名和内容的映射
-        
-        # 通用代码块模式 - 支持各种格式
-        code_block_patterns = [
-            # 标准格式: ```language\ncode```
-            r'```(\w+)\s*\n(.*?)```',
-            # 带文件名: ```filename.ext\ncode```
-            r'```([\w\-_.]+\.[\w]+)\s*\n(.*?)```',
-            # 文件名在第一行: ```\nfilename.ext\ncode```
-            r'```\s*\n([\w\-_.]+\.[\w]+)\s*\n(.*?)```',
-            # 简单代码块: ```\ncode```
-            r'```\s*\n(.*?)```'
-        ]
-        
-        for pattern in code_block_patterns:
-            matches = re.findall(pattern, full_content, re.DOTALL | re.IGNORECASE)
-            
-            for match in matches:
-                if isinstance(match, tuple) and len(match) == 2:
-                    first_part, content = match
-                    content = content.strip()
-                    
-                    if not content:  # 跳过空内容
-                        continue
-                    
-                    # 判断第一部分是语言还是文件名
-                    if '.' in first_part:  # 包含点号，可能是文件名
-                        filename = first_part
-                        logger.info(f"📁 发现文件: {filename}")
-                        extracted_files[filename] = content
-                        
-                        # 根据文件扩展名分类
-                        if filename.endswith('.html'):
-                            html_matches.append(content)
-                        elif filename.endswith('.css'):
-                            css_matches.append(content)
-                        elif filename.endswith('.js'):
-                            js_matches.append(content)
-                    else:  # 是语言标识符
-                        language = first_part.lower()
-                        if language in ['html', 'htm']:
-                            html_matches.append(content)
-                        elif language in ['css']:
-                            css_matches.append(content)
-                        elif language in ['javascript', 'js']:
-                            js_matches.append(content)
-                        else:
-                            # 未知语言，尝试根据内容判断
-                            if any(tag in content for tag in ['<html', '<body', '<div', '<!DOCTYPE']):
-                                html_matches.append(content)
-                            elif any(prop in content for prop in ['background:', 'color:', 'font-size:']):
-                                css_matches.append(content)
-                            elif any(keyword in content for keyword in ['function', 'const', 'let', 'document.']):
-                                js_matches.append(content)
-                elif isinstance(match, str):  # 简单代码块，没有语言标识
-                    content = match.strip()
-                    if content:
-                        # 根据内容特征判断类型
-                        if any(tag in content for tag in ['<html', '<body', '<div', '<!DOCTYPE']):
-                            html_matches.append(content)
-                        elif any(prop in content for prop in ['background:', 'color:', 'font-size:']):
-                            css_matches.append(content)
-                        elif any(keyword in content for keyword in ['function', 'const', 'let', 'document.']):
-                            js_matches.append(content)
-                        else:
-                            # 默认当作HTML处理
-                            html_matches.append(content)
-        
-        logger.info(f"📊 提取结果: HTML={len(html_matches)}, CSS={len(css_matches)}, JS={len(js_matches)}")
-        
-        # 组装完整的HTML文档
-        html_content = html_matches[0] if html_matches else ""
-        css_content = css_matches[0] if css_matches else ""
-        js_content = js_matches[0] if js_matches else ""
-        
-        if html_content:
-            # 如果HTML内容不完整，补充基本结构
-            if not html_content.strip().startswith('<!DOCTYPE'):
-                if '<style>' not in html_content and css_content:
-                    html_content = html_content.replace('<head>', f'<head>\n<style>\n{css_content}\n</style>')
-                if '<script>' not in html_content and js_content:
-                    html_content = html_content.replace('</body>', f'<script>\n{js_content}\n</script>\n</body>')
-            
-            return html_content
-        
-        # 如果没有明确的HTML结构，创建一个基本模板
-        if css_content or js_content:
-            return f"""<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI生成的应用</title>
-    <style>
-{css_content}
-    </style>
-</head>
-<body>
-    <div id="app">
-        <h1>AI生成的应用</h1>
-    </div>
-    <script>
-{js_content}
-    </script>
-</body>
-</html>"""
-        
-        # 兜底：返回原始内容
-        return full_content
+        match = re.search(r'(<!DOCTYPE[\s\S]*?</html>)', full_content, re.IGNORECASE)
+        if match:
+            logger.info("✅ 直接从流式内容中提取完整HTML")
+            return self._clean_html_content(match.group(1))
+
+        # 最后兜底：构造简单HTML骨架
+        logger.info("⚠️ 未找到明确的HTML，返回兜底页面")
+        return "<!DOCTYPE html>\n<html><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><title>AI明信片</title></head><body><div style=\"width:375px;height:600px;margin:20px auto;background:#fff;border-radius:20px;box-shadow:0 10px 30px rgba(0,0,0,.1);display:flex;align-items:center;justify-content:center;font-family:Arial,Helvetica,PingFang SC\">AI Postcard</div></body></html>"
 
     def _ensure_file_in_target_path(self, filename: str, content: str, target_dir: str):
         """
@@ -773,11 +809,135 @@ Start generating the application files now using the Write tool."""
             
         return False
 
+    def _get_default_miniprogram_filename(self, lang: str) -> str:
+        """根据语言获取默认的小程序文件名"""
+        lang_map = {
+            'wxml': 'postcard-component.wxml',
+            'wxss': 'postcard-component.wxss',
+            'javascript': 'postcard-component.js',
+            'js': 'postcard-component.js',
+            'html': 'postcard-component.wxml',  # 转换HTML为WXML
+            'css': 'postcard-component.wxss',   # 转换CSS为WXSS
+            'json': 'postcard-component.json'
+        }
+        return lang_map.get(lang.lower(), 'postcard-component.js')
+    
+    def _deep_clean_miniprogram_code(self, content: str, filename: str) -> str:
+        """深度清理小程序代码内容"""
+        import re
+        
+        # 基础清理
+        clean_content = content.strip()
+        
+        # 移除代码块标记
+        clean_content = re.sub(r'^```[\w\-_.]*\s*\n?', '', clean_content)
+        clean_content = re.sub(r'\n?```\s*$', '', clean_content)
+        
+        # 移除多余的注释和说明性文字
+        clean_content = re.sub(r'^//\s*文件名?[:：]\s*.*$', '', clean_content, flags=re.MULTILINE)
+        clean_content = re.sub(r'^<!--\s*文件名?[:：]\s*.*?-->', '', clean_content, flags=re.MULTILINE)
+        
+        # 根据文件类型进行特定清理
+        if filename.endswith('.wxml'):
+            clean_content = self._clean_wxml_content(clean_content)
+        elif filename.endswith('.wxss'):
+            clean_content = self._clean_wxss_content(clean_content)
+        elif filename.endswith('.js'):
+            clean_content = self._clean_miniprogram_js_content(clean_content)
+        
+        return clean_content.strip()
+    
+    def _clean_wxml_content(self, content: str) -> str:
+        """清理WXML内容"""
+        import re
+        
+        # 如果包含HTML标签，转换为小程序标签
+        content = re.sub(r'<div', '<view', content)
+        content = re.sub(r'</div>', '</view>', content)
+        content = re.sub(r'<span', '<text', content)
+        content = re.sub(r'</span>', '</text>', content)
+        content = re.sub(r'<p', '<text', content)
+        content = re.sub(r'</p>', '</text>', content)
+        content = re.sub(r'onclick=', 'bindtap=', content)
+        
+        # 确保有根节点
+        if not content.startswith('<view') and not content.startswith('<!--'):
+            content = f'<view class="postcard-container">\n{content}\n</view>'
+        
+        return content
+    
+    def _clean_wxss_content(self, content: str) -> str:
+        """清理WXSS内容"""
+        import re
+        
+        # 转换px单位为rpx（如果需要）
+        # 这里先保持原样，因为生成时已经使用了rpx
+        
+        # 格式化WXSS
+        content = re.sub(r'\s*{\s*', ' {\n  ', content)
+        content = re.sub(r';\s*', ';\n  ', content)
+        content = re.sub(r'\s*}\s*', '\n}\n\n', content)
+        
+        return content.strip()
+    
+    def _clean_miniprogram_js_content(self, content: str) -> str:
+        """清理小程序JavaScript内容"""
+        import re
+        
+        # 确保使用Component构造器
+        if not content.strip().startswith('Component('):
+            if 'Component(' not in content:
+                content = f"""Component({{
+  properties: {{}},
+  data: {{}},
+  methods: {{
+    {content}
+  }}
+}})"""
+        
+        return content
+    
+    def _extract_miniprogram_by_content_analysis(self, content: str) -> dict:
+        """基于内容分析提取小程序文件"""
+        import re
+        extracted_files = {}
+        
+        # WXML内容检测
+        wxml_patterns = [
+            r'```(?:wxml|html)?\s*\n(.*?)```',
+            r'(<view.*?</view>)',
+            r'(<text.*?</text>)'
+        ]
+        
+        for pattern in wxml_patterns:
+            match = re.search(pattern, content, re.DOTALL | re.IGNORECASE)
+            if match:
+                wxml_content = self._deep_clean_miniprogram_code(match.group(1), 'postcard-component.wxml')
+                if wxml_content:
+                    extracted_files['postcard-component.wxml'] = wxml_content
+                    break
+        
+        # WXSS内容检测
+        wxss_match = re.search(r'```(?:wxss|css)\s*\n(.*?)```', content, re.DOTALL)
+        if wxss_match:
+            wxss_content = self._deep_clean_miniprogram_code(wxss_match.group(1), 'postcard-component.wxss')
+            if wxss_content:
+                extracted_files['postcard-component.wxss'] = wxss_content
+        
+        # JavaScript内容检测
+        js_match = re.search(r'```(?:javascript|js)\s*\n(.*?)```', content, re.DOTALL)
+        if js_match:
+            js_content = self._deep_clean_miniprogram_code(js_match.group(1), 'postcard-component.js')
+            if js_content:
+                extracted_files['postcard-component.js'] = js_content
+        
+        return extracted_files
+
     def _build_coding_prompt(self, user_prompt: str) -> str:
         """构建编码提示"""
-        return f"""请根据以下需求生成前端代码：
+        return f"""请根据以下需求生成微信小程序明信片组件：
 
 {user_prompt}
 
-请直接生成完整可运行的HTML代码，包含必要的CSS和JavaScript。
+请生成完整的小程序组件代码，包含WXML模板、WXSS样式和JavaScript逻辑。
 """
