@@ -133,6 +133,17 @@ async def miniprogram_postcards_proxy(path: str, request: Request):
         request
     )
 
+# 小程序用户配额服务路由
+@app.api_route("/api/v1/miniprogram/users/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+async def miniprogram_users_proxy(path: str, request: Request):
+    """小程序用户配额服务代理"""
+    return await proxy_request(
+        SERVICES["postcard-service"],
+        request.method,
+        f"/api/v1/miniprogram/users/{path}",
+        request
+    )
+
 # 小程序AI生成服务路由
 @app.api_route("/api/v1/miniprogram/ai/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def miniprogram_ai_proxy(path: str, request: Request):

@@ -9,6 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from ..models.postcard import Postcard, TaskStatus
 from ..models.task import PostcardGenerationTask, PostcardRequest, TaskStatusResponse
 from .queue_service import QueueService
+from .quota_service import QuotaService
 
 logger = logging.getLogger(__name__)
 
@@ -16,10 +17,16 @@ class PostcardService:
     def __init__(self, db: Session):
         self.db = db
         self.queue_service = QueueService()
+        self.quota_service = QuotaService(db)
 
     async def create_task(self, request: PostcardRequest) -> str:
         """创建新的明信片生成任务"""
         try:
+            # 🔥 检查用户每日生成配额
+            quota_check = await self.quota_service.check_generation_quota(request.user_id)
+            if not quota_check["can_generate"]:
+                raise Exception(f"每日生成次数已用完。{quota_check['message']}")
+            
             # 生成任务ID
             task_id = str(uuid.uuid4())
             
@@ -59,11 +66,16 @@ class PostcardService:
                 style=request.style,
                 theme=request.theme,
                 user_id=request.user_id,
-                created_at=datetime.now().isoformat()
+                created_at=datetime.now().isoformat(),
+                # 🆕 传递base64编码的情绪图片数据
+                emotion_image_base64=request.emotion_image_base64
             )
             
             # 发布到消息队列
             await self.queue_service.publish_task(task)
+            
+            # 🔥 消耗用户配额 - 传递卡片ID
+            await self.quota_service.consume_generation_quota(request.user_id, postcard.id)
             
             logger.info(f"✅ 任务创建成功: {task_id}")
             return task_id
@@ -84,23 +96,32 @@ class PostcardService:
             if not postcard:
                 return None
             
-            return TaskStatusResponse(
-                task_id=postcard.task_id,
-                status=TaskStatus(postcard.status),
-                created_at=postcard.created_at,
-                updated_at=postcard.updated_at,
-                completed_at=postcard.completed_at,
-                concept=postcard.concept,
-                content=postcard.content,
-                image_url=postcard.image_url,
-                frontend_code=postcard.frontend_code,
-                preview_url=postcard.preview_url,
-                card_image_url=getattr(postcard, 'card_image_url', None),
-                card_html=getattr(postcard, 'card_html', None),
-                structured_data=getattr(postcard, 'structured_data', None),  # 新增结构化数据
-                error_message=postcard.error_message,
-                retry_count=postcard.retry_count
-            )
+            # 构建基础响应数据
+            response_data = {
+                'task_id': postcard.task_id,
+                'status': TaskStatus(postcard.status),
+                'created_at': postcard.created_at,
+                'updated_at': postcard.updated_at,
+                'completed_at': postcard.completed_at,
+                'concept': postcard.concept,
+                'content': postcard.content,
+                'image_url': postcard.image_url,
+                'frontend_code': postcard.frontend_code,
+                'preview_url': postcard.preview_url,
+                'card_image_url': getattr(postcard, 'card_image_url', None),
+                'card_html': getattr(postcard, 'card_html', None),
+                'structured_data': getattr(postcard, 'structured_data', None),
+                'error_message': postcard.error_message,
+                'retry_count': postcard.retry_count
+            }
+            
+            # 🆕 添加扁平化字段 - 从structured_data中提取
+            structured_data = getattr(postcard, 'structured_data', None)
+            if structured_data and isinstance(structured_data, dict):
+                flattened_fields = self._flatten_structured_data(structured_data)
+                response_data.update(flattened_fields)
+            
+            return TaskStatusResponse(**response_data)
             
         except Exception as e:
             logger.error(f"❌ 获取任务状态失败: {task_id} - {e}")
@@ -259,8 +280,14 @@ class PostcardService:
             if not postcard:
                 return False
             
+            # 保存用户ID用于配额恢复
+            user_id = postcard.user_id
+            
             self.db.delete(postcard)
             self.db.commit()
+            
+            # 🔥 释放今日卡片位置（不恢复生成次数）
+            await self.quota_service.release_card_position(user_id, postcard_id)
             
             logger.info(f"✅ 明信片删除成功: {postcard_id}")
             return True
@@ -279,3 +306,129 @@ class PostcardService:
         except Exception as e:
             logger.error(f"❌ 获取明信片失败: {postcard_id} - {e}")
             raise
+    
+    def _flatten_structured_data(self, structured_data: Dict[str, Any]) -> Dict[str, Any]:
+        """将structured_data扁平化为协议约定的字段格式"""
+        flattened = {}
+        
+        try:
+            # 基础标题
+            if 'title' in structured_data:
+                flattened['card_title'] = structured_data['title']
+            
+            # 情绪字段
+            mood = structured_data.get('mood', {})
+            if isinstance(mood, dict):
+                if 'primary' in mood:
+                    flattened['mood_primary'] = mood['primary']
+                if 'intensity' in mood:
+                    flattened['mood_intensity'] = mood['intensity']
+                if 'secondary' in mood:
+                    flattened['mood_secondary'] = mood['secondary']
+                if 'color_theme' in mood:
+                    flattened['mood_color_theme'] = mood['color_theme']
+            
+            # 视觉样式字段
+            visual = structured_data.get('visual', {})
+            if isinstance(visual, dict):
+                style_hints = visual.get('style_hints', {})
+                if isinstance(style_hints, dict):
+                    if 'color_scheme' in style_hints:
+                        flattened['visual_color_scheme'] = style_hints['color_scheme']
+                    if 'layout_style' in style_hints:
+                        flattened['visual_layout_style'] = style_hints['layout_style']
+                    if 'animation_type' in style_hints:
+                        flattened['visual_animation_type'] = style_hints['animation_type']
+                
+                if 'background_image_url' in visual:
+                    flattened['visual_background_image'] = visual['background_image_url']
+            
+            # 内容字段
+            content = structured_data.get('content', {})
+            if isinstance(content, dict):
+                if 'main_text' in content:
+                    flattened['content_main_text'] = content['main_text']
+                
+                quote = content.get('quote', {})
+                if isinstance(quote, dict):
+                    if 'text' in quote:
+                        flattened['content_quote_text'] = quote['text']
+                    if 'author' in quote:
+                        flattened['content_quote_author'] = quote['author']
+                    if 'translation' in quote:
+                        flattened['content_quote_translation'] = quote['translation']
+                
+                hot_topics = content.get('hot_topics', {})
+                if isinstance(hot_topics, dict):
+                    if 'douyin' in hot_topics:
+                        flattened['content_hot_topics_douyin'] = hot_topics['douyin']
+                    if 'xiaohongshu' in hot_topics:
+                        flattened['content_hot_topics_xiaohongshu'] = hot_topics['xiaohongshu']
+            
+            # 上下文字段
+            context = structured_data.get('context', {})
+            if isinstance(context, dict):
+                if 'weather' in context:
+                    flattened['context_weather'] = context['weather']
+                if 'location' in context:
+                    flattened['context_location'] = context['location']
+                if 'time_context' in context:
+                    flattened['context_time'] = context['time_context']
+            
+            # 推荐内容字段
+            recommendations = structured_data.get('recommendations', {})
+            if isinstance(recommendations, dict):
+                # 音乐推荐
+                music = recommendations.get('music', [])
+                if music and len(music) > 0:
+                    music_item = music[0] if isinstance(music, list) else music
+                    if isinstance(music_item, dict):
+                        if 'title' in music_item:
+                            flattened['recommendations_music_title'] = music_item['title']
+                        if 'artist' in music_item:
+                            flattened['recommendations_music_artist'] = music_item['artist']
+                        if 'reason' in music_item:
+                            flattened['recommendations_music_reason'] = music_item['reason']
+                
+                # 书籍推荐
+                book = recommendations.get('book', [])
+                if book and len(book) > 0:
+                    book_item = book[0] if isinstance(book, list) else book
+                    if isinstance(book_item, dict):
+                        if 'title' in book_item:
+                            flattened['recommendations_book_title'] = book_item['title']
+                        if 'author' in book_item:
+                            flattened['recommendations_book_author'] = book_item['author']
+                        if 'reason' in book_item:
+                            flattened['recommendations_book_reason'] = book_item['reason']
+                
+                # 电影推荐
+                movie = recommendations.get('movie', [])
+                if movie and len(movie) > 0:
+                    movie_item = movie[0] if isinstance(movie, list) else movie
+                    if isinstance(movie_item, dict):
+                        if 'title' in movie_item:
+                            flattened['recommendations_movie_title'] = movie_item['title']
+                        if 'director' in movie_item:
+                            flattened['recommendations_movie_director'] = movie_item['director']
+                        if 'reason' in movie_item:
+                            flattened['recommendations_movie_reason'] = movie_item['reason']
+            
+            # 🆕 扩展字段处理 - 8个extras字段（卡片背面内容的核心）
+            extras = structured_data.get('extras', {})
+            if isinstance(extras, dict):
+                extras_fields = ['reflections', 'gratitude', 'micro_actions', 'mood_tips', 
+                               'life_insights', 'creative_spark', 'mindfulness', 'future_vision']
+                
+                for field in extras_fields:
+                    if field in extras:
+                        flat_field_name = f'extras_{field}'
+                        flattened[flat_field_name] = extras[field]
+            
+            logger.info(f"📊 扁平化数据完成，生成字段: {list(flattened.keys())}")
+            
+        except Exception as e:
+            logger.error(f"❌ 数据扁平化失败: {e}")
+            # 返回空字典，不影响主要功能
+        
+        return flattened

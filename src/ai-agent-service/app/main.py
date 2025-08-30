@@ -24,6 +24,9 @@ from .api.environment import router as environment_router
 # 导入HTML转图片API
 from .api.html_image import router as html_image_router
 
+# 导入上传API
+from .api.upload import router as upload_router
+
 # 导入WebSearch测试服务
 from .services.claude_websearch_test import ClaudeWebSearchTest
 
@@ -147,6 +150,13 @@ app.include_router(
     tags=["HTML转图片服务"]
 )
 
+# 集成上传API路由
+app.include_router(
+    upload_router,
+    prefix="/api/v1/upload",
+    tags=["文件上传服务"]
+)
+
 # 初始化WebSearch测试服务
 websearch_test = ClaudeWebSearchTest()
 
@@ -207,6 +217,10 @@ app.mount("/static/generated", StaticFiles(directory=generated_dir), name="stati
 images_dir = os.path.join(generated_dir, "images")
 os.makedirs(images_dir, exist_ok=True)
 # 注意：已经包含在/generated中了，不需要单独挂载
+
+# 创建情绪图片上传目录
+emotions_dir = os.path.join(generated_dir, "emotions")
+os.makedirs(emotions_dir, exist_ok=True)
 
 # 添加根路径静态文件处理，用于AI生成的文件引用
 @app.get("/script.js")

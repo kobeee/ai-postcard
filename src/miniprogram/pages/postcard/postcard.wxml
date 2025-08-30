@@ -19,6 +19,8 @@
     <!-- 结构化明信片渲染（最高优先级） -->
     <view class="structured-card-section" wx:if="{{hasStructuredData}}">
       <structured-postcard 
+        id="main-structured-postcard"
+        class="main-structured-postcard"
         structured-data="{{structuredData}}"
         background-image="{{structuredData.visual.background_image_url || postcard.image_url}}"
         fallback-english="{{postcard.english}}"
@@ -47,45 +49,6 @@
 
     <!-- 明信片信息 -->
     <view class="info-section">
-      <view class="content-card">
-        <view class="card-header">
-          <text class="content-card-title">明信片内容</text>
-          <text class="copy-btn" bindtap="copyContent">📋</text>
-        </view>
-        <!-- 智能内容显示 -->
-        <view wx:if="{{hasStructuredData}}" class="structured-content-summary">
-          <text class="content-title">解析成功的结构化内容</text>
-          <text class="content-desc">已转换为美观的卡片展示</text>
-        </view>
-        <view wx:else class="raw-content-display">
-          <text class="content-warning">⚠️ 原始数据显示（建议优化）</text>
-          <text class="postcard-content">{{postcard.content || '暂无内容'}}</text>
-        </view>
-      </view>
-
-      <!-- 创作信息 -->
-      <!-- 调试信息（开发时显示） -->
-      <view class="debug-card" wx:if="{{debugInfo}}">
-        <view class="card-header">
-          <text class="content-card-title">🔧 调试信息</text>
-        </view>
-        <view class="debug-item">
-          <text class="debug-label">数据类型：</text>
-          <text class="debug-value">{{debugInfo.contentType}}</text>
-        </view>
-        <view class="debug-item">
-          <text class="debug-label">解析状态：</text>
-          <text class="debug-value">{{debugInfo.parseSuccess ? '✅ 成功' : '❌ 失败'}}</text>
-        </view>
-        <view class="debug-item" wx:if="{{debugInfo.parsedKeys}}">
-          <text class="debug-label">数据字段：</text>
-          <text class="debug-value">{{debugInfo.parsedKeys.join(', ')}}</text>
-        </view>
-        <view class="debug-item">
-          <text class="debug-label">数据预览：</text>
-          <text class="debug-preview">{{debugInfo.originalContent}}</text>
-        </view>
-      </view>
 
       <view class="meta-card">
         <view class="meta-item">
@@ -115,20 +78,9 @@
     <!-- 操作按钮 -->
     <view class="actions-section">
       <view class="action-row">
-        <button class="action-btn primary" open-type="share">
-          <text class="btn-icon">📤</text>
-          <text class="btn-text">分享给好友</text>
-        </button>
-        <button class="action-btn secondary" bindtap="saveImage">
+        <button class="action-btn secondary" bindtap="saveCardScreenshot">
           <text class="btn-icon">💾</text>
-          <text class="btn-text">保存图片</text>
-        </button>
-      </view>
-
-      <view class="action-row">
-        <button class="action-btn secondary" bindtap="previewCode" wx:if="{{postcard.frontend_code}}">
-          <text class="btn-icon">🌐</text>
-          <text class="btn-text">查看交互</text>
+          <text class="btn-text">保存卡片</text>
         </button>
         <button class="action-btn danger" bindtap="handleDelete">
           <text class="btn-icon">🗑️</text>
@@ -136,6 +88,10 @@
         </button>
       </view>
     </view>
+
+    <!-- 隐藏的Canvas用于截图 -->
+    <canvas canvas-id="shareCanvas" class="share-canvas"></canvas>
+    <canvas canvas-id="screenshot-canvas" class="screenshot-canvas"></canvas>
 
     <!-- 底部信息 -->
     <view class="footer-section">

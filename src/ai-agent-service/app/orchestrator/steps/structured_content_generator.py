@@ -40,6 +40,9 @@ class StructuredContentGenerator:
             if image_url:
                 if "visual" not in parsed_data:
                     parsed_data["visual"] = {}
+                # 🔧 修复：再次确保visual字段是字典类型
+                if not isinstance(parsed_data["visual"], dict):
+                    parsed_data["visual"] = {}
                 parsed_data["visual"]["background_image_url"] = image_url
             
             # 保存结构化数据到结果中
@@ -91,7 +94,7 @@ class StructuredContentGenerator:
 
 ```json
 {{
-  "title": "简洁标题（6-10字）",
+  "title": "精彩标题（8-15字）",
   "mood": {{
     "primary": "主要情绪（如：开心、思考、期待等）",
     "secondary": "次要情绪（可选）",
@@ -100,15 +103,26 @@ class StructuredContentGenerator:
   }},
   "content": {{
     "main_text": "核心文案（25-40字，简练有力，一句话表达）",
+    "sub_text": "补充文案（可选，15-25字，用于翻转后的卡片背面）",
     "hot_topics": {{
-      "xiaohongshu": "小红书话题（15字内，可选）",
-      "douyin": "抖音热点（15字内，可选）"
+      "xiaohongshu": "小红书话题形式内容（不要#号，15-25字描述体验感受）",
+      "douyin": "抖音热点形式内容（不要#号，15-25字生活化表达）"
     }},
     "quote": {{
-      "text": "简洁英文格言（不超6个单词）",
+      "text": "优美英文格言（6-12个单词，意境深远）",
       "author": "作者",
-      "translation": "中文翻译（不超10字）"
+      "translation": "中文翻译（8-15字，诗意表达）"
     }}
+  }},
+  "extras": {{
+    "reflections": ["深度反思内容（20-30字，有哲理性）", "第二条反思（18-25字，不同角度）", "深层思考（可选）"],
+    "gratitude": ["具体感谢事物（15-22字，细节丰富）", "第二条感谢（12-20字，不同层面）", "细节感恩（可选）"], 
+    "micro_actions": ["今日可实践的具体行动（18-25字）", "延伸行动建议（15-22字）", "进阶实践（可选）"],
+    "mood_tips": ["情绪调节具体方法（20-30字）", "深层心理建议（18-25字）", "进阶技巧（可选）"],
+    "life_insights": ["生活感悟（25-35字，有启发性）", "人生思考（20-30字，不同维度）", "智慧总结（可选）"],
+    "creative_spark": ["创意灵感或想法（18-28字）", "艺术表达建议（15-25字）", "创作启发（可选）"],
+    "mindfulness": ["当下觉察练习（20-30字）", "冥想或放松方法（18-28字）", "深度觉察（可选）"],
+    "future_vision": ["对未来的美好期待（25-35字）", "具体愿景（20-30字）", "长远规划（可选）"]
   }},
   "recommendations": {{
     // 随机包含以下1-3种推荐（至少返回一种）。每种推荐可返回对象或数组；如返回多个请使用数组。
@@ -137,7 +151,7 @@ class StructuredContentGenerator:
 1. **简洁精炼优先**：内容务必简洁有力，适合移动端卡片显示
    - 严格控制文字长度，避免冗长表述
    - 一句话表达核心思想，删除多余修饰
-   - 推荐理由要简明扼要，不超过15字
+   - 推荐理由简明扼要，不超过15字
 
 2. **个性化深度定制**：内容要有温度、有个性，能引起用户情感共鸣
    - 避免千篇一律的通用内容
@@ -159,6 +173,19 @@ class StructuredContentGenerator:
 
 6. **视觉协调**：色彩和动效要与情绪氛围一致
    - 根据情绪强度选择合适的视觉表现形式
+
+7. **背面内容丰富化**（extras字段）：卡片背面应提供深层次、互补性内容
+   - **必须生成6-8个不同类型的extras内容**，每个类型提供2-3条内容，确保背面内容非常充实
+   - 背面内容要与正面形成深度互补，而不是简单重复
+   - 优先生成多条内容而非单条，让用户有更多选择和启发
+   - reflections: 基于当前情绪的深度哲学思考，有启发性
+   - gratitude: 具体而微的感谢对象，细节丰富有画面感
+   - micro_actions: 可立即执行的小行动，实用且有意义
+   - mood_tips: 实用的情绪管理技巧，不是空泛建议
+   - life_insights: 人生感悟，要有深度和普适性
+   - creative_spark: 创意想法或艺术表达建议
+   - mindfulness: 当下觉察或冥想方法，具体可操作
+   - future_vision: 对未来的美好憧憬，积极向上
 
 ## 个性化约束
 - 地理位置相关内容要避免刻板印象，挖掘城市的独特魅力和隐藏故事
@@ -222,7 +249,22 @@ class StructuredContentGenerator:
                 raise ValueError("响应中未找到JSON数据")
             
             json_str = response[json_start:json_end]
-            parsed_data = json.loads(json_str)
+            raw_parsed_data = json.loads(json_str)
+            
+            # 🔧 修复：处理AI返回列表而非字典的情况
+            self.logger.debug(f"🐛 调试：AI返回数据类型: {type(raw_parsed_data)}")
+            if isinstance(raw_parsed_data, list):
+                self.logger.debug(f"🐛 调试：数组长度: {len(raw_parsed_data)}")
+                if len(raw_parsed_data) > 0 and isinstance(raw_parsed_data[0], dict):
+                    parsed_data = raw_parsed_data[0]  # 取第一个字典元素
+                    self.logger.warning("⚠️ AI返回了数组格式，已自动提取第一个对象")
+                else:
+                    raise ValueError("AI返回的数组中没有有效的字典对象")
+            elif isinstance(raw_parsed_data, dict):
+                parsed_data = raw_parsed_data
+                self.logger.debug(f"🐛 调试：字典键列表: {list(raw_parsed_data.keys())}")
+            else:
+                raise ValueError(f"AI返回了不支持的数据类型: {type(raw_parsed_data)}")
             
             # 基本验证
             required_fields = ["title", "mood", "content"]
@@ -233,6 +275,10 @@ class StructuredContentGenerator:
             # 设置默认值
             if "visual" not in parsed_data:
                 parsed_data["visual"] = {}
+            # 🔧 修复：确保visual字段是字典类型
+            if not isinstance(parsed_data["visual"], dict):
+                self.logger.warning(f"⚠️ AI返回了非字典类型的visual: {type(parsed_data['visual'])}")
+                parsed_data["visual"] = {}
             if "style_hints" not in parsed_data["visual"]:
                 parsed_data["visual"]["style_hints"] = {
                     "animation_type": "float",
@@ -241,7 +287,17 @@ class StructuredContentGenerator:
                 }
             
             # 规范化推荐字段：允许数组或对象；确保存在键时统一为列表；并尽量保证至少返回一项
-            rec = parsed_data.get("recommendations", {}) or {}
+            rec_data = parsed_data.get("recommendations", {}) or {}
+            self.logger.debug(f"🐛 调试：recommendations数据类型: {type(rec_data)}")
+            # 🔧 修复：确保rec始终是字典类型
+            if isinstance(rec_data, dict):
+                rec = rec_data
+                self.logger.debug(f"🐛 调试：recommendations键列表: {list(rec_data.keys())}")
+            else:
+                # 如果AI返回的是列表或其他类型，转换为空字典
+                self.logger.warning(f"⚠️ AI返回了非字典类型的recommendations: {type(rec_data)}, 内容: {rec_data}")
+                rec = {}
+            
             def ensure_list(x):
                 if not x:
                     return []
@@ -251,7 +307,14 @@ class StructuredContentGenerator:
                     rec[key] = ensure_list(rec[key])
             # 若三项都为空，尝试从 quote 或 mood 生成一条兜底音乐推荐
             if not any(rec.get(k) for k in ["music", "book", "movie"]):
-                mood = (parsed_data.get("mood") or {}).get("primary") or "calm"
+                mood_data = parsed_data.get("mood")
+                self.logger.debug(f"🐛 调试：mood数据类型: {type(mood_data)}, 内容: {mood_data}")
+                if isinstance(mood_data, dict):
+                    mood = mood_data.get("primary", "calm")
+                elif isinstance(mood_data, str):
+                    mood = mood_data
+                else:
+                    mood = "calm"
                 rec["music"] = [{"title": "Lo-fi Beats", "artist": "Various", "reason": f"适合当前情绪: {mood}"}]
             parsed_data["recommendations"] = rec
 
@@ -259,10 +322,18 @@ class StructuredContentGenerator:
             
         except json.JSONDecodeError as e:
             self.logger.error(f"❌ JSON解析失败: {e}")
+            self.logger.error(f"🐛 AI原始响应内容: {response[:1000]}...") # 只记录前1000字符避免日志过长
+            if 'json_str' in locals():
+                self.logger.error(f"🐛 提取的JSON字符串: {json_str}")
             # 返回基础结构
             return self._get_fallback_structure()
         except Exception as e:
+            import traceback
             self.logger.error(f"❌ 数据验证失败: {e}")
+            self.logger.error(f"🐛 详细错误堆栈: {traceback.format_exc()}")
+            self.logger.error(f"🐛 当前parsed_data类型: {type(parsed_data) if 'parsed_data' in locals() else 'undefined'}")
+            if 'parsed_data' in locals():
+                self.logger.error(f"🐛 当前parsed_data内容: {parsed_data}")
             return self._get_fallback_structure()
     
     def _get_fallback_structure(self) -> Dict[str, Any]:

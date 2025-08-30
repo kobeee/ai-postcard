@@ -47,9 +47,14 @@ def get_db():
 def init_database():
     """初始化数据库表"""
     try:
-        from ..models.postcard import Base
+        # 导入所有模型以确保它们被注册到Base.metadata中
+        from ..models.postcard import Postcard
+        from ..models.user_quota import UserQuota
+        
+        # 创建所有表
         Base.metadata.create_all(bind=engine)
         logger.info("✅ 数据库表初始化成功")
+        logger.info("📊 已注册模型: Postcard, UserQuota")
     except Exception as e:
         logger.error(f"❌ 数据库表初始化失败: {e}")
         raise

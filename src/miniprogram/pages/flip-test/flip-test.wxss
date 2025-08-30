@@ -1,0 +1,106 @@
+/* flip-test.wxss - 卡片翻转测试页面样式 */
+
+.page {
+  background: #f0f0f0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.container {
+  text-align: center;
+}
+
+.title {
+  font-size: 32rpx;
+  font-weight: bold;
+  margin-bottom: 60rpx;
+  color: #333;
+}
+
+/* 卡片容器 - 透视容器 */
+.card-container {
+  perspective: 1000rpx;
+  width: 300rpx;
+  height: 400rpx;
+  margin: 0 auto 60rpx;
+}
+
+/* 卡片 - 翻转元素 */
+.card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.8s ease;
+  cursor: pointer;
+}
+
+.card.flipped {
+  transform: rotateY(180deg);
+}
+
+/* 正面和背面 */
+.card-front,
+.card-back {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  border-radius: 20rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.15);
+}
+
+/* 正面样式 */
+.card-front {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+}
+
+/* 背面样式 */
+.card-back {
+  background: #333;
+  color: white;
+  transform: rotateY(180deg);
+}
+
+.card-text {
+  font-size: 36rpx;
+  font-weight: bold;
+  margin-bottom: 16rpx;
+}
+
+.card-subtitle {
+  font-size: 24rpx;
+  opacity: 0.8;
+}
+
+/* 控制按钮 */
+.controls {
+  display: flex;
+  gap: 20rpx;
+  justify-content: center;
+}
+
+.flip-button {
+  background: #667eea;
+  color: white;
+  border-radius: 10rpx;
+  padding: 16rpx 32rpx;
+  border: none;
+}
+
+.back-button {
+  background: #666;
+  color: white;
+  border-radius: 10rpx;
+  padding: 16rpx 32rpx;
+  border: none;
+}

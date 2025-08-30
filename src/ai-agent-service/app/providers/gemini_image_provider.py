@@ -76,11 +76,15 @@ Theme: {prompt}
 Requirements:
 - Resolution: {size}
 - Quality: {quality}
-- Style: illustration style, harmonious colors
-- Layout: suitable for postcard use, leave space for text
+- Style: illustration style, harmonious colors, artistic and elegant
+- Layout: suitable for postcard use, leave space for text overlay
 - Mood: positive and beautiful
+- IMPORTANT: NO TEXT, NO WORDS, NO LETTERS, NO CHARACTERS of any kind in the image
+- Create pure visual artwork without any textual elements
+- Focus on landscapes, nature, abstract patterns, or atmospheric scenes
+- Avoid any symbols, logos, or written content
 
-Please create a beautiful image that meets these requirements."""
+Please create a beautiful pure visual image without any text or written elements."""
             
             # 按照官网教程调用图片生成API
             loop = asyncio.get_event_loop()

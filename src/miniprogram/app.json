@@ -2,7 +2,8 @@
   "pages": [
     "pages/index/index",
     "pages/postcard/postcard",
-    "pages/logs/logs"
+    "pages/logs/logs",
+    "pages/flip-test/flip-test"
   ],
   "window": {
     "navigationBarTextStyle": "white",

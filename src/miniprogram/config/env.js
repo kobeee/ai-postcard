@@ -57,5 +57,12 @@ module.exports = {
     if (config.debug) {
       console.error('[AI明信片错误]', ...args);
     }
+  },
+  
+  // 警告日志
+  warn: (...args) => {
+    if (config.debug) {
+      console.warn('[AI明信片警告]', ...args);
+    }
   }
 };

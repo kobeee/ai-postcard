@@ -217,7 +217,10 @@ module.exports = {
       requestManager.get(envConfig.getApiUrl('/miniprogram/postcards/user'), { user_id: userId, page, limit }),
     
     // 删除作品
-    delete: (postcardId) => requestManager.delete(envConfig.getApiUrl(`/miniprogram/postcards/${postcardId}`))
+    delete: (postcardId) => requestManager.delete(envConfig.getApiUrl(`/miniprogram/postcards/${postcardId}`)),
+    
+    // 获取用户生成配额
+    getUserQuota: (userId) => requestManager.get(envConfig.getApiUrl(`/miniprogram/users/${userId}/quota`))
   },
   
   // 用户认证相关API

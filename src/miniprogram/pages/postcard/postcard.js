@@ -63,9 +63,24 @@ Page({
     } catch (error) {
       envConfig.error('加载明信片失败:', error);
       
+      let errorMessage = '加载失败，请重试';
+      
+      // 根据错误类型提供更具体的提示
+      if (error.message) {
+        if (error.message.includes('404')) {
+          errorMessage = '明信片不存在或已被删除';
+        } else if (error.message.includes('401') || error.message.includes('403')) {
+          errorMessage = '无权限访问此明信片';
+        } else if (error.message.includes('Network')) {
+          errorMessage = '网络连接失败，请检查网络';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
       this.setData({ 
         loading: false,
-        error: error.message || '加载失败，请重试'
+        error: errorMessage
       });
     }
   },
@@ -116,18 +131,30 @@ Page({
    * 分享明信片
    */
   onShareAppMessage() {
-    const { postcard } = this.data;
+    const { postcard, structuredData, hasStructuredData } = this.data;
     
     if (!postcard) {
       return {
-        title: 'AI明信片',
+        title: 'AI明信片 - 每一天，都值得被温柔记录',
         path: '/pages/index/index'
       };
     }
     
+    // 构建个性化分享标题
+    let shareTitle = '我用AI制作了一张明信片，快来看看！';
+    if (hasStructuredData && structuredData) {
+      const cardTitle = structuredData.title || structuredData.card_title;
+      const mood = structuredData.mood?.primary;
+      if (cardTitle) {
+        shareTitle = `${cardTitle} | 我的AI明信片`;
+      } else if (mood) {
+        shareTitle = `今天的心情是${mood} | 我的AI明信片`;
+      }
+    }
+    
     return {
-      title: `我用AI制作了一张明信片，快来看看！`,
-      path: `/pages/postcard/postcard?id=${postcard.id}`,
+      title: shareTitle,
+      path: `/pages/postcard/postcard?id=${postcard.id || this.postcardId}`,
       imageUrl: postcard.card_image_url || postcard.image_url
     };
   },
@@ -136,29 +163,46 @@ Page({
    * 分享到朋友圈
    */
   onShareTimeline() {
-    const { postcard } = this.data;
+    const { postcard, structuredData, hasStructuredData } = this.data;
     
     if (!postcard) {
       return {
-        title: 'AI明信片 - 让AI为你创作独特明信片'
+        title: 'AI明信片 - 每一天，都值得被温柔记录'
       };
     }
     
+    // 构建朋友圈分享标题 
+    let timelineTitle = 'AI明信片 - 每一天，都值得被温柔记录';
+    if (hasStructuredData && structuredData) {
+      const cardTitle = structuredData.title || structuredData.card_title;
+      const location = structuredData.context?.location;
+      const weather = structuredData.context?.weather;
+      
+      if (cardTitle && location) {
+        timelineTitle = `${cardTitle} | ${location}的AI明信片`;
+      } else if (cardTitle) {
+        timelineTitle = `${cardTitle} | AI明信片`;
+      } else if (location && weather) {
+        timelineTitle = `${location}，${weather} | AI明信片记录`;
+      }
+    }
+    
     return {
-      title: `AI明信片 - 让AI为你创作独特明信片`,
-      imageUrl: postcard.image_url
+      title: timelineTitle,
+      imageUrl: postcard.card_image_url || postcard.image_url
     };
   },
 
+
   /**
-   * 保存图片到相册
+   * 保存卡片截图到相册
    */
-  async saveImage() {
-    const { postcard } = this.data;
+  async saveCardScreenshot() {
+    const { hasStructuredData } = this.data;
     
-    if (!postcard || !(postcard.card_image_url || postcard.image_url)) {
+    if (!hasStructuredData) {
       wx.showToast({
-        title: '没有可保存的图片',
+        title: '当前卡片不支持截图保存',
         icon: 'none'
       });
       return;
@@ -166,28 +210,44 @@ Page({
     
     try {
       const app = getApp();
-      app.utils.showLoading('保存中...');
+      app.utils.showLoading('生成卡片截图...');
+      
+      // 生成卡片截图
+      const imageUrl = await this.generateCardScreenshotForSave();
+      
+      if (!imageUrl) {
+        app.utils.hideLoading();
+        wx.showToast({
+          title: '截图生成失败',
+          icon: 'none'
+        });
+        return;
+      }
+      
+      app.utils.showLoading('下载图片...');
       
       // 下载图片
-      const res = await new Promise((resolve, reject) => {
+      const downloadRes = await new Promise((resolve, reject) => {
         wx.downloadFile({
-          url: postcard.card_image_url || postcard.image_url,
+          url: imageUrl,
           success: resolve,
           fail: reject
         });
       });
       
+      app.utils.showLoading('保存中...');
+      
       // 保存到相册
       await new Promise((resolve, reject) => {
         wx.saveImageToPhotosAlbum({
-          filePath: res.tempFilePath,
+          filePath: downloadRes.tempFilePath,
           success: resolve,
           fail: reject
         });
       });
       
       app.utils.hideLoading();
-      app.utils.showSuccess('已保存到相册');
+      app.utils.showSuccess('卡片已保存到相册');
       
     } catch (error) {
       const app = getApp();
@@ -208,8 +268,126 @@ Page({
         app.utils.showError('保存失败，请重试');
       }
       
-      envConfig.error('保存图片失败:', error);
+      envConfig.error('保存卡片截图失败:', error);
     }
+  },
+
+  /**
+   * 生成卡片截图用于保存
+   */
+  async generateCardScreenshotForSave() {
+    try {
+      const { hasStructuredData } = this.data;
+      
+      // 如果有结构化数据，尝试生成真实的Canvas截图
+      if (hasStructuredData) {
+        try {
+          const screenshotPath = await this.generateRealCardScreenshot();
+          if (screenshotPath) {
+            return screenshotPath;
+          }
+        } catch (error) {
+          envConfig.error('Canvas截图失败，使用降级方案:', error);
+        }
+      }
+      
+      // 降级方案：使用现有的卡片图片
+      const { postcard } = this.data;
+      if (postcard && (postcard.card_image_url || postcard.image_url)) {
+        return postcard.card_image_url || postcard.image_url;
+      }
+      
+      // 最后的降级方案
+      return this.fallbackComponentScreenshot();
+    } catch (error) {
+      envConfig.error('生成卡片截图失败:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * 生成真实的卡片截图 - 调用组件的Canvas截图功能
+   */
+  async generateRealCardScreenshot() {
+    try {
+      const { hasStructuredData, structuredData } = this.data;
+      envConfig.log('开始生成Canvas截图');
+      envConfig.log('hasStructuredData:', hasStructuredData);
+      envConfig.log('structuredData存在:', !!structuredData);
+      
+      // 如果没有结构化数据，直接失败
+      if (!hasStructuredData) {
+        throw new Error('当前明信片没有结构化数据，无法生成Canvas截图');
+      }
+      
+      // 等待一下确保组件已经渲染
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // 获取结构化明信片组件的引用 - 使用ID选择器
+      const structuredCard = this.selectComponent('#main-structured-postcard');
+      envConfig.log('通过ID获取组件结果:', !!structuredCard);
+      
+      if (!structuredCard) {
+        envConfig.error('无法通过ID获取组件，尝试class选择器');
+        // 尝试使用class选择器
+        const structuredCardByClass = this.selectComponent('.main-structured-postcard');
+        envConfig.log('通过class获取组件结果:', !!structuredCardByClass);
+        
+        if (!structuredCardByClass) {
+          // 尝试不使用选择器，直接查找组件
+          const allComponents = this.selectAllComponents('structured-postcard');
+          envConfig.log('所有structured-postcard组件:', allComponents.length);
+          
+          if (allComponents.length > 0) {
+            return await this.callComponentScreenshot(allComponents[0]);
+          }
+          
+          throw new Error('无法获取结构化明信片组件，请检查组件是否渲染。可能原因：1) hasStructuredData为false 2) 组件渲染条件不满足');
+        }
+        return await this.callComponentScreenshot(structuredCardByClass);
+      }
+      
+      return await this.callComponentScreenshot(structuredCard);
+      
+    } catch (error) {
+      envConfig.error('生成Canvas截图失败:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * 调用组件截图方法的封装
+   */
+  async callComponentScreenshot(component) {
+    try {
+      // 检查组件是否有截图方法
+      if (!component.generateCanvasScreenshot) {
+        throw new Error('组件不支持Canvas截图功能');
+      }
+      
+      // 调用组件的Canvas截图方法
+      const screenshotPath = await component.generateCanvasScreenshot();
+      
+      envConfig.log('Canvas截图生成成功:', screenshotPath);
+      return screenshotPath;
+      
+    } catch (error) {
+      envConfig.error('调用组件截图方法失败:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * 降级方案：返回现有图片或提示
+   */
+  async fallbackComponentScreenshot() {
+    const { postcard } = this.data;
+    
+    if (postcard && (postcard.card_image_url || postcard.image_url)) {
+      return postcard.card_image_url || postcard.image_url;
+    }
+    
+    throw new Error('无法生成卡片截图');
   },
 
   /**

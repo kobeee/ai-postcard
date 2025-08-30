@@ -220,6 +220,118 @@ function parseCardData(cardData) {
         structuredData.recommendations = recommendations;
       }
       
+      // 🆕 扩展字段处理 - 8个extras字段，支持卡片背面丰富内容
+      const extras = {};
+      
+      // reflections - 深度思考与反思
+      if (cardData.extras_reflections) {
+        try {
+          extras.reflections = Array.isArray(cardData.extras_reflections) 
+            ? cardData.extras_reflections 
+            : JSON.parse(cardData.extras_reflections);
+        } catch (e) {
+          if (typeof cardData.extras_reflections === 'string') {
+            extras.reflections = [cardData.extras_reflections];
+          }
+        }
+      }
+      
+      // gratitude - 感恩内容
+      if (cardData.extras_gratitude) {
+        try {
+          extras.gratitude = Array.isArray(cardData.extras_gratitude) 
+            ? cardData.extras_gratitude 
+            : JSON.parse(cardData.extras_gratitude);
+        } catch (e) {
+          if (typeof cardData.extras_gratitude === 'string') {
+            extras.gratitude = [cardData.extras_gratitude];
+          }
+        }
+      }
+      
+      // micro_actions - 微行动建议
+      if (cardData.extras_micro_actions) {
+        try {
+          extras.micro_actions = Array.isArray(cardData.extras_micro_actions) 
+            ? cardData.extras_micro_actions 
+            : JSON.parse(cardData.extras_micro_actions);
+        } catch (e) {
+          if (typeof cardData.extras_micro_actions === 'string') {
+            extras.micro_actions = [cardData.extras_micro_actions];
+          }
+        }
+      }
+      
+      // mood_tips - 情绪管理建议
+      if (cardData.extras_mood_tips) {
+        try {
+          extras.mood_tips = Array.isArray(cardData.extras_mood_tips) 
+            ? cardData.extras_mood_tips 
+            : JSON.parse(cardData.extras_mood_tips);
+        } catch (e) {
+          if (typeof cardData.extras_mood_tips === 'string') {
+            extras.mood_tips = [cardData.extras_mood_tips];
+          }
+        }
+      }
+      
+      // life_insights - 人生感悟
+      if (cardData.extras_life_insights) {
+        try {
+          extras.life_insights = Array.isArray(cardData.extras_life_insights) 
+            ? cardData.extras_life_insights 
+            : JSON.parse(cardData.extras_life_insights);
+        } catch (e) {
+          if (typeof cardData.extras_life_insights === 'string') {
+            extras.life_insights = [cardData.extras_life_insights];
+          }
+        }
+      }
+      
+      // creative_spark - 创意火花
+      if (cardData.extras_creative_spark) {
+        try {
+          extras.creative_spark = Array.isArray(cardData.extras_creative_spark) 
+            ? cardData.extras_creative_spark 
+            : JSON.parse(cardData.extras_creative_spark);
+        } catch (e) {
+          if (typeof cardData.extras_creative_spark === 'string') {
+            extras.creative_spark = [cardData.extras_creative_spark];
+          }
+        }
+      }
+      
+      // mindfulness - 正念练习
+      if (cardData.extras_mindfulness) {
+        try {
+          extras.mindfulness = Array.isArray(cardData.extras_mindfulness) 
+            ? cardData.extras_mindfulness 
+            : JSON.parse(cardData.extras_mindfulness);
+        } catch (e) {
+          if (typeof cardData.extras_mindfulness === 'string') {
+            extras.mindfulness = [cardData.extras_mindfulness];
+          }
+        }
+      }
+      
+      // future_vision - 未来愿景
+      if (cardData.extras_future_vision) {
+        try {
+          extras.future_vision = Array.isArray(cardData.extras_future_vision) 
+            ? cardData.extras_future_vision 
+            : JSON.parse(cardData.extras_future_vision);
+        } catch (e) {
+          if (typeof cardData.extras_future_vision === 'string') {
+            extras.future_vision = [cardData.extras_future_vision];
+          }
+        }
+      }
+      
+      // 只在有内容时添加extras字段
+      if (Object.keys(extras).length > 0) {
+        structuredData.extras = extras;
+      }
+      
       hasStructuredData = true;
       debugInfo.parseSuccess = true;
       debugInfo.dataSource = 'backend_flattened';

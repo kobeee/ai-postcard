@@ -320,20 +320,42 @@ clean_data() {
         sleep 5
     fi
     
-    # 清理明信片数据
+    # 清理所有相关的数据库表
     log_info "清理postcards表数据..."
     docker exec ai-postcard-postgres psql -U postgres -d ai_postcard -c "DELETE FROM postcards;"
     
-    # 安全清理Redis缓存（避免删除基础设施数据）
-    log_info "清理Redis缓存数据..."
+    log_info "清理用户配额数据..."
+    docker exec ai-postcard-postgres psql -U postgres -d ai_postcard -c "DELETE FROM user_quotas;"
+    
+    log_info "清理用户数据..."
+    docker exec ai-postcard-postgres psql -U postgres -d ai_postcard -c "DELETE FROM users WHERE id != 'system';" 2>/dev/null || true
+    
+    # 清理Redis中的所有相关数据（包括任务队列）
+    log_info "清理Redis缓存和队列数据..."
     if docker-compose ps | grep -q "ai-postcard-redis.*Up"; then
+        # 清理缓存数据
         docker exec ai-postcard-redis sh -c 'redis-cli -a "$REDIS_PASSWORD" --scan --pattern "cache:*" | xargs -r -n 1 redis-cli -a "$REDIS_PASSWORD" DEL' 2>/dev/null || true
         docker exec ai-postcard-redis sh -c 'redis-cli -a "$REDIS_PASSWORD" --scan --pattern "session:*" | xargs -r -n 1 redis-cli -a "$REDIS_PASSWORD" DEL' 2>/dev/null || true
         docker exec ai-postcard-redis sh -c 'redis-cli -a "$REDIS_PASSWORD" --scan --pattern "temp:*" | xargs -r -n 1 redis-cli -a "$REDIS_PASSWORD" DEL' 2>/dev/null || true
         docker exec ai-postcard-redis sh -c 'redis-cli -a "$REDIS_PASSWORD" --scan --pattern "postcard_cache:*" | xargs -r -n 1 redis-cli -a "$REDIS_PASSWORD" DEL' 2>/dev/null || true
+        
+        # 🔥 清理任务队列中的未完成任务（但保留基础设施）
+        log_info "清理Redis任务队列中的未完成任务..."
+        docker exec ai-postcard-redis sh -c 'redis-cli -a "$REDIS_PASSWORD" XTRIM postcard_tasks MAXLEN 0' 2>/dev/null || true
+        
+        # 重置消费者组状态（清理未确认的消息）
+        docker exec ai-postcard-redis sh -c 'redis-cli -a "$REDIS_PASSWORD" XGROUP DESTROY postcard_tasks ai_agent_workers' 2>/dev/null || true
+        docker exec ai-postcard-redis sh -c 'redis-cli -a "$REDIS_PASSWORD" XGROUP CREATE postcard_tasks ai_agent_workers 0 MKSTREAM' 2>/dev/null || true
     fi
     
     log_success "数据清理完成"
+    log_info "已清理："
+    log_info "  ✓ 明信片数据 (postcards)"
+    log_info "  ✓ 用户配额数据 (user_quotas)" 
+    log_info "  ✓ 用户数据 (users，保留系统用户)"
+    log_info "  ✓ Redis缓存数据"
+    log_info "  ✓ Redis任务队列未完成任务"
+    log_info "  ✓ 重置消费者组状态"
 }
 
 # 清理容器和卷

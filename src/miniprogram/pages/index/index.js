@@ -376,40 +376,53 @@ Page({
   },
 
   /**
-   * 检查今日卡片
+   * 检查今日卡片状态 - 基于配额系统
    */
   async checkTodayCard() {
     try {
-      const today = new Date().toDateString();
-      const response = await postcardAPI.getUserPostcards(this.data.userInfo.id, 1, 1);
-      const cards = response.postcards || [];
+      const userId = this.data.userInfo.id;
       
-      if (cards.length > 0) {
-        const latestCard = cards[0];
-        const cardDate = new Date(latestCard.created_at).toDateString();
+      // 🔥 使用配额API检查状态
+      const quotaInfo = await postcardAPI.getUserQuota(userId);
+      
+      if (quotaInfo.current_card_exists) {
+        // 当前有今日卡片，获取并显示
+        const response = await postcardAPI.getUserPostcards(userId, 1, 1);
+        const cards = response.postcards || [];
         
-        if (cardDate === today) {
-          // 已有今日卡片，显示卡片
+        if (cards.length > 0) {
+          const latestCard = cards[0];
           this.setData({
             todayCard: this.formatCardData(latestCard),
-            needEmotionInput: false
+            needEmotionInput: false  // 不显示画布
           });
         } else {
-          // 需要创建今日卡片
+          // 配额显示有卡片但实际没有，可能数据不一致，显示画布
           this.setData({
-            needEmotionInput: true
+            needEmotionInput: quotaInfo.should_show_canvas
           });
         }
       } else {
-        // 首次使用，需要创建卡片
+        // 当前没有今日卡片，根据should_show_canvas决定显示
         this.setData({
-          needEmotionInput: true
+          needEmotionInput: quotaInfo.should_show_canvas,
+          todayCard: null
         });
       }
+      
+      envConfig.log('今日卡片状态检查:', {
+        current_card_exists: quotaInfo.current_card_exists,
+        should_show_canvas: quotaInfo.should_show_canvas,
+        generated_count: quotaInfo.generated_count,
+        remaining_quota: quotaInfo.remaining_quota
+      });
+      
     } catch (error) {
       envConfig.error('检查今日卡片失败:', error);
+      // 出错时默认显示画布
       this.setData({
-        needEmotionInput: true
+        needEmotionInput: true,
+        todayCard: null
       });
     }
   },
@@ -859,6 +872,289 @@ Page({
     
     this.emotionPath = null;
     this.emotionAnalysis = null;
+    this.emotionImagePath = null;
+  },
+  
+  /**
+   * 获取canvas的base64数据
+   */
+  async getCanvasBase64Data() {
+    try {
+      envConfig.log('开始获取canvas的base64数据...');
+      
+      return new Promise((resolve, reject) => {
+        wx.canvasToTempFilePath({
+          canvasId: 'emotionCanvas',
+          success: (res) => {
+            const tempFilePath = res.tempFilePath;
+            envConfig.log('Canvas转临时文件成功:', tempFilePath);
+            
+            // 读取文件并转换为base64
+            const fs = wx.getFileSystemManager();
+            fs.readFile({
+              filePath: tempFilePath,
+              encoding: 'base64',
+              success: (readResult) => {
+                const base64Data = readResult.data;
+                envConfig.log('Canvas转base64成功，数据长度:', base64Data.length);
+                resolve({
+                  base64: base64Data,
+                  format: 'png',
+                  size: base64Data.length * 3 / 4 // 估算文件大小
+                });
+              },
+              fail: (readError) => {
+                envConfig.error('读取临时文件失败:', readError);
+                reject(new Error('读取canvas图片数据失败'));
+              }
+            });
+          },
+          fail: (error) => {
+            envConfig.error('Canvas转临时文件失败:', error);
+            reject(new Error(`Canvas转图片失败: ${error.errMsg || error.message || '未知错误'}`));
+          }
+        });
+      });
+      
+    } catch (error) {
+      envConfig.error('获取canvas base64数据过程中出错:', error);
+      throw error;
+    }
+  },
+  
+  /**
+   * 上传base64图片数据到服务器
+   */
+  async uploadEmotionImageBase64(imageData) {
+    try {
+      envConfig.log('开始上传情绪图片base64数据到服务器，数据大小:', imageData.size);
+      
+      // 获取用户token
+      const userToken = wx.getStorageSync('userToken');
+      if (!userToken) {
+        throw new Error('用户未登录');
+      }
+      
+      return new Promise((resolve, reject) => {
+        wx.request({
+          url: envConfig.getApiUrl('/upload/emotion-image-base64'),
+          method: 'POST',
+          header: {
+            'Authorization': `Bearer ${userToken}`,
+            'Content-Type': 'application/json'
+          },
+          data: {
+            image_base64: imageData.base64,
+            format: imageData.format,
+            size: imageData.size
+          },
+          success: (res) => {
+            try {
+              envConfig.log('上传响应状态码:', res.statusCode);
+              envConfig.log('上传响应数据:', res.data);
+              
+              if (res.statusCode !== 200) {
+                reject(new Error(`HTTP ${res.statusCode}: ${JSON.stringify(res.data) || '服务器错误'}`));
+                return;
+              }
+              
+              const data = res.data;
+              if (data.success) {
+                envConfig.log('情绪图片base64上传成功:', data.data);
+                resolve(data.data);
+              } else {
+                envConfig.error('情绪图片上传失败:', data.message);
+                reject(new Error(data.message || '上传失败'));
+              }
+            } catch (e) {
+              envConfig.error('解析上传响应失败:', e, res);
+              reject(new Error(`服务器响应异常: ${JSON.stringify(res.data)}`));
+            }
+          },
+          fail: (error) => {
+            envConfig.error('情绪图片上传网络失败:', error);
+            reject(new Error(`网络请求失败: ${error.errMsg || error.message || '未知错误'}`));
+          }
+        });
+      });
+      
+    } catch (error) {
+      envConfig.error('上传情绪图片过程中出错:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * 分析绘画轨迹数据，提供详细的绘制特征分析
+   */
+  analyzeDrawingTrajectory() {
+    if (!this.emotionPath || this.emotionPath.length < 2) {
+      return {
+        stroke_count: 0,
+        drawing_time: 0,
+        average_speed: 0,
+        complexity: 'none',
+        direction_changes: 0,
+        pressure_variation: 'steady',
+        pattern_type: 'undefined',
+        emotion_indicators: []
+      };
+    }
+
+    const path = this.emotionPath;
+    const totalPoints = path.length;
+    const totalTime = path[totalPoints - 1].time - path[0].time;
+    
+    // 计算总路径长度
+    let totalDistance = 0;
+    let directionChanges = 0;
+    let speeds = [];
+    
+    for (let i = 1; i < totalPoints; i++) {
+      const prev = path[i - 1];
+      const curr = path[i];
+      const distance = Math.sqrt(Math.pow(curr.x - prev.x, 2) + Math.pow(curr.y - prev.y, 2));
+      const timeInterval = curr.time - prev.time;
+      
+      totalDistance += distance;
+      
+      if (timeInterval > 0) {
+        speeds.push(distance / timeInterval);
+      }
+      
+      // 检测方向变化
+      if (i > 1) {
+        const prevPrev = path[i - 2];
+        const angle1 = Math.atan2(prev.y - prevPrev.y, prev.x - prevPrev.x);
+        const angle2 = Math.atan2(curr.y - prev.y, curr.x - prev.x);
+        const angleDiff = Math.abs(angle2 - angle1);
+        
+        if (angleDiff > Math.PI / 4) { // 45度以上的方向变化
+          directionChanges++;
+        }
+      }
+    }
+    
+    const averageSpeed = speeds.length > 0 ? speeds.reduce((a, b) => a + b, 0) / speeds.length : 0;
+    const speedVariance = speeds.length > 0 ? speeds.reduce((acc, speed) => acc + Math.pow(speed - averageSpeed, 2), 0) / speeds.length : 0;
+    
+    // 分析绘制模式
+    let patternType = 'undefined';
+    let complexity = 'simple';
+    let emotionIndicators = [];
+    
+    // 根据统计数据推断绘制模式和情绪
+    const normalizedDistance = totalDistance / 100; // 标准化距离
+    const normalizedTime = totalTime / 1000; // 转换为秒
+    
+    // 模式分析
+    if (directionChanges < totalPoints * 0.1) {
+      patternType = 'smooth_flow';  // 平滑流畅
+    } else if (directionChanges > totalPoints * 0.3) {
+      patternType = 'chaotic';      // 混乱多变
+    } else {
+      patternType = 'moderate';     // 适中
+    }
+    
+    // 复杂度分析
+    if (totalPoints > 50 && directionChanges > 10) {
+      complexity = 'complex';
+    } else if (totalPoints > 20 || directionChanges > 5) {
+      complexity = 'moderate';
+    }
+    
+    // 情绪指标分析
+    if (averageSpeed > 2) {
+      emotionIndicators.push('energetic');
+    }
+    if (speedVariance > 1) {
+      emotionIndicators.push('unstable_pace');
+    }
+    if (totalTime > 10000) { // 超过10秒
+      emotionIndicators.push('contemplative');
+    }
+    if (directionChanges / totalPoints > 0.3) {
+      emotionIndicators.push('restless');
+    }
+    if (normalizedDistance < 2) {
+      emotionIndicators.push('concentrated');
+    }
+    
+    return {
+      stroke_count: 1, // 当前实现为单笔画
+      drawing_time: totalTime,
+      total_distance: totalDistance,
+      average_speed: averageSpeed,
+      speed_variance: speedVariance,
+      complexity: complexity,
+      direction_changes: directionChanges,
+      direction_change_rate: directionChanges / totalPoints,
+      pressure_variation: speedVariance > 1 ? 'varied' : 'steady',
+      pattern_type: patternType,
+      emotion_indicators: emotionIndicators,
+      point_count: totalPoints,
+      // 提供给AI的文本描述
+      drawing_description: this.generateDrawingDescription(
+        patternType, complexity, averageSpeed, totalTime, emotionIndicators
+      )
+    };
+  },
+
+  /**
+   * 生成绘画描述供AI理解
+   */
+  generateDrawingDescription(patternType, complexity, averageSpeed, totalTime, emotionIndicators) {
+    let description = [];
+    
+    // 绘制风格描述
+    const patternMap = {
+      'smooth_flow': '绘制流畅平滑，笔触连贯',
+      'chaotic': '绘制多变混乱，频繁转向',
+      'moderate': '绘制节奏适中，有张有弛'
+    };
+    description.push(patternMap[patternType] || '绘制风格未明');
+    
+    // 复杂度描述
+    const complexityMap = {
+      'simple': '线条简单',
+      'moderate': '线条中等复杂',
+      'complex': '线条复杂多变'
+    };
+    description.push(complexityMap[complexity]);
+    
+    // 速度描述
+    if (averageSpeed > 3) {
+      description.push('绘制速度很快');
+    } else if (averageSpeed > 1) {
+      description.push('绘制速度适中');
+    } else {
+      description.push('绘制速度缓慢');
+    }
+    
+    // 时长描述
+    if (totalTime > 15000) {
+      description.push('绘制时间很长，显示深思');
+    } else if (totalTime > 5000) {
+      description.push('绘制时间适中');
+    } else {
+      description.push('绘制时间较短');
+    }
+    
+    // 情绪指标描述
+    if (emotionIndicators.includes('energetic')) {
+      description.push('显示精力充沛');
+    }
+    if (emotionIndicators.includes('contemplative')) {
+      description.push('体现深思状态');
+    }
+    if (emotionIndicators.includes('restless')) {
+      description.push('表现内心不安');
+    }
+    if (emotionIndicators.includes('concentrated')) {
+      description.push('显示专注集中');
+    }
+    
+    return description.join('，');
   },
 
   /**
@@ -872,6 +1168,58 @@ Page({
         showCancel: false
       });
       return;
+    }
+
+    // 🔥 检查用户生成配额
+    try {
+      const app = getApp();
+      const userId = app.globalData.user?.id || 'test_user';
+      
+      wx.showLoading({
+        title: '检查生成次数...',
+        mask: true
+      });
+      
+      const quotaInfo = await postcardAPI.getUserQuota(userId);
+      wx.hideLoading();
+      
+      if (!quotaInfo.can_generate) {
+        wx.showModal({
+          title: '生成次数已用完',
+          content: quotaInfo.message,
+          confirmText: '我知道了',
+          showCancel: false
+        });
+        return;
+      }
+      
+      // 显示配额提示
+      if (quotaInfo.remaining_quota <= 1) {
+        const shouldContinue = await new Promise(resolve => {
+          wx.showModal({
+            title: '生成提醒',
+            content: `${quotaInfo.message}，确定要生成吗？`,
+            confirmText: '确定生成',
+            cancelText: '暂不生成',
+            success: (res) => resolve(res.confirm),
+            fail: () => resolve(false)
+          });
+        });
+        
+        if (!shouldContinue) {
+          return;
+        }
+      }
+      
+    } catch (error) {
+      wx.hideLoading();
+      envConfig.error('检查配额失败:', error);
+      // 配额检查失败时不阻断用户操作，显示警告即可
+      wx.showToast({
+        title: '配额检查失败，将继续生成',
+        icon: 'none',
+        duration: 2000
+      });
     }
 
     // 检查环境信息是否已获取完成
@@ -936,6 +1284,26 @@ Page({
         currentStep: 0,
         loadingText: '正在感知你的情绪...'
       });
+
+      // Step 1: 获取情绪墨迹的base64数据（直接传给生成接口）
+      let emotionImageBase64 = null;
+      try {
+        // 检查是否有绘制内容
+        if (!this.emotionPath || this.emotionPath.length < 5) {
+          envConfig.log('没有足够的绘制内容，跳过图片处理');
+        } else {
+          this.setData({ loadingText: '提取情绪墨迹数据...' });
+          
+          // 直接获取canvas的base64数据
+          const imageData = await this.getCanvasBase64Data();
+          emotionImageBase64 = imageData.base64;
+          
+          envConfig.log('情绪墨迹base64数据提取成功，数据长度:', emotionImageBase64.length);
+        }
+      } catch (imageError) {
+        envConfig.warn('情绪图片数据提取失败，继续使用轨迹分析:', imageError);
+        // 图片处理失败不影响卡片生成，继续使用传统的轨迹分析
+      }
 
       // 模拟生成步骤
       setTimeout(() => {
@@ -1002,13 +1370,23 @@ Page({
       
       // 构建丰富的AI提示
       const userInput = this.buildEnhancedPrompt(locationInfo, emotionInfo, timeContext, trendingTopics);
+      
+      // 分析绘画轨迹数据
+      const drawingAnalysis = this.analyzeDrawingTrajectory();
 
       const requestData = {
         user_input: userInput,
         user_id: this.data.userInfo.id,
         // 增强的主题信息，便于后端AI理解
         theme: emotionInfo.type,
-        style: `emotion-compass-${emotionInfo.intensity}-${timeContext.period}`
+        style: `emotion-compass-${emotionInfo.intensity}-${timeContext.period}`,
+        // 添加绘画轨迹分析数据
+        drawing_data: {
+          trajectory: this.emotionPath || [],
+          analysis: drawingAnalysis
+        },
+        // 🆕 直接传递base64编码的情绪图片数据
+        emotion_image_base64: emotionImageBase64
       };
 
       // 发送生成请求
@@ -1076,6 +1454,10 @@ Page({
    * 翻转卡片
    */
   flipCard() {
+    // 若使用结构化组件，则由子组件自行处理翻转，这里不再切换父容器
+    if (this.data.todayCard && this.data.todayCard.structured_data) {
+      return;
+    }
     this.setData({
       cardFlipped: !this.data.cardFlipped
     });
@@ -1105,15 +1487,53 @@ Page({
       const response = await postcardAPI.getUserPostcards(this.data.userInfo.id, 1, 10);
       const cards = response.postcards || [];
       
-      const formattedCards = cards.map(card => ({
-        id: card.id,
-        date: new Date(card.created_at).toLocaleDateString('zh-CN', {
-          month: 'short',
-          day: 'numeric'
-        }),
-        keyword: card.concept || '回忆',
-        moodColor: this.getMoodColor(card.emotion_type)
-      }));
+      const formattedCards = cards.map(card => {
+        // 解析结构化数据，提取预览内容
+        let previewData = {
+          title: card.concept || '回忆',
+          mainText: '',
+          mood: '',
+          backgroundImage: ''
+        };
+        
+        if (card.structured_data) {
+          try {
+            const structured = typeof card.structured_data === 'string' 
+              ? JSON.parse(card.structured_data) 
+              : card.structured_data;
+            
+            previewData = {
+              title: structured.title || card.concept || '回忆',
+              mainText: structured.content?.main_text || card.quote || '',
+              mood: structured.mood?.primary || '',
+              backgroundImage: structured.visual?.background_image_url || card.image || ''
+            };
+          } catch (e) {
+            envConfig.warn('解析结构化数据失败:', e);
+          }
+        } else {
+          // 降级处理
+          previewData = {
+            title: card.concept || '回忆',
+            mainText: card.quote || '',
+            mood: card.emotion_type || '',
+            backgroundImage: card.image || ''
+          };
+        }
+        
+        return {
+          id: card.id,
+          date: new Date(card.created_at).toLocaleDateString('zh-CN', {
+            month: 'short',
+            day: 'numeric'
+          }),
+          keyword: previewData.title,
+          mainText: previewData.mainText.substring(0, 20) + (previewData.mainText.length > 20 ? '...' : ''),
+          mood: previewData.mood,
+          backgroundImage: previewData.backgroundImage,
+          moodColor: this.getMoodColor(card.emotion_type)
+        };
+      });
 
       this.setData({
         userCards: formattedCards
@@ -1143,8 +1563,23 @@ Page({
    */
   viewCard(e) {
     const { cardId } = e.currentTarget.dataset;
+    
+    envConfig.log('点击查看卡片, cardId:', cardId);
+    
+    if (!cardId) {
+      envConfig.error('卡片ID缺失');
+      const app = getApp();
+      app.utils?.showError('卡片信息异常，请重试');
+      return;
+    }
+    
     wx.navigateTo({
-      url: `/pages/postcard/postcard?id=${cardId}`
+      url: `/pages/postcard/postcard?id=${cardId}`,
+      fail: (error) => {
+        envConfig.error('页面跳转失败:', error);
+        const app = getApp();
+        app.utils?.showError('页面跳转失败，请重试');
+      }
     });
   },
 
@@ -1174,15 +1609,26 @@ Page({
    */
   onShareAppMessage() {
     if (this.data.todayCard) {
+      const card = this.data.todayCard;
+      let shareTitle = '我在AI明信片记录了今天的心情';
+      
+      // 使用更丰富的分享标题
+      if (card.keyword && card.keyword !== '今日心境') {
+        shareTitle = `${card.keyword} | 我的AI明信片`;
+      } else if (card.quote && card.quote.length > 0) {
+        const shortQuote = card.quote.length > 20 ? card.quote.substring(0, 20) + '...' : card.quote;
+        shareTitle = `"${shortQuote}" | 我的AI明信片`;
+      }
+      
       return {
-        title: `我在情绪罗盘记录了今天的心情：${this.data.todayCard.keyword}`,
-        path: `/pages/postcard/postcard?id=${this.data.todayCard.id}`,
-        imageUrl: this.data.todayCard.image || ''
+        title: shareTitle,
+        path: `/pages/postcard/postcard?id=${card.id}`,
+        imageUrl: card.image || ''
       };
     }
     
     return {
-      title: '情绪罗盘 - 每一天，都值得被温柔记录',
+      title: 'AI明信片 - 每一天，都值得被温柔记录',
       path: '/pages/index/index'
     };
   },
@@ -1191,8 +1637,27 @@ Page({
    * 分享到朋友圈
    */
   onShareTimeline() {
+    const cityName = this.data.cityName;
+    const weatherInfo = this.data.weatherInfo;
+    
+    let timelineTitle = 'AI明信片 - 每一天，都值得被温柔记录';
+    
+    // 结合环境信息的朋友圈标题
+    if (this.data.todayCard) {
+      const card = this.data.todayCard;
+      if (card.keyword && cityName) {
+        timelineTitle = `${card.keyword} | ${cityName}的AI明信片`;
+      } else if (cityName && weatherInfo) {
+        timelineTitle = `${cityName}，${weatherInfo} | AI明信片记录`;
+      } else if (card.keyword) {
+        timelineTitle = `${card.keyword} | AI明信片`;
+      }
+    } else if (cityName && weatherInfo) {
+      timelineTitle = `${cityName}，${weatherInfo} | AI明信片创作`;
+    }
+    
     return {
-      title: '情绪罗盘 - 每一天，都值得被温柔记录',
+      title: timelineTitle,
       imageUrl: this.data.todayCard?.image || ''
     };
   },
@@ -1446,6 +1911,15 @@ ${trendingTopics ? `• 当地热点：${trendingTopics}` : ''}
           });
         }
       }
+    });
+  },
+
+  /**
+   * 跳转到测试页面
+   */
+  goToTestPage() {
+    wx.navigateTo({
+      url: '/pages/flip-test/flip-test'
     });
   }
 });

@@ -19,4 +19,6 @@ class PostcardGenerationTask(BaseModel):
     theme: Optional[str] = None
     user_id: Optional[str] = None
     created_at: str
+    # 🆕 版本3.0新增：直接包含base64编码的情绪图片数据
+    emotion_image_base64: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)

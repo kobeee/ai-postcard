@@ -46,7 +46,7 @@
   <!-- 核心卡片区域 -->
   <view class="card-container" wx:if="{{hasUserInfo}}">
     <!-- 今日卡片 -->
-    <view class="daily-card {{cardFlipped ? 'flipped' : ''}}" wx:if="{{todayCard}}" bindtap="flipCard">
+    <view class="daily-card" wx:if="{{todayCard}}">
       <!-- 结构化卡片展示 -->
       <view class="card-display-area" wx:if="{{todayCard}}">
         <!-- 使用结构化卡片组件（如果有结构化数据） -->
@@ -57,7 +57,6 @@
           fallback-english="{{todayCard.english}}"
           show-animation="{{false}}"
           size-mode="standard"
-          bind:cardtap="onStructuredCardTap"
           bind:recommendationtap="onRecommendationTap"
           bind:share="onStructuredCardShare"
         ></structured-postcard>
@@ -227,9 +226,24 @@
         bindtap="viewCard"
         data-card-id="{{item.id}}"
       >
-        <view class="memory-date">{{item.date}}</view>
-        <view class="memory-keyword">{{item.keyword}}</view>
-        <view class="memory-mood" style="background: {{item.moodColor}}"></view>
+        <!-- 卡片背景图片 -->
+        <image 
+          wx:if="{{item.backgroundImage}}"
+          class="memory-bg"
+          src="{{item.backgroundImage}}" 
+          mode="aspectFill"
+        ></image>
+        <view class="memory-overlay"></view>
+        
+        <!-- 卡片内容 -->
+        <view class="memory-content">
+          <view class="memory-date">{{item.date}}</view>
+          <view class="memory-title">{{item.keyword}}</view>
+          <view class="memory-text" wx:if="{{item.mainText}}">{{item.mainText}}</view>
+          <view class="memory-mood-label" wx:if="{{item.mood}}">{{item.mood}}</view>
+        </view>
+        
+        <view class="memory-mood-bar" style="background: {{item.moodColor}}"></view>
       </view>
     </scroll-view>
   </view>

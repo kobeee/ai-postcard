@@ -1,0 +1,29 @@
+<!-- flip-test.wxml - 卡片翻转测试页面 -->
+<view class="page">
+  <view class="container">
+    <view class="title">卡片翻转测试</view>
+    
+    <!-- 测试卡片 -->
+    <view class="card-container">
+      <view class="card {{isFlipped ? 'flipped' : ''}}" bindtap="flipCard">
+        <!-- 正面 -->
+        <view class="card-front">
+          <text class="card-text">正面</text>
+          <text class="card-subtitle">点击翻转</text>
+        </view>
+        
+        <!-- 背面 -->
+        <view class="card-back">
+          <text class="card-text">背面</text>
+          <text class="card-subtitle">黑色背景</text>
+        </view>
+      </view>
+    </view>
+    
+    <!-- 控制按钮 -->
+    <view class="controls">
+      <button bindtap="flipCard" class="flip-button">手动翻转</button>
+      <button bindtap="goBack" class="back-button">返回</button>
+    </view>
+  </view>
+</view>

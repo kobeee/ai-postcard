@@ -4,6 +4,7 @@ certifi==2025.8.3
 charset-normalizer==3.4.3
 click==8.2.1
 fastapi==0.116.1
+python-multipart>=0.0.6  # 支持文件上传的表单数据处理
 h11==0.16.0
 httptools==0.6.4
 idna==3.10

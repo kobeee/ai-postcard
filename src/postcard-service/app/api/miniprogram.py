@@ -99,6 +99,17 @@ def flatten_structured_data(structured_data: dict) -> dict:
                 "recommendations_movie_director": movie.get('director', ''),
                 "recommendations_movie_reason": movie.get('reason', ''),
             })
+        
+        # 🔥 关键新增：8个扩展字段处理（卡片背面内容的核心）
+        extras = structured_data.get('extras', {})
+        if extras and isinstance(extras, dict):
+            extras_fields = ['reflections', 'gratitude', 'micro_actions', 'mood_tips', 
+                           'life_insights', 'creative_spark', 'mindfulness', 'future_vision']
+            
+            for field in extras_fields:
+                if field in extras:
+                    flat_field_name = f'extras_{field}'
+                    flattened_data[flat_field_name] = extras[field]
     
     return flattened_data
 
@@ -171,16 +182,25 @@ async def get_miniprogram_postcard_status(
             "data": None
         }
 
-@router.get("/postcards/result/{task_id}")
+@router.get("/postcards/result/{id}")
 async def get_miniprogram_postcard_result(
-    task_id: str,
+    id: str,
     db: Session = Depends(get_db),
     x_client_type: Optional[str] = Header(None)
 ):
-    """小程序：获取明信片最终结果"""
+    """小程序：获取明信片最终结果（支持任务ID或明信片ID）"""
     try:
         service = PostcardService(db)
-        result = await service.get_task_result(task_id)
+        
+        # 首先尝试按任务ID查询
+        result = await service.get_task_result(id)
+        
+        # 如果按任务ID找不到，再尝试按明信片ID查询
+        if not result:
+            result = await service.get_postcard_by_id(id)
+            # 确保明信片已完成
+            if result and result.status != "completed":
+                result = None
         
         if not result:
             return {
@@ -226,7 +246,7 @@ async def get_miniprogram_postcard_result(
             "message": "获取结果成功",
             "data": {
                 "postcard_id": result.id,
-                "task_id": task_id,
+                "task_id": result.task_id,
                 "content": result.content,
                 "concept": result.concept,
                 "image_url": result.image_url,  # Gemini生成的原图
@@ -348,16 +368,20 @@ async def delete_miniprogram_postcard(
 ):
     """小程序：删除明信片"""
     try:
+        logger.info(f"收到删除明信片请求: {postcard_id}")
+        
         service = PostcardService(db)
         success = await service.delete_postcard(postcard_id)
         
         if not success:
+            logger.warning(f"明信片不存在或已被删除: {postcard_id}")
             return {
                 "code": -1,
                 "message": "明信片不存在或已被删除",
                 "data": None
             }
         
+        logger.info(f"明信片删除成功: {postcard_id}")
         return {
             "code": 0,
             "message": "删除成功",
@@ -442,5 +466,29 @@ async def get_shared_miniprogram_postcard(
         return {
             "code": -1,
             "message": f"获取分享明信片失败: {str(e)}",
+            "data": None
+        }
+
+@router.get("/users/{user_id}/quota")
+async def get_user_generation_quota(
+    user_id: str,
+    db: Session = Depends(get_db),
+    x_client_type: Optional[str] = Header(None)
+):
+    """小程序：获取用户生成配额信息"""
+    try:
+        service = PostcardService(db)
+        quota_info = await service.quota_service.check_generation_quota(user_id)
+        
+        return {
+            "code": 0,
+            "message": "获取配额信息成功",
+            "data": quota_info
+        }
+    except Exception as e:
+        logger.error(f"获取用户配额失败: {user_id} - {str(e)}")
+        return {
+            "code": -1,
+            "message": f"获取配额失败: {str(e)}",
             "data": None
         }
