@@ -77,7 +77,13 @@ async def proxy_request(
         
         # 准备请求头
         headers = dict(request.headers)
+        # 移除会导致上游与实际转发内容不一致的头部
         headers.pop("host", None)  # 移除原始host头
+        headers.pop("content-length", None)
+        headers.pop("transfer-encoding", None)
+        # 对于无请求体的方法，不转发 content-type，避免误导上游
+        if method.upper() not in ["POST", "PUT", "PATCH"]:
+            headers.pop("content-type", None)
         headers["X-Client-Type"] = "miniprogram"
         headers["X-Forwarded-For"] = request.client.host
         

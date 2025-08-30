@@ -15,11 +15,23 @@ class RequestManager {
     
     // 默认请求拦截器
     this.addRequestInterceptor((config) => {
-      // 添加通用headers
-      config.header = {
-        'Content-Type': 'application/json',
-        ...config.header
-      };
+      const methodUpper = (config.method || 'GET').toUpperCase();
+      const hasBody = ['POST', 'PUT', 'PATCH'].includes(methodUpper);
+      
+      // 仅在有请求体的方法上设置 Content-Type；无体方法移除以避免误判
+      config.header = { ...config.header };
+      if (hasBody) {
+        if (!config.header['Content-Type']) {
+          config.header['Content-Type'] = 'application/json';
+        }
+      } else {
+        delete config.header['Content-Type'];
+      }
+      
+      // 无体方法不携带 data，避免产生意外的 Content-Length
+      if (!hasBody && 'data' in config) {
+        delete config.data;
+      }
       
       // 添加用户token（如果存在）
       const token = wx.getStorageSync('userToken');
@@ -102,14 +114,19 @@ class RequestManager {
    */
   async request(options) {
     try {
-      // 构建请求配置
+      // 构建请求配置（无体方法不默认附加 data）
+      const method = options.method || 'GET';
+      const methodUpper = method.toUpperCase();
+      const hasBody = ['POST', 'PUT', 'PATCH'].includes(methodUpper);
       let config = {
         url: options.url.startsWith('http') ? options.url : `${this.baseURL}${options.url}`,
-        method: options.method || 'GET',
-        data: options.data || {},
+        method,
         header: options.header || {},
         timeout: options.timeout || this.timeout
       };
+      if (hasBody && typeof options.data !== 'undefined') {
+        config.data = options.data;
+      }
       
       // 执行请求拦截器
       config = await this.executeRequestInterceptors(config);

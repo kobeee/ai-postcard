@@ -114,10 +114,34 @@ Page({
       app.utils.hideLoading();
       app.utils.showSuccess('删除成功');
       
-      // 返回上一页
+      // 若删除的是今日生成的卡片，首页需重置到画布初始状态
+      try {
+        const pc = this.data.postcard;
+        let isToday = true;
+        if (pc && pc.created_at) {
+          const todayStr = new Date().toDateString();
+          const cardDayStr = new Date(pc.created_at).toDateString();
+          isToday = (todayStr === cardDayStr);
+        }
+        if (isToday) {
+          app.globalData = app.globalData || {};
+          app.globalData.resetToCanvas = true;
+        }
+      } catch (_) {}
+      
+      // 返回首页：优先返回上一页，失败则重启到首页
       setTimeout(() => {
-        wx.navigateBack();
-      }, 1500);
+        try {
+          wx.navigateBack({
+            delta: 1,
+            fail: () => {
+              wx.reLaunch({ url: '/pages/index/index' });
+            }
+          });
+        } catch (_) {
+          wx.reLaunch({ url: '/pages/index/index' });
+        }
+      }, 800);
       
     } catch (error) {
       envConfig.error('删除明信片失败:', error);

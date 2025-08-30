@@ -60,6 +60,22 @@ Page({
     // 刷新用户状态
     this.refreshUserStatus();
     
+    // 若从删除返回并被标记为重置，则清理今日卡片并回到画布
+    try {
+      const app = getApp();
+      if (app.globalData && app.globalData.resetToCanvas) {
+        app.globalData.resetToCanvas = false;
+        // 清空今日卡片并重新初始化画布
+        this.setData({ todayCard: null, needEmotionInput: true, cardFlipped: false });
+        this.clearInk();
+        this.initCanvas();
+        // 刷新记忆画廊
+        this.loadUserCards();
+        // 跳过本次配额检查，直接展示画布
+        return;
+      }
+    } catch (_) {}
+    
     // 检查是否有今日卡片
     if (this.data.hasUserInfo && !this.data.todayCard) {
       this.checkTodayCard();
@@ -1446,7 +1462,19 @@ Page({
       });
 
       const app = getApp();
-      app.utils.showError('生成失败，请重试');
+      const errMsg = (error && error.message) || '';
+      const quotaKeywords = ['超出', '次数', '配额', 'quota', 'limit'];
+      const isQuotaExceeded = quotaKeywords.some(k => errMsg.includes(k));
+      
+      if (isQuotaExceeded) {
+        wx.showToast({
+          title: '今日生成次数已用完',
+          icon: 'none',
+          duration: 3000
+        });
+      } else {
+        app.utils.showError('生成失败，请重试');
+      }
     }
   },
 
