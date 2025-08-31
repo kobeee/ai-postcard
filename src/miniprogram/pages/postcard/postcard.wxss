@@ -17,7 +17,7 @@ page {
   --text-muted: rgba(255, 255, 255, 0.7);
   
   /* 背景色彩 */
-  --bg-gradient: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+  --bg-gradient: linear-gradient(180deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
   --bg-card: rgba(255, 255, 255, 0.95);
   --bg-overlay: rgba(0, 0, 0, 0.1);
   
@@ -37,9 +37,10 @@ page {
   min-height: 100vh;
   box-sizing: border-box;
   background: transparent;
+  position: relative;
 }
 
-/* 确保整个页面背景覆盖 */
+/* 升级页面背景装饰效果 */
 .container::before {
   content: '';
   position: fixed;
@@ -47,7 +48,10 @@ page {
   left: 0;
   width: 100%;
   height: 200vh;
-  background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+  background: 
+    var(--bg-gradient),
+    radial-gradient(circle at 20% 80%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
   z-index: -1;
   pointer-events: none;
 }
@@ -75,21 +79,35 @@ page {
 .loading-spinner {
   width: 80rpx;
   height: 80rpx;
-  border: 4rpx solid rgba(255, 255, 255, 0.3);
+  /* 升级加载动画效果 */
+  border: 4rpx solid rgba(255, 255, 255, 0.2);
   border-top: 4rpx solid #fff;
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin-bottom: 32rpx;
+  box-shadow: 0 0 20rpx rgba(255, 255, 255, 0.3);
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% { 
+    transform: rotate(0deg); 
+    box-shadow: 0 0 20rpx rgba(255, 255, 255, 0.3);
+  }
+  100% { 
+    transform: rotate(360deg); 
+    box-shadow: 0 0 30rpx rgba(255, 255, 255, 0.5);
+  }
 }
 
 .loading-text {
   color: var(--text-light);
   font-size: 32rpx;
+  /* 添加加载文字效果 */
+  text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.3);
+  background: linear-gradient(135deg, #fff 0%, rgba(255, 255, 255, 0.8) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 /* 错误状态 */
@@ -105,6 +123,8 @@ page {
 .error-icon {
   font-size: 120rpx;
   margin-bottom: 32rpx;
+  /* 添加错误图标发光效果 */
+  filter: drop-shadow(0 0 20rpx rgba(239, 68, 68, 0.5));
 }
 
 .error-text {
@@ -112,15 +132,28 @@ page {
   font-size: 32rpx;
   margin-bottom: 48rpx;
   line-height: 1.4;
+  text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.3);
 }
 
 .retry-btn {
+  /* 升级重试按钮效果 */
   background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
   color: var(--text-light);
   border: none;
   border-radius: 48rpx;
   padding: 24rpx 48rpx;
   font-size: 30rpx;
+  box-shadow: 
+    0 8rpx 32rpx rgba(99, 102, 241, 0.4),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.2);
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.retry-btn:hover {
+  transform: translateY(-4rpx) scale(1.02);
+  box-shadow: 
+    0 12rpx 40rpx rgba(99, 102, 241, 0.5),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.3);
 }
 
 /* 明信片容器 */
@@ -132,13 +165,19 @@ page {
 /* 动态组件区域 */
 .dynamic-section {
   position: relative;
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 24rpx;
+  /* 升级动态区域背景效果 */
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.98) 0%, 
+    rgba(255, 255, 255, 0.95) 100%);
+  border-radius: 28rpx;
   padding: 0;
   margin-bottom: 32rpx;
-  backdrop-filter: blur(10px);
-  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(15rpx);
+  box-shadow: 
+    0 12rpx 40rpx rgba(0, 0, 0, 0.15),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.8);
   overflow: hidden;
+  border: 2rpx solid rgba(255, 255, 255, 0.3);
 }
 
 .component-badge {
@@ -151,40 +190,55 @@ page {
 }
 
 .ai-tag {
-  background: linear-gradient(45deg, #667eea, #764ba2);
+  /* 升级AI标签效果 */
+  background: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
   color: white;
-  padding: 6rpx 12rpx;
-  border-radius: 16rpx;
+  padding: 8rpx 16rpx;
+  border-radius: 20rpx;
   font-size: 20rpx;
   font-weight: 600;
+  box-shadow: 0 4rpx 16rpx rgba(102, 126, 234, 0.4);
+  border: 1rpx solid rgba(255, 255, 255, 0.3);
 }
 
 .animation-tag {
-  background: linear-gradient(45deg, #ff6b6b, #feca57);
+  /* 升级动画标签效果 */
+  background: linear-gradient(45deg, #ff6b6b 0%, #feca57 100%);
   color: white;
-  padding: 6rpx 12rpx;
-  border-radius: 16rpx;
+  padding: 8rpx 16rpx;
+  border-radius: 20rpx;
   font-size: 20rpx;
   font-weight: 600;
+  box-shadow: 0 4rpx 16rpx rgba(255, 107, 107, 0.4);
+  border: 1rpx solid rgba(255, 255, 255, 0.3);
 }
 
 .interactive-tag {
-  background: linear-gradient(45deg, #48bb78, #38a169);
+  /* 升级交互标签效果 */
+  background: linear-gradient(45deg, #48bb78 0%, #38a169 100%);
   color: white;
-  padding: 6rpx 12rpx;
-  border-radius: 16rpx;
+  padding: 8rpx 16rpx;
+  border-radius: 20rpx;
   font-size: 20rpx;
   font-weight: 600;
+  box-shadow: 0 4rpx 16rpx rgba(72, 187, 120, 0.4);
+  border: 1rpx solid rgba(255, 255, 255, 0.3);
 }
 
 /* 图片区域 */
 .image-section {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 24rpx;
+  /* 升级图片区域效果 */
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.98) 0%, 
+    rgba(255, 255, 255, 0.95) 100%);
+  border-radius: 28rpx;
   padding: 24rpx;
   margin-bottom: 32rpx;
-  backdrop-filter: blur(10px);
-  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(15rpx);
+  box-shadow: 
+    0 12rpx 40rpx rgba(0, 0, 0, 0.15),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.8);
+  border: 2rpx solid rgba(255, 255, 255, 0.3);
 }
 
 .image-badge {
@@ -197,8 +251,19 @@ page {
 .postcard-image {
   width: 100%;
   min-height: 400rpx;
-  border-radius: 16rpx;
-  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.1);
+  border-radius: 20rpx;
+  /* 升级图片阴影效果 */
+  box-shadow: 
+    0 12rpx 32rpx rgba(0, 0, 0, 0.15),
+    0 0 0 1rpx rgba(255, 255, 255, 0.2);
+  transition: all 0.3s ease;
+}
+
+.postcard-image:hover {
+  transform: scale(1.02);
+  box-shadow: 
+    0 16rpx 48rpx rgba(0, 0, 0, 0.2),
+    0 0 0 1rpx rgba(255, 255, 255, 0.3);
 }
 
 /* 信息区域 */
@@ -207,12 +272,26 @@ page {
 }
 
 .content-card, .meta-card, .interactive-card {
-  background: var(--bg-card);
-  border-radius: var(--border-radius);
+  /* 升级信息卡片效果 */
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.98) 0%, 
+    rgba(255, 255, 255, 0.95) 100%);
+  border-radius: 24rpx;
   padding: 32rpx;
   margin-bottom: 24rpx;
-  backdrop-filter: blur(10px);
-  box-shadow: var(--box-shadow);
+  backdrop-filter: blur(15rpx);
+  box-shadow: 
+    0 12rpx 40rpx rgba(0, 0, 0, 0.12),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.8);
+  border: 2rpx solid rgba(255, 255, 255, 0.3);
+  transition: all 0.3s ease;
+}
+
+.content-card:hover, .meta-card:hover, .interactive-card:hover {
+  transform: translateY(-4rpx);
+  box-shadow: 
+    0 16rpx 48rpx rgba(0, 0, 0, 0.15),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.9);
 }
 
 .card-header {
@@ -225,13 +304,25 @@ page {
 .content-card-title {
   font-size: 32rpx;
   font-weight: 600;
-  color: var(--text-primary);
+  /* 升级卡片标题效果 */
+  background: linear-gradient(135deg, var(--text-primary) 0%, var(--primary-color) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .copy-btn, .preview-btn {
   font-size: 32rpx;
   padding: 8rpx;
   cursor: pointer;
+  /* 添加按钮悬停效果 */
+  transition: all 0.3s ease;
+  border-radius: 8rpx;
+}
+
+.copy-btn:hover, .preview-btn:hover {
+  background: rgba(99, 102, 241, 0.1);
+  transform: scale(1.1);
 }
 
 .postcard-content {
@@ -245,6 +336,11 @@ page {
 .meta-item {
   display: flex;
   margin-bottom: 16rpx;
+  /* 添加元信息项装饰 */
+  padding: 12rpx;
+  background: rgba(99, 102, 241, 0.05);
+  border-radius: 12rpx;
+  border-left: 4rpx solid var(--primary-color);
 }
 
 .meta-item:last-child {
@@ -256,6 +352,7 @@ page {
   color: #718096;
   width: 160rpx;
   flex-shrink: 0;
+  font-weight: 600;
 }
 
 .meta-value {
@@ -293,42 +390,84 @@ page {
   align-items: center;
   justify-content: center;
   padding: 32rpx 16rpx;
-  border-radius: 20rpx;
+  border-radius: 24rpx;
   border: none;
   font-size: 26rpx;
   font-weight: 500;
-  backdrop-filter: blur(10px);
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.1);
-  transition: all 0.3s ease;
+  backdrop-filter: blur(15rpx);
+  /* 升级操作按钮阴影效果 */
+  box-shadow: 
+    0 8rpx 24rpx rgba(0, 0, 0, 0.12),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.2);
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  position: relative;
+  overflow: hidden;
+}
+
+/* 添加按钮光效 */
+.action-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, 
+    transparent, 
+    rgba(255, 255, 255, 0.2), 
+    transparent);
+  transition: left 0.6s;
+}
+
+.action-btn:hover::before,
+.action-btn.button-hover::before {
+  left: 100%;
 }
 
 .action-btn.primary {
+  /* 升级主要按钮效果 */
   background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
   color: #fff;
+  box-shadow: 
+    0 8rpx 24rpx rgba(72, 187, 120, 0.4),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.2);
 }
 
 .action-btn.secondary {
-  background: rgba(255, 255, 255, 0.9);
+  /* 升级次要按钮效果 */
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.95) 0%, 
+    rgba(255, 255, 255, 0.9) 100%);
   color: #2d3748;
+  border: 2rpx solid rgba(99, 102, 241, 0.2);
 }
 
 .action-btn.danger {
+  /* 升级危险按钮效果 */
   background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
   color: #fff;
+  box-shadow: 
+    0 8rpx 24rpx rgba(245, 101, 101, 0.4),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.2);
 }
 
 .action-btn.button-hover {
-  transform: translateY(-4rpx);
-  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.15);
+  transform: translateY(-6rpx) scale(1.02);
+  box-shadow: 
+    0 16rpx 40rpx rgba(0, 0, 0, 0.2),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.3);
 }
 
 .btn-icon {
   font-size: 36rpx;
   margin-bottom: 12rpx;
+  /* 添加图标发光效果 */
+  filter: drop-shadow(0 2rpx 8rpx rgba(0, 0, 0, 0.2));
 }
 
 .btn-text {
   font-size: 24rpx;
+  text-shadow: 0 1rpx 2rpx rgba(0, 0, 0, 0.1);
 }
 
 /* 底部信息 */
@@ -340,8 +479,9 @@ page {
 .footer-text {
   display: block;
   font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.8);
   margin-bottom: 12rpx;
+  text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.3);
 }
 
 .footer-link {
@@ -349,6 +489,14 @@ page {
   color: #fff;
   text-decoration: underline;
   cursor: pointer;
+  /* 添加链接悬停效果 */
+  transition: all 0.3s ease;
+  text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.3);
+}
+
+.footer-link:hover {
+  color: rgba(255, 255, 255, 0.8);
+  text-shadow: 0 0 10rpx rgba(255, 255, 255, 0.5);
 }
 
 /* ===== ✅ 结构化明信片区域 ===== */
@@ -363,17 +511,23 @@ page {
   gap: 12rpx;
   margin-top: 16rpx;
   padding: 12rpx 24rpx;
-  background: linear-gradient(135deg, #10b981, #059669);
-  border-radius: 24rpx;
+  /* 升级成功指示器效果 */
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border-radius: 28rpx;
   max-width: 400rpx;
   margin-left: auto;
   margin-right: auto;
+  box-shadow: 
+    0 8rpx 24rpx rgba(16, 185, 129, 0.4),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.2);
+  border: 1rpx solid rgba(255, 255, 255, 0.3);
 }
 
 .success-text, .parse-status {
   font-size: 24rpx;
   color: white;
   font-weight: 500;
+  text-shadow: 0 1rpx 2rpx rgba(0, 0, 0, 0.2);
 }
 
 /* ===== 🔥 降级方案：全新超简单卡片 ===== */
@@ -439,8 +593,10 @@ page {
 .card-subtitle {
   display: block;
   font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.8);
-  letter-spacing: 2rpx;
+  color: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
 }
 
 .card-image-section {
@@ -551,37 +707,53 @@ page {
 .structured-section {
   position: relative;
   margin-bottom: 40rpx;
-  border-radius: 24rpx;
+  border-radius: 28rpx;
   overflow: hidden;
-  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.12);
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
+  /* 升级结构化区域阴影效果 */
+  box-shadow: 
+    0 16rpx 48rpx rgba(0, 0, 0, 0.15),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.8);
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.98) 0%, 
+    rgba(255, 255, 255, 0.95) 100%);
+  backdrop-filter: blur(15rpx);
+  border: 2rpx solid rgba(255, 255, 255, 0.3);
 }
 
 .structured-badge {
-  background: linear-gradient(135deg, #10b981, #059669);
+  /* 升级结构化标识效果 */
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  box-shadow: 0 4rpx 16rpx rgba(16, 185, 129, 0.4);
 }
 
 .dynamic-badge {
-  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  /* 升级动态标识效果 */
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  box-shadow: 0 4rpx 16rpx rgba(59, 130, 246, 0.4);
 }
 
 .data-tag {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.3);
   color: white;
   padding: 4rpx 12rpx;
   border-radius: 12rpx;
   font-size: 22rpx;
   margin-left: 8rpx;
+  /* 添加数据标签阴影 */
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.2);
 }
 
 /* ===== 内容显示优化 ===== */
 .structured-content-summary {
   padding: 24rpx;
-  background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
-  border-radius: 16rpx;
+  /* 升级内容摘要背景效果 */
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border-radius: 20rpx;
   border: 2rpx solid #0284c7;
   margin-bottom: 16rpx;
+  box-shadow: 
+    0 4rpx 16rpx rgba(2, 132, 199, 0.1),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.8);
 }
 
 .content-title {
@@ -601,10 +773,14 @@ page {
 
 .raw-content-display {
   padding: 24rpx;
-  background: #fef3c7;
-  border-radius: 16rpx;
+  /* 升级原始内容显示效果 */
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-radius: 20rpx;
   border: 2rpx solid #f59e0b;
   margin-bottom: 16rpx;
+  box-shadow: 
+    0 4rpx 16rpx rgba(245, 158, 11, 0.1),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.8);
 }
 
 .content-warning {
@@ -617,17 +793,23 @@ page {
 
 .fallback-warning {
   padding: 20rpx;
-  background: #fef2f2;
-  border-radius: 12rpx;
+  /* 升级警告区域效果 */
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+  border-radius: 16rpx;
   border: 2rpx solid #ef4444;
   margin-bottom: 20rpx;
   display: flex;
   align-items: center;
   gap: 12rpx;
+  box-shadow: 
+    0 4rpx 16rpx rgba(239, 68, 68, 0.1),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.8);
 }
 
 .warning-icon {
   font-size: 32rpx;
+  /* 添加警告图标发光效果 */
+  filter: drop-shadow(0 0 8rpx rgba(239, 68, 68, 0.5));
 }
 
 .warning-text {
@@ -638,11 +820,15 @@ page {
 
 /* ===== 调试信息样式 ===== */
 .debug-card {
-  background: #f8fafc;
-  border-radius: 16rpx;
+  /* 升级调试卡片效果 */
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-radius: 20rpx;
   padding: 24rpx;
   margin-bottom: 24rpx;
   border: 2rpx dashed #64748b;
+  box-shadow: 
+    0 4rpx 16rpx rgba(100, 116, 139, 0.1),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.8);
 }
 
 .debug-item {
@@ -684,7 +870,7 @@ page {
 }
 
 /* 响应式适配 */
-@media screen and (max-width: 750px) {
+@media screen and (max-width: 750rpx) {
   .container {
     padding: 16rpx;
   }
@@ -712,5 +898,9 @@ page {
   
   .debug-value, .debug-preview {
     font-size: 22rpx;
+  }
+  
+  .dynamic-section, .image-section, .structured-section {
+    border-radius: 24rpx;
   }
 }

@@ -2,21 +2,40 @@
 
 /* 页面基础 */
 .page {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 60%, #a8edea 100%);
+  /* 升级背景渐变，使用更现代的色彩搭配 */
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
   min-height: 100vh;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   overflow-x: hidden;
+  /* 添加背景纹理效果 */
+  position: relative;
+}
+
+/* 添加背景纹理层 */
+.page::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: 
+    radial-gradient(circle at 20% 80%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 40% 40%, rgba(255, 255, 255, 0.05) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
 }
 
 /* 主容器 */
 .compass-container {
   position: relative;
   min-height: 100vh;
-  padding: 40rpx 30rpx;    /* 统一使用30rpx边距，确保总宽度750rpx-60rpx=690rpx */
-  /* 预留底部安全区，防止内容与底栏/记忆区域贴合或被遮挡 */
+  padding: 40rpx 30rpx;
   padding-bottom: calc(200rpx + env(safe-area-inset-bottom));
   padding-bottom: calc(200rpx + constant(safe-area-inset-bottom));
   box-sizing: border-box;
+  z-index: 1;
 }
 
 /* 背景装饰 */
@@ -34,17 +53,28 @@
   position: absolute;
   width: 8rpx;
   height: 8rpx;
-  background: rgba(255, 255, 255, 0.3);
+  /* 优化粒子效果，添加渐变色彩 */
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0.2) 100%);
   border-radius: 50%;
   animation: float 6s ease-in-out infinite;
   animation-delay: var(--delay);
   left: var(--x);
   top: var(--y);
+  /* 添加发光效果 */
+  box-shadow: 0 0 10rpx rgba(255, 255, 255, 0.3);
 }
 
 @keyframes float {
-  0%, 100% { transform: translateY(0px) scale(1); opacity: 0.3; }
-  50% { transform: translateY(-20px) scale(1.2); opacity: 0.8; }
+  0%, 100% { 
+    transform: translateY(0px) scale(1); 
+    opacity: 0.3; 
+  }
+  50% { 
+    transform: translateY(-30rpx) scale(1.3); 
+    opacity: 0.9; 
+    /* 添加发光动画 */
+    box-shadow: 0 0 20rpx rgba(255, 255, 255, 0.5);
+  }
 }
 
 /* 用户状态区域 */
@@ -68,24 +98,37 @@
   width: 100%;
   height: 100%;
   border-radius: 50%;
-  border: 4rpx solid rgba(255, 255, 255, 0.8);
-  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.15);
+  /* 升级头像边框效果 */
+  border: 4rpx solid rgba(255, 255, 255, 0.9);
+  box-shadow: 
+    0 8rpx 32rpx rgba(0, 0, 0, 0.15),
+    0 0 0 8rpx rgba(255, 255, 255, 0.1);
 }
 
 .ring-glow {
   position: absolute;
-  top: -8rpx;
-  left: -8rpx;
-  right: -8rpx;
-  bottom: -8rpx;
-  border: 2rpx solid rgba(255, 255, 255, 0.4);
+  top: -12rpx;
+  left: -12rpx;
+  right: -12rpx;
+  bottom: -12rpx;
+  /* 优化光环效果 */
+  border: 3rpx solid rgba(255, 255, 255, 0.6);
   border-radius: 50%;
   animation: pulse 3s ease-in-out infinite;
+  background: radial-gradient(circle, transparent 60%, rgba(255, 255, 255, 0.1) 100%);
 }
 
 @keyframes pulse {
-  0%, 100% { transform: scale(1); opacity: 0.4; }
-  50% { transform: scale(1.1); opacity: 0.8; }
+  0%, 100% { 
+    transform: scale(1); 
+    opacity: 0.4; 
+    border-color: rgba(255, 255, 255, 0.4);
+  }
+  50% { 
+    transform: scale(1.15); 
+    opacity: 0.8; 
+    border-color: rgba(255, 255, 255, 0.8);
+  }
 }
 
 .greeting-text {
@@ -93,13 +136,20 @@
   font-weight: 600;
   color: #fff;
   margin-bottom: 12rpx;
-  text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.2);
+  /* 增强文字阴影效果 */
+  text-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.3);
+  letter-spacing: 1rpx;
 }
 
 .date-info {
   font-size: 26rpx;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.9);
   letter-spacing: 1rpx;
+  /* 添加背景装饰 */
+  background: rgba(255, 255, 255, 0.1);
+  padding: 8rpx 16rpx;
+  border-radius: 20rpx;
+  backdrop-filter: blur(10rpx);
 }
 
 /* 登录容器 */
@@ -116,54 +166,90 @@
 
 .compass-logo {
   margin-bottom: 80rpx;
+  /* 添加整体动画效果 */
+  animation: logoFloat 4s ease-in-out infinite;
+}
+
+/* 新增logo浮动动画 */
+@keyframes logoFloat {
+  0%, 100% { transform: translateY(0rpx); }
+  50% { transform: translateY(-10rpx); }
 }
 
 .compass-ring {
   position: relative;
   width: 200rpx;
   height: 200rpx;
-  border: 6rpx solid rgba(255, 255, 255, 0.3);
+  /* 升级罗盘环效果 */
+  border: 6rpx solid rgba(255, 255, 255, 0.4);
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
+  background: 
+    radial-gradient(circle, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.05) 100%);
+  backdrop-filter: blur(15rpx);
   display: flex;
   align-items: center;
   justify-content: center;
-  /* 只让底盘微弱呼吸，避免公转导致针位移错觉 */
-  animation: none;
+  box-shadow: 
+    0 0 0 2rpx rgba(255, 255, 255, 0.1),
+    0 20rpx 40rpx rgba(0, 0, 0, 0.2),
+    inset 0 0 20rpx rgba(255, 255, 255, 0.1);
+  animation: compassGlow 3s ease-in-out infinite;
 }
 
-@keyframes compassRotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+/* 新增罗盘发光动画 */
+@keyframes compassGlow {
+  0%, 100% { 
+    box-shadow: 
+      0 0 0 2rpx rgba(255, 255, 255, 0.1),
+      0 20rpx 40rpx rgba(0, 0, 0, 0.2),
+      inset 0 0 20rpx rgba(255, 255, 255, 0.1);
+  }
+  50% { 
+    box-shadow: 
+      0 0 0 4rpx rgba(255, 255, 255, 0.2),
+      0 25rpx 50rpx rgba(0, 0, 0, 0.3),
+      inset 0 0 30rpx rgba(255, 255, 255, 0.2);
+  }
 }
 
 .compass-needle {
   position: absolute;
   width: 4rpx;
   height: 80rpx;
-  background: linear-gradient(to top, transparent, #fff, #ff6b6b);
+  /* 升级指针渐变效果 */
+  background: linear-gradient(to top, 
+    rgba(255, 255, 255, 0.3), 
+    rgba(255, 255, 255, 0.9), 
+    #ff6b6b);
   border-radius: 2rpx;
-  /* 确保针位于圆盘正中心 */
   left: 50%;
   bottom: 50%;
   transform-origin: bottom center;
   transform: translateX(-50%);
-  /* 自转：轻微摆动；不跟随底盘旋转 */
   animation: needleSwing 4s ease-in-out infinite;
+  /* 添加指针发光效果 */
+  box-shadow: 0 0 10rpx rgba(255, 107, 107, 0.5);
 }
 
 @keyframes needleSwing {
-  0%, 100% { transform: translateX(-50%) rotate(-5deg); }
-  50% { transform: translateX(-50%) rotate(5deg); }
+  0%, 100% { 
+    transform: translateX(-50%) rotate(-8deg); 
+    box-shadow: 0 0 10rpx rgba(255, 107, 107, 0.5);
+  }
+  50% { 
+    transform: translateX(-50%) rotate(8deg); 
+    box-shadow: 0 0 15rpx rgba(255, 107, 107, 0.8);
+  }
 }
 
 .compass-dot {
   width: 16rpx;
   height: 16rpx;
-  background: #fff;
+  /* 升级中心点效果 */
+  background: radial-gradient(circle, #fff 0%, rgba(255, 255, 255, 0.8) 100%);
   border-radius: 50%;
   z-index: 1;
+  box-shadow: 0 0 10rpx rgba(255, 255, 255, 0.8);
 }
 
 .brand-text {
@@ -178,9 +264,16 @@
   font-weight: 700;
   color: #fff;
   margin-bottom: 24rpx;
-  text-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.3);
+  /* 增强标题效果 */
+  text-shadow: 
+    0 4rpx 16rpx rgba(0, 0, 0, 0.3),
+    0 0 30rpx rgba(255, 255, 255, 0.2);
   letter-spacing: 4rpx;
   text-align: center;
+  background: linear-gradient(135deg, #fff 0%, rgba(255, 255, 255, 0.8) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .brand-subtitle {
@@ -196,28 +289,66 @@
   text-overflow: ellipsis;
   max-width: 400rpx;
   margin: 0 auto;
+  /* 添加背景装饰 */
+  background: rgba(255, 255, 255, 0.1);
+  padding: 12rpx 24rpx;
+  border-radius: 25rpx;
+  backdrop-filter: blur(10rpx);
 }
 
 .login-btn {
-  background: rgba(255, 255, 255, 0.2);
-  border: 2rpx solid rgba(255, 255, 255, 0.3);
+  /* 升级登录按钮效果 */
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.25) 0%, 
+    rgba(255, 255, 255, 0.15) 100%);
+  border: 2rpx solid rgba(255, 255, 255, 0.4);
   border-radius: 60rpx;
   padding: 32rpx 100rpx;
-  backdrop-filter: blur(10px);
-  transition: all 0.3s ease;
+  backdrop-filter: blur(15rpx);
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   min-width: 320rpx;
   width: auto;
   display: flex;
   justify-content: center;
   align-items: center;
   white-space: nowrap;
+  box-shadow: 
+    0 8rpx 32rpx rgba(0, 0, 0, 0.15),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.2);
+  position: relative;
+  overflow: hidden;
+}
+
+/* 添加按钮光效 */
+.login-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, 
+    transparent, 
+    rgba(255, 255, 255, 0.2), 
+    transparent);
+  transition: left 0.6s;
+}
+
+.login-btn:hover::before,
+.login-btn-hover::before {
+  left: 100%;
 }
 
 .login-btn:hover,
 .login-btn-hover {
-  background: rgba(255, 255, 255, 0.3) !important;
-  transform: translateY(-4rpx);
-  box-shadow: 0 12rpx 40rpx rgba(0, 0, 0, 0.2);
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.35) 0%, 
+    rgba(255, 255, 255, 0.25) 100%) !important;
+  transform: translateY(-6rpx) scale(1.02);
+  box-shadow: 
+    0 16rpx 48rpx rgba(0, 0, 0, 0.25),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.6);
 }
 
 .login-text {
@@ -228,6 +359,7 @@
   text-align: center;
   white-space: nowrap;
   display: inline-block;
+  text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.2);
 }
 
 /* 卡片容器 */
@@ -247,13 +379,19 @@
   width: 100%;
   border-radius: 32rpx;
   overflow: hidden;
-  box-shadow: 0 40rpx 80rpx rgba(0,0,0,0.15);
-  transition: transform 0.3s ease;
+  /* 升级卡片阴影效果 */
+  box-shadow: 
+    0 40rpx 80rpx rgba(0,0,0,0.2),
+    0 0 0 1rpx rgba(255, 255, 255, 0.1);
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   background: none;
 }
 
 .card-image-display:active {
-  transform: scale(0.98);
+  transform: scale(0.97);
+  box-shadow: 
+    0 20rpx 40rpx rgba(0,0,0,0.3),
+    0 0 0 1rpx rgba(255, 255, 255, 0.2);
 }
 
 .generated-card-image {
@@ -274,28 +412,42 @@
 }
 
 .ai-badge {
-  background: rgba(0,0,0,0.8);
+  /* 升级AI标识效果 */
+  background: linear-gradient(135deg, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.7) 100%);
   color: white;
   padding: 12rpx 24rpx;
   border-radius: 40rpx;
   font-size: 24rpx;
   backdrop-filter: blur(20rpx);
   font-weight: 500;
+  border: 1rpx solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.3);
 }
 
 .interactive-hint {
-  background: rgba(138, 43, 226, 0.9);
+  /* 升级交互提示效果 */
+  background: linear-gradient(135deg, rgba(138, 43, 226, 0.95) 0%, rgba(168, 85, 247, 0.95) 100%);
   color: white;
   padding: 8rpx 20rpx;
   border-radius: 30rpx;
   font-size: 22rpx;
   backdrop-filter: blur(20rpx);
-  animation: pulse 2s ease-in-out infinite;
+  animation: hintPulse 2s ease-in-out infinite;
+  border: 1rpx solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 4rpx 16rpx rgba(138, 43, 226, 0.4);
 }
 
-@keyframes pulse {
-  0%, 100% { transform: scale(1); opacity: 0.9; }
-  50% { transform: scale(1.05); opacity: 1; }
+@keyframes hintPulse {
+  0%, 100% { 
+    transform: scale(1); 
+    opacity: 0.9; 
+    box-shadow: 0 4rpx 16rpx rgba(138, 43, 226, 0.4);
+  }
+  50% { 
+    transform: scale(1.05); 
+    opacity: 1; 
+    box-shadow: 0 8rpx 24rpx rgba(138, 43, 226, 0.6);
+  }
 }
 
 /* 传统卡片布局（降级方案） */
@@ -494,12 +646,35 @@
 
 /* 情绪墨迹区域 */
 .emotion-ink {
-  background: rgba(255, 255, 255, 0.9);
+  /* 升级墨迹区域背景效果 */
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.95) 0%, 
+    rgba(255, 255, 255, 0.9) 100%);
   border-radius: 32rpx;
-  padding: 30rpx;  /* 减少内边距，与主容器保持一致 */
-  backdrop-filter: blur(20px);
-  border: 2rpx solid rgba(255, 255, 255, 0.3);
-  box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.15);
+  padding: 30rpx;
+  backdrop-filter: blur(25rpx);
+  border: 2rpx solid rgba(255, 255, 255, 0.4);
+  box-shadow: 
+    0 20rpx 60rpx rgba(0, 0, 0, 0.15),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.8);
+  position: relative;
+  overflow: hidden;
+}
+
+/* 添加墨迹区域装饰效果 */
+.emotion-ink::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4rpx;
+  background: linear-gradient(90deg, 
+    transparent, 
+    rgba(102, 126, 234, 0.5), 
+    rgba(118, 75, 162, 0.5), 
+    transparent);
+  border-radius: 32rpx 32rpx 0 0;
 }
 
 .ink-title {
@@ -511,7 +686,11 @@
   display: block;
   font-size: 36rpx;
   font-weight: 600;
-  color: #333;
+  /* 升级标题渐变效果 */
+  background: linear-gradient(135deg, #333 0%, #667eea 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   margin-bottom: 16rpx;
 }
 
@@ -523,12 +702,22 @@
 }
 
 .ink-canvas {
-  width: calc(100% - 40rpx);  /* 左右各留20rpx边距 */
+  width: calc(100% - 40rpx);
   height: 300rpx;
-  background: #fafafa;
-  border: 2rpx dashed #ddd;
-  border-radius: 16rpx;
-  margin: 0 20rpx 32rpx 20rpx;  /* 左右20rpx边距 */
+  /* 升级画布效果 */
+  background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%);
+  border: 3rpx dashed rgba(102, 126, 234, 0.3);
+  border-radius: 20rpx;
+  margin: 0 20rpx 32rpx 20rpx;
+  box-shadow: inset 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+}
+
+.ink-canvas:active {
+  border-color: rgba(102, 126, 234, 0.6);
+  box-shadow: 
+    inset 0 2rpx 8rpx rgba(0, 0, 0, 0.1),
+    0 0 0 4rpx rgba(102, 126, 234, 0.1);
 }
 
 .ink-actions {
@@ -543,31 +732,58 @@
   font-size: 28rpx;
   font-weight: 600;
   border: none;
-  transition: all 0.3s ease;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  position: relative;
 }
 
 .ink-btn.clear {
-  background: rgba(0, 0, 0, 0.1);
+  /* 升级清空按钮效果 */
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.08) 0%, rgba(0, 0, 0, 0.12) 100%);
   color: #666;
+  border: 2rpx solid rgba(0, 0, 0, 0.1);
+}
+
+.ink-btn.clear:hover {
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.12) 0%, rgba(0, 0, 0, 0.16) 100%);
+  transform: translateY(-2rpx);
 }
 
 .ink-btn.generate {
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  /* 升级生成按钮效果 */
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: #fff;
-  box-shadow: 0 8rpx 24rpx rgba(102, 126, 234, 0.3);
+  box-shadow: 
+    0 8rpx 24rpx rgba(102, 126, 234, 0.4),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.2);
+  border: 2rpx solid rgba(255, 255, 255, 0.2);
+}
+
+.ink-btn.generate:hover {
+  transform: translateY(-4rpx) scale(1.02);
+  box-shadow: 
+    0 12rpx 32rpx rgba(102, 126, 234, 0.5),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.3);
 }
 
 .ink-btn.loading {
-  background: linear-gradient(135deg, #ffa726, #ff7043);
+  /* 升级加载状态效果 */
+  background: linear-gradient(135deg, #ffa726 0%, #ff7043 100%);
   animation: generatePulse 2s ease-in-out infinite;
+  box-shadow: 0 8rpx 24rpx rgba(255, 167, 38, 0.4);
 }
 
 @keyframes generatePulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.05); }
+  0%, 100% { 
+    transform: scale(1); 
+    box-shadow: 0 8rpx 24rpx rgba(255, 167, 38, 0.4);
+  }
+  50% { 
+    transform: scale(1.05); 
+    box-shadow: 0 12rpx 32rpx rgba(255, 167, 38, 0.6);
+  }
 }
 
 /* 记忆回廊 */
@@ -590,12 +806,24 @@
   font-size: 32rpx;
   font-weight: 600;
   color: #fff;
-  text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.2);
+  /* 升级标题效果 */
+  text-shadow: 
+    0 2rpx 8rpx rgba(0, 0, 0, 0.3),
+    0 0 20rpx rgba(255, 255, 255, 0.2);
+  background: linear-gradient(135deg, #fff 0%, rgba(255, 255, 255, 0.8) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .gallery-count {
   font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.9);
+  /* 添加计数器装饰 */
+  background: rgba(255, 255, 255, 0.15);
+  padding: 6rpx 12rpx;
+  border-radius: 15rpx;
+  backdrop-filter: blur(10rpx);
 }
 
 .gallery-scroll {
@@ -607,19 +835,26 @@
   width: 200rpx;
   height: 320rpx;
   margin-right: 24rpx;
-  background: rgba(255, 255, 255, 0.9);
-  border-radius: 20rpx;
-  backdrop-filter: blur(10px);
-  border: 2rpx solid rgba(255, 255, 255, 0.3);
-  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.1);
-  transition: all 0.3s ease;
+  /* 升级记忆卡片效果 */
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.95) 0%, 
+    rgba(255, 255, 255, 0.9) 100%);
+  border-radius: 24rpx;
+  backdrop-filter: blur(15rpx);
+  border: 2rpx solid rgba(255, 255, 255, 0.4);
+  box-shadow: 
+    0 12rpx 32rpx rgba(0, 0, 0, 0.15),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.8);
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   position: relative;
   overflow: hidden;
 }
 
 .memory-card:hover {
-  transform: translateY(-8rpx);
-  box-shadow: 0 16rpx 32rpx rgba(0, 0, 0, 0.2);
+  transform: translateY(-12rpx) scale(1.02);
+  box-shadow: 
+    0 20rpx 48rpx rgba(0, 0, 0, 0.25),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.9);
 }
 
 /* 背景图片 */
@@ -640,16 +875,17 @@
   left: 0;
   width: 100%;
   height: 100%;
+  /* 升级遮罩渐变效果 */
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.9) 0%,
-    rgba(255, 255, 255, 0.7) 50%,
-    rgba(255, 255, 255, 0.9) 100%
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(255, 255, 255, 0.8) 30%,
+    rgba(255, 255, 255, 0.7) 70%,
+    rgba(255, 255, 255, 0.95) 100%
   );
   z-index: 2;
 }
 
-/* 内容容器 */
 .memory-content {
   position: relative;
   z-index: 3;
@@ -715,9 +951,11 @@
   bottom: 0;
   left: 0;
   right: 0;
-  height: 6rpx;
-  border-radius: 0 0 20rpx 20rpx;
+  height: 8rpx;
+  border-radius: 0 0 24rpx 24rpx;
   z-index: 4;
+  /* 添加心情条发光效果 */
+  box-shadow: 0 0 10rpx rgba(139, 92, 246, 0.5);
 }
 
 /* 空状态 */
@@ -767,8 +1005,11 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(10px);
+  /* 升级加载遮罩效果 */
+  background: linear-gradient(135deg, 
+    rgba(0, 0, 0, 0.8) 0%, 
+    rgba(0, 0, 0, 0.6) 100%);
+  backdrop-filter: blur(15rpx);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -777,24 +1018,45 @@
 }
 
 .loading-compass .compass-ring {
-  border-color: rgba(255, 255, 255, 0.6);
-  background: rgba(255, 255, 255, 0.1);
+  /* 升级加载罗盘效果 */
+  border-color: rgba(255, 255, 255, 0.8);
+  background: radial-gradient(circle, 
+    rgba(255, 255, 255, 0.2) 0%, 
+    rgba(255, 255, 255, 0.05) 100%);
+  box-shadow: 
+    0 0 30rpx rgba(255, 255, 255, 0.3),
+    inset 0 0 20rpx rgba(255, 255, 255, 0.1);
 }
 
 .compass-needle.spinning {
   animation: spin 2s linear infinite;
+  /* 添加旋转发光效果 */
+  box-shadow: 0 0 15rpx rgba(255, 107, 107, 0.8);
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from { 
+    transform: rotate(0deg); 
+    box-shadow: 0 0 15rpx rgba(255, 107, 107, 0.8);
+  }
+  to { 
+    transform: rotate(360deg); 
+    box-shadow: 0 0 20rpx rgba(255, 107, 107, 1);
+  }
 }
 
 .loading-text {
   font-size: 32rpx;
   color: #fff;
   margin: 40rpx 0;
-  text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.3);
+  /* 升级加载文字效果 */
+  text-shadow: 
+    0 2rpx 8rpx rgba(0, 0, 0, 0.5),
+    0 0 20rpx rgba(255, 255, 255, 0.3);
+  background: linear-gradient(135deg, #fff 0%, rgba(255, 255, 255, 0.8) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .loading-steps {
@@ -809,21 +1071,32 @@
   align-items: center;
   gap: 12rpx;
   opacity: 0.4;
-  transition: all 0.5s ease;
+  transition: all 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  /* 添加步骤背景装饰 */
+  background: rgba(255, 255, 255, 0.05);
+  padding: 20rpx;
+  border-radius: 20rpx;
+  backdrop-filter: blur(10rpx);
 }
 
 .step.active {
   opacity: 1;
-  transform: scale(1.1);
+  transform: scale(1.15);
+  /* 升级激活状态效果 */
+  background: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 8rpx 32rpx rgba(255, 255, 255, 0.2);
 }
 
 .step-icon {
   font-size: 40rpx;
+  /* 添加图标发光效果 */
+  filter: drop-shadow(0 0 10rpx rgba(255, 255, 255, 0.5));
 }
 
 .step-text {
   font-size: 22rpx;
   color: #fff;
+  text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.3);
 }
 
 /* 环境状态显示 */
@@ -886,20 +1159,17 @@
     font-size: 56rpx;
   }
   
-  .card-keyword {
-    font-size: 64rpx;
+  .beautiful-postcard {
+    width: calc(100vw - 48rpx);
+    max-width: 690rpx;
   }
   
   .loading-steps {
     gap: 40rpx;
   }
   
-  .date-info-container {
-    gap: 6rpx;
-  }
-  
-  .status-text {
-    font-size: 18rpx;
+  .step {
+    padding: 16rpx;
   }
 }
 
@@ -921,51 +1191,25 @@
 /* ==================== 美化卡片组件样式 ==================== */
 .beautiful-postcard {
   position: relative;
-  width: 690rpx;              /* 微信小程序标准宽度750rpx - 60rpx边距 */
-  height: 920rpx;             /* 稍微矮一些，留出底部安全距离 */
+  width: 690rpx;
+  height: 920rpx;
   margin: 0 auto;
   border-radius: 32rpx;
   overflow: hidden;
-  box-shadow: 0 24rpx 80rpx rgba(0, 0, 0, 0.25);
+  box-shadow: 
+    0 32rpx 100rpx rgba(0, 0, 0, 0.3),
+    0 0 0 1rpx rgba(255, 255, 255, 0.1);
   background: #fff;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-/* 防止与下方记忆回廊重叠，增加底部外边距 */
-.card-container { margin-bottom: 120rpx; }
-
-/* 动态布局：紧凑与丰富模式 */
-.beautiful-postcard.layout-compact .postcard-content {
-  padding: 60rpx 40rpx;
-}
-.beautiful-postcard.layout-compact .postcard-title {
-  font-size: 44rpx;
-}
-.beautiful-postcard.layout-rich .postcard-content {
-  padding: 100rpx 70rpx;
-}
-.beautiful-postcard.layout-rich .quote-text {
-  font-size: 32rpx;
+.beautiful-postcard:active {
+  transform: scale(0.98);
+  box-shadow: 
+    0 16rpx 50rpx rgba(0, 0, 0, 0.4),
+    0 0 0 1rpx rgba(255, 255, 255, 0.2);
 }
 
-/* 动效类：根据 motion 添加微交互 */
-/* 关闭页面级卡片浮动，避免压盖记忆区域 */
-.beautiful-postcard.motion-float { animation: none; }
-@keyframes floatCard {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8rpx); }
-}
-
-.beautiful-postcard.motion-pulse { animation: none; }
-@keyframes pulseCard {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.01); }
-}
-
-.beautiful-postcard.motion-gradient .background-overlay {
-  background: linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.7) 50%, rgba(255,255,255,0.95) 100%);
-}
-
-/* 背景图层 */
 .postcard-background {
   position: absolute;
   top: 0;
@@ -987,31 +1231,31 @@
   left: 0;
   width: 100%;
   height: 100%;
+  /* 升级背景遮罩渐变 */
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.95) 0%,
-    rgba(255, 255, 255, 0.75) 40%,
+    rgba(255, 255, 255, 0.98) 0%,
+    rgba(255, 255, 255, 0.85) 30%,
+    rgba(255, 255, 255, 0.75) 50%,
     rgba(255, 255, 255, 0.85) 70%,
-    rgba(255, 255, 255, 0.95) 100%
+    rgba(255, 255, 255, 0.98) 100%
   );
-  backdrop-filter: blur(2rpx);
+  backdrop-filter: blur(3rpx);
 }
 
-/* 内容层 */
 .postcard-content {
   position: relative;
   z-index: 2;
   height: 100%;
-  padding: 70rpx 56rpx; /* 略收紧整体内边距 */
+  padding: 70rpx 56rpx;
   display: flex;
   flex-direction: column;
-  justify-content: flex-start; /* 避免上下被强制拉开导致大面积留白 */
+  justify-content: flex-start;
 }
 
-/* 顶部标题区 */
 .postcard-header {
   text-align: center;
-  margin-bottom: 28rpx; /* 减小抬头与正文间距 */
+  margin-bottom: 28rpx;
 }
 
 .postcard-date {
@@ -1027,20 +1271,23 @@
   display: block;
   font-size: 54rpx;
   font-weight: bold;
-  color: #1a1a1a;
+  /* 升级标题渐变效果 */
+  background: linear-gradient(135deg, #1a1a1a 0%, #667eea 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   line-height: 1.2;
   margin-bottom: 16rpx;
   text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.1);
 }
 
-/* 主文案区 */
 .postcard-body {
   flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: center;
   text-align: center;
-  margin: 16rpx 0 24rpx 0; /* 收紧正文块上下间距 */
+  margin: 16rpx 0 24rpx 0;
 }
 
 .main-quote {
@@ -1049,7 +1296,7 @@
 
 .quote-text {
   display: block;
-  font-size: 30rpx; /* 缩小主文案字号，为更多元素留白 */
+  font-size: 30rpx;
   line-height: 1.6;
   color: #2d3748;
   font-weight: 400;
@@ -1067,7 +1314,7 @@
 
 .english-text {
   display: block;
-  font-size: 24rpx; /* 略缩小英文引用 */
+  font-size: 24rpx;
   color: #6b7280;
   font-style: italic;
   line-height: 1.5;
@@ -1075,7 +1322,6 @@
   font-family: 'Georgia', serif;
 }
 
-/* 英文浮条 */
 .english-ribbon {
   margin-top: 24rpx;
   background: linear-gradient(135deg, rgba(99,102,241,.12), rgba(139,92,246,.12));
@@ -1084,13 +1330,18 @@
   padding: 16rpx 24rpx;
 }
 
-/* 推荐内容区 */
 .postcard-recommendations {
   margin: 30rpx 0;
   padding: 30rpx;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(139, 92, 246, 0.05));
-  border-radius: 20rpx;
-  border: 2rpx solid rgba(139, 92, 246, 0.1);
+  /* 升级推荐区域效果 */
+  background: linear-gradient(135deg, 
+    rgba(99, 102, 241, 0.08) 0%, 
+    rgba(139, 92, 246, 0.08) 100%);
+  border-radius: 24rpx;
+  border: 2rpx solid rgba(139, 92, 246, 0.15);
+  box-shadow: 
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.8),
+    0 4rpx 16rpx rgba(139, 92, 246, 0.1);
 }
 
 .recommendations-title {
@@ -1143,7 +1394,6 @@
   font-weight: 300;
 }
 
-/* 底部装饰区 */
 .postcard-footer {
   margin-top: auto;
   text-align: center;
@@ -1173,7 +1423,6 @@
   letter-spacing: 1rpx;
 }
 
-/* AI生成标识 */
 .ai-badge {
   position: absolute;
   top: 24rpx;
@@ -1191,33 +1440,10 @@
   font-weight: 500;
 }
 
-/* 响应式调整 - 针对小屏幕优化 */
-@media (max-width: 400px) {
-  .compass-container {
-    padding: 32rpx 20rpx;    /* 小屏幕使用更小的边距 */
-  }
-  
-  .beautiful-postcard {
-    width: 710rpx;           /* 小屏幕使用更大的宽度 750rpx - 40rpx */
-  }
-  
-  .postcard-content {
-    padding: 60rpx 40rpx;
-  }
-  
-  .postcard-title {
-    font-size: 48rpx;
-  }
-  
-  .quote-text {
-    font-size: 32rpx;
-  }
-}
-
 /* 卡片动画效果 */
 .beautiful-postcard {
-  animation: cardFadeIn 0.8s ease-out;
-  transition: transform 0.3s ease;
+  animation: cardFadeIn 1s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 .beautiful-postcard:active {
@@ -1227,7 +1453,7 @@
 @keyframes cardFadeIn {
   0% {
     opacity: 0;
-    transform: translateY(40rpx) scale(0.95);
+    transform: translateY(60rpx) scale(0.9);
   }
   100% {
     opacity: 1;
