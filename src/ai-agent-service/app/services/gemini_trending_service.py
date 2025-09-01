@@ -23,8 +23,12 @@ class GeminiTrendingService:
             self.logger.warning("❌ 未找到Gemini API密钥，请在.env文件中设置GEMINI_API_KEY")
             self.client = None
         else:
-            # 使用新的google-genai SDK
-            self.client = genai.Client(api_key=api_key)
+            # 使用新的google-genai SDK，注入 http_options.base_url
+            base_url = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com")
+            self.client = genai.Client(
+                api_key=api_key,
+                http_options=genai.types.HttpOptions(base_url=base_url)
+            )
         
         # 简单内存缓存
         self._cache = {}

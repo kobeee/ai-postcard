@@ -1,6 +1,5 @@
 # 使用官方推荐的google-genai SDK
 from google import genai
-from google.genai import types
 from typing import Dict, Any, Optional
 from .base_provider import BaseImageProvider
 import os
@@ -32,7 +31,10 @@ class GeminiImageProvider(BaseImageProvider):
         # 配置Gemini客户端（按官网教程）
         self.client = None
         if api_key:
-            self.client = genai.Client(api_key=api_key)
+            self.client = genai.Client(
+                api_key=api_key,
+                http_options=genai.types.HttpOptions(base_url=self.base_url)
+            )
         # 控制是否严格调用真实生图API
         self.strict_mode = os.getenv("GEMINI_IMAGE_STRICT", "false").lower() == "true"
         
@@ -94,7 +96,7 @@ Please create a beautiful pure visual image without any text or written elements
                 lambda: self.client.models.generate_content(
                     model=self.model_name,
                     contents=full_prompt,
-                    config=types.GenerateContentConfig(
+                    config=genai.types.GenerateContentConfig(
                         response_modalities=['TEXT', 'IMAGE']
                     )
                 )

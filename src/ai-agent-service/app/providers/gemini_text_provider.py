@@ -15,8 +15,12 @@ class GeminiTextProvider(BaseTextProvider):
         if not api_key:
             raise ValueError("GEMINI_API_KEY环境变量未配置")
             
-        # 使用新SDK创建客户端
-        self.client = genai.Client(api_key=api_key)
+        # 使用新SDK创建客户端，并设置http_options.base_url
+        base_url = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com")
+        self.client = genai.Client(
+            api_key=api_key,
+            http_options=genai.types.HttpOptions(base_url=base_url)
+        )
         
         # 配置模型参数
         self.model_name = os.getenv("GEMINI_TEXT_MODEL", "gemini-2.5-flash-lite")
