@@ -169,6 +169,41 @@ create_directories() {
     chmod -R 755 logs/ data/ uploads/ 2>/dev/null || true
     chmod -R 755 src/*/logs/ 2>/dev/null || true
     
+    # 创建所有服务的挂载目录
+    mkdir -p logs/nginx logs/gateway logs/user logs/postcard logs/ai-agent
+    mkdir -p data/postgres data/redis data/ai-agent/static
+    
+    # 为各种容器设置正确的目录权限
+    if [ "$ENVIRONMENT" = "prod" ]; then
+        log_info "设置容器挂载目录权限..."
+        
+        # 数据目录权限设置（使用Docker volumes，不需要特殊权限）
+        log_info "  → 数据目录基础权限设置"
+        chmod -R 755 data/postgres data/redis data/ai-agent 2>/dev/null || true
+        
+        # Nginx (nginx用户UID=101, GID=101)
+        log_info "  → Nginx权限设置 (UID=101)"
+        chown -R 101:101 logs/nginx 2>/dev/null || true
+        chmod -R 755 logs/nginx 2>/dev/null || true
+        
+        # Python服务 (appuser用户UID=1000, GID=1000)
+        log_info "  → Python服务权限设置 (UID=1000)"
+        for service_dir in logs/gateway logs/user logs/postcard logs/ai-agent data/ai-agent; do
+            chown -R 1000:1000 "$service_dir" 2>/dev/null || true
+            chmod -R 755 "$service_dir" 2>/dev/null || true
+        done
+        
+        # 使用 setfacl 设置 ACL 权限（如果系统支持）
+        if command -v setfacl &> /dev/null; then
+            log_info "  → 使用ACL设置扩展权限"
+            setfacl -m u:101:rwx -R logs/nginx 2>/dev/null || true
+            setfacl -m u:1000:rwx -R logs/gateway logs/user logs/postcard logs/ai-agent data/ai-agent 2>/dev/null || true
+        fi
+        
+        log_success "容器挂载目录权限设置完成"
+        log_info "注意: PostgreSQL 和 Redis 使用容器内部日志，可通过 'docker logs' 命令查看"
+    fi
+    
     log_success "目录结构创建完成"
 }
 

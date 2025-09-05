@@ -226,17 +226,16 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./configs/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
       - ./scripts/init-database.sql:/docker-entrypoint-initdb.d/02-schema.sql:ro
-      - ./logs/postgres:/var/log/postgresql:rw
+      # 注释掉外部日志挂载，使用Docker日志系统
+      # - ./logs/postgres:/var/log/postgresql:rw
       - /etc/localtime:/etc/localtime:ro
-    # PostgreSQL 配置优化
+    # PostgreSQL 配置优化 - 修改为使用容器日志系统
     command: >
       postgres
       -c shared_preload_libraries=pg_stat_statements
       -c log_statement=all
       -c log_destination=stderr
-      -c logging_collector=on
-      -c log_directory=/var/log/postgresql
-      -c log_filename=postgresql-%Y-%m-%d.log
+      -c logging_collector=off
       -c log_min_duration_statement=1000
       -c max_connections=200
       -c shared_buffers=256MB
@@ -281,7 +280,8 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
-      - ./logs/redis:/var/log/redis:rw
+      # 注释掉外部日志挂载，使用Docker日志系统
+      # - ./logs/redis:/var/log/redis:rw
       - /etc/localtime:/etc/localtime:ro
     environment:
       - TZ=UTC
