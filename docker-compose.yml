@@ -10,7 +10,7 @@ x-python-base: &python-base
   build:
     context: .
   volumes:
-    - ./src:/app/src
+    - ./src:/app/src:z
   depends_on:
     postgres:
       condition: service_healthy
@@ -25,9 +25,9 @@ x-ai-agent-base: &ai-agent-base
     context: ./src/ai-agent-service
     dockerfile: Dockerfile.dev
   volumes:
-    - ./src/ai-agent-service/app:/app/app  # 只挂载源码，不挂载.venv
+    - ./src/ai-agent-service/app:/app/app:z  # 只挂载源码，不挂载.venv
     - ./src/ai-agent-service/requirements.txt:/app/requirements.txt
-    - ./src/ai-agent-service/logs:/app/logs  # 挂载日志目录
+    - ./src/ai-agent-service/logs:/app/logs:z  # 挂载日志目录
   depends_on:
     postgres:
       condition: service_healthy

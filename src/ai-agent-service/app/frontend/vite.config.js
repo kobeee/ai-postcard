@@ -5,7 +5,7 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig({
   plugins: [vue()],
   build: {
-    outDir: '../static', // 构建到上级static目录，供FastAPI静态文件服务
+    outDir: 'dist', // 构建到dist目录，供Docker多阶段构建使用
     emptyOutDir: true,
   },
   server: {

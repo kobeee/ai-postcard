@@ -31,12 +31,23 @@ RUN npm install -g puppeteer
 COPY app/frontend/package.json app/frontend/package-lock.json* /app/app/frontend/
 RUN cd /app/app/frontend && npm install
 
-# 创建非root用户aiuser
-RUN useradd -m aiuser
-# 确保/app目录归aiuser所有
+# 创建和配置非root用户
+RUN useradd -m -d /home/aiuser -s /bin/bash aiuser
+
+# 1. 预先创建应用需要写入的所有目录
+RUN mkdir -p /app/app/static/generated \
+    && mkdir -p /app/app/static/assets \
+    && mkdir -p /app/logs 
+
+# 2. 一次性将 /app 下所有文件和目录的所有权赋予 aiuser
 RUN chown -R aiuser:aiuser /app
 
-# 切换到非root用户
+# 3. 为需要写入的目录明确赋予 755 权限
+RUN chmod -R 755 /app/app/static/generated \
+    && chmod -R 755 /app/app/static/assets \
+    && chmod -R 755 /app/logs
+
+# 4. 切换到非root用户
 USER aiuser
 
 # 启动脚本：安装Python依赖、构建前端、运行服务
