@@ -1295,31 +1295,30 @@ Page({
     }
 
     try {
-      this.setData({ 
-        isGenerating: true,
-        currentStep: 0,
-        loadingText: '正在感知你的情绪...'
-      });
-
       // Step 1: 获取情绪墨迹的base64数据（直接传给生成接口）
+      // 注意：为避免原生 canvas 层级遮挡加载层，先完成截图再进入生成状态
       let emotionImageBase64 = null;
       try {
         // 检查是否有绘制内容
         if (!this.emotionPath || this.emotionPath.length < 5) {
           envConfig.log('没有足够的绘制内容，跳过图片处理');
         } else {
-          this.setData({ loadingText: '提取情绪墨迹数据...' });
-          
-          // 直接获取canvas的base64数据
+          // 先行截图，完成后再显示加载遮罩
           const imageData = await this.getCanvasBase64Data();
           emotionImageBase64 = imageData.base64;
-          
           envConfig.log('情绪墨迹base64数据提取成功，数据长度:', emotionImageBase64.length);
         }
       } catch (imageError) {
         envConfig.warn('情绪图片数据提取失败，继续使用轨迹分析:', imageError);
         // 图片处理失败不影响卡片生成，继续使用传统的轨迹分析
       }
+
+      // 开始显示生成遮罩（此时画布已完成截图且会被隐藏，不会遮挡）
+      this.setData({ 
+        isGenerating: true,
+        currentStep: 0,
+        loadingText: '正在感知你的情绪...'
+      });
 
       // 模拟生成步骤
       setTimeout(() => {

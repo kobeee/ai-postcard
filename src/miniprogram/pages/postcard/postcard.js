@@ -248,23 +248,27 @@ Page({
         return;
       }
       
-      app.utils.showLoading('下载图片...');
-      
-      // 下载图片
-      const downloadRes = await new Promise((resolve, reject) => {
-        wx.downloadFile({
-          url: imageUrl,
-          success: resolve,
-          fail: reject
+      // 根据来源分别处理：
+      // 1) 组件Canvas截图返回本地路径（wxfile:// 或 /tmp/），可直接保存
+      // 2) 远程http/https图片需先downloadFile
+      let localFilePath = imageUrl;
+      const isRemote = /^https?:\/\//i.test(imageUrl);
+      if (isRemote) {
+        app.utils.showLoading('下载图片...');
+        const downloadRes = await new Promise((resolve, reject) => {
+          wx.downloadFile({
+            url: imageUrl,
+            success: resolve,
+            fail: reject
+          });
         });
-      });
+        localFilePath = downloadRes.tempFilePath;
+      }
       
       app.utils.showLoading('保存中...');
-      
-      // 保存到相册
       await new Promise((resolve, reject) => {
         wx.saveImageToPhotosAlbum({
-          filePath: downloadRes.tempFilePath,
+          filePath: localFilePath,
           success: resolve,
           fail: reject
         });

@@ -194,6 +194,7 @@
       <canvas 
         class="ink-canvas" 
         canvas-id="emotionCanvas"
+        hidden="{{isGenerating}}"
         bind:touchstart="onInkStart"
         bind:touchmove="onInkMove"
         bind:touchend="onInkEnd"

@@ -1256,3 +1256,62 @@ curl http://localhost:8081/health
 
 通过这次修复，AI明信片项目从开发环境成功过渡到生产环境，为用户提供稳定可靠的明信片生成服务奠定了坚实的技术基础。
 
+---
+
+## 2025-09-06 - 解决构建基础镜像的问题 🔧
+
+本次将“解决构建基础镜像的问题”的变更归档到项目日志，确保团队可以追溯基础镜像构建策略与修复点。
+
+### 背景
+- 开发/CI 环节偶发基础镜像构建失败与缓存不一致问题，导致依赖无法正确安装或镜像无法复用。
+
+### 核心修复
+- 完善 `docker/Dockerfile.base` 基础镜像构建流程，补齐必须的系统依赖与工具链，构建稳定可复用。
+- 规范多阶段构建与缓存层顺序，避免因为层顺序不合理导致的重复安装与缓存失效。
+- 明确非 root 运行与目录权限，统一工作目录与缓存目录，减少权限类失败。
+- 对接 Compose 编排与构建：确保 `docker-compose.yml` 复用基础镜像，避免环境漂移。
+
+### 影响
+- 本地与 CI 构建时间更可控、失败率显著下降。
+- 各服务镜像对齐到统一的基础环境，后续依赖升级与安全修复成本更低。
+
+---
+
+## 2025-09-06 - 小程序真机背景图与截图保存修复 📱
+
+### 问题
+1. 真机上结构化卡片的背景图不显示（远程 http/IP 资源在真机被拦截）。
+2. 保存卡片截图时，背景图未被包含进导出的图片。
+
+### 修复内容
+- 组件侧背景图显示
+  - 在 `structured-postcard` 组件新增本地化预处理：
+    - `prepareBackgroundImage()`：对 `backgroundImage` 执行 `wx.downloadFile` 预下载，本地化为 `tempFilePath`。
+    - 模板优先使用 `displayBackgroundImage` 渲染，远程失败时优雅降级到渐变背景。
+  - 修改：
+    - `src/miniprogram/components/structured-postcard/structured-postcard.js`
+    - `src/miniprogram/components/structured-postcard/structured-postcard.wxml`
+
+- 截图保存包含背景
+  - Canvas 截图前先下载背景图并用 `ctx.drawImage(localPath, ...)` 绘制，再导出。
+  - 保存逻辑兼容本地/远程：
+    - `wxfile://` 或临时文件直接 `saveImageToPhotosAlbum`；
+    - `http/https` 先 `downloadFile` 再保存。
+  - 修改：
+    - `src/miniprogram/pages/postcard/postcard.js`
+    - `src/miniprogram/components/structured-postcard/structured-postcard.js`
+
+- 生成遮罩与原生 canvas 层级冲突修复（避免遮挡动效）
+  - 生成时隐藏情绪画布：`index.wxml` 的 `emotionCanvas` 增加 `hidden="{{isGenerating}}"`。
+  - 调整生成顺序：截图完成后再设置 `isGenerating=true`，防止隐藏后无法截图。
+  - 修改：
+    - `src/miniprogram/pages/index/index.wxml`
+    - `src/miniprogram/pages/index/index.js`
+
+### 注意事项（真机环境必做）
+- 背景图远程地址需要使用 HTTPS 且域名加入小程序后台的“下载文件/图片/业务域名”白名单；否则真机会拦截远程资源。
+
+### 验证结果
+- 真机上背景图正常显示；保存的图片包含背景与全部内容。
+- 加载遮罩不再被原生 canvas 覆盖，生成过程展示正常。
+

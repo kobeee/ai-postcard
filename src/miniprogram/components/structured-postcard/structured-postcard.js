@@ -88,11 +88,14 @@ Component({
     quoteTranslation: "",
     // 背面扩展内容（当后端未返回 extras 时，本地兜底）
     extras: null,
+    // 真机可展示的背景本地路径
+    displayBackgroundImage: '',
   },
 
   lifetimes: {
     attached() {
       this.initCard()
+      this.prepareBackgroundImage()
     },
 
     ready() {
@@ -114,6 +117,39 @@ Component({
   },
 
   methods: {
+    /**
+     * 预处理背景图：
+     * - http/https：直接使用；
+     * - 其他协议（data/base64 或不支持）/或强制本地化：downloadFile 到本地 temp，再赋给 displayBackgroundImage
+     */
+    async prepareBackgroundImage() {
+      try {
+        const { backgroundImage } = this.data
+        if (!backgroundImage) return
+        // 如果是真机不显示，多半是 http 非 https 或域名未在白名单。
+        const isHttp = /^https?:\/\//i.test(backgroundImage)
+        if (isHttp) {
+          // 直接显示远程图（需确保域名在downloadFile和image安全域名）
+          this.setData({ displayBackgroundImage: backgroundImage })
+          return
+        }
+        // 其他情况尝试下载到本地（若为 wxfile 已本地则直接用）
+        if (/^wxfile:\/\//i.test(backgroundImage)) {
+          this.setData({ displayBackgroundImage: backgroundImage })
+          return
+        }
+        const dl = await new Promise((resolve, reject) => {
+          wx.downloadFile({ url: backgroundImage, success: resolve, fail: reject })
+        })
+        if (dl && dl.tempFilePath) {
+          this.setData({ displayBackgroundImage: dl.tempFilePath })
+        }
+      } catch (e) {
+        console.warn('背景图预处理失败，继续使用原链接:', e)
+        // 兜底：继续使用原链接，可能仍能在开发者工具显示
+        this.setData({ displayBackgroundImage: this.data.backgroundImage })
+      }
+    },
     /**
      * 初始化卡片
      */
