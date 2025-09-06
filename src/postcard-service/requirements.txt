@@ -11,4 +11,3 @@ python-jose[cryptography]
 passlib[bcrypt]
 python-multipart
 httpx
-gunicorn==21.2.0

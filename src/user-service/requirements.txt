@@ -15,4 +15,3 @@ requests
 
 # Testing
 pytest
-gunicorn==21.2.0

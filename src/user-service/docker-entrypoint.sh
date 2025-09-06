@@ -122,7 +122,6 @@ trap cleanup SIGTERM SIGINT SIGQUIT
 # 主函数
 main() {
     log_info "User Service 容器启动中..."
-    log_info "环境: ${BUILD_ENV:-development}"
     
     check_environment
     wait_for_database
@@ -134,21 +133,13 @@ main() {
         exec "$@"
     else
         log_info "启动 User Service Web 服务..."
-        
-        if [ "${BUILD_ENV}" = "production" ]; then
-            exec gunicorn app.main:app \
-                --workers 4 \
-                --worker-class uvicorn.workers.UvicornWorker \
-                --bind 0.0.0.0:8000 \
-                --access-logfile - \
-                --log-level info
-        else
-            exec uvicorn app.main:app \
-                --host 0.0.0.0 \
-                --port 8000 \
-                --reload \
-                --log-level debug
-        fi
+        # 统一使用 uvicorn（去除 BUILD_ENV 分支）
+        exec uvicorn app.main:app \
+            --host 0.0.0.0 \
+            --port 8000 \
+            --reload \
+            --reload-dir app \
+            --log-level info
     fi
 }
 

@@ -1,204 +1,156 @@
-version: '3.9'
+# =============================================================================
+# AI 明信片项目 - Docker Compose 配置
+# =============================================================================
+# 统一的服务配置，简单高效，一套镜像到处跑
+# =============================================================================
 
-x-python-base: &python-base
-  env_file:
-    - .env
-  environment:
-    - PYTHONUNBUFFERED=1
-    - PYTHONPATH=/app
-    - PATH=/app/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-  build:
-    context: .
-  volumes:
-    - ./src:/app/src:z
-  depends_on:
-    postgres:
-      condition: service_healthy
-    redis:
-      condition: service_healthy
-  networks:
-    - app-network
+x-common: &common
+  env_file: .env
+  networks: [app-network]
+  restart: unless-stopped
 
-x-ai-agent-base: &ai-agent-base
-  <<: *python-base
-  build:
-    context: ./src/ai-agent-service
-    dockerfile: Dockerfile.dev
-  volumes:
-    - ./src/ai-agent-service/app:/app/app:z  # 只挂载源码，不挂载.venv
-    - ./src/ai-agent-service/requirements.txt:/app/requirements.txt
-    - ./src/ai-agent-service/logs:/app/logs:z  # 挂载日志目录
+x-app-service: &app-service
+  <<: *common
+  user: "0:0"
   depends_on:
-    postgres:
-      condition: service_healthy
-    redis:
-      condition: service_healthy
+    postgres: { condition: service_healthy }
+    redis: { condition: service_healthy }
 
 services:
-  # --- AI Agent Service ---
-  ai-agent-service:
-    <<: *ai-agent-base
-    container_name: ai-postcard-ai-agent-service
-    ports:
-      - "8080:8000"
-    environment:
-      - AI_AGENT_PUBLIC_URL=${AI_AGENT_PUBLIC_URL}
-    profiles:
-      - agent
-      - all
-
-  # --- AI Agent Worker (独立工作进程) ---
-  ai-agent-worker:
-    <<: *ai-agent-base
-    container_name: ai-postcard-ai-agent-worker
-    command: ["python", "-m", "app.worker"]
-    profiles:
-      - agent
-      - worker
-      - all
-
-  # --- AI Agent Service Tests ---
-  ai-agent-service-tests:
-    <<: *ai-agent-base
-    container_name: ai-postcard-agent-tests
-    command: ["pytest"]
-    profiles:
-      - agent-tests
-
-  # --- 异步工作流测试 ---
-  async-workflow-tests:
-    <<: *ai-agent-base
-    container_name: ai-postcard-async-workflow-tests
-    command: ["python", "-m", "pytest", "tests/test_async_workflow.py", "-v"]
-    profiles:
-      - workflow-tests
-
-  # --- User Service (Python/FastAPI) ---
-  user-service:
-    <<: *python-base
-    container_name: ai-postcard-user-service
-    build:
-      context: ./src/user-service
-      dockerfile: Dockerfile.dev
-    volumes:
-      - ./src/user-service/app:/app/app  # 只挂载源代码，不挂载虚拟环境
-      - ./src/user-service/logs:/app/logs  # 挂载日志目录
-    ports:
-      - "8081:8000"
-    profiles:
-      - user
-      - all
-
-  # --- User Service Tests ---
-  user-service-tests:
-    <<: *python-base
-    container_name: ai-postcard-user-service-tests
-    build:
-      context: ./src/user-service
-      dockerfile: Dockerfile.dev
-    volumes:
-      - ./src/user-service:/app
-      - ./src/user-service/.venv:/app/.venv
-    command: ["pytest"]
-    profiles:
-      - user-tests
-  
-  # --- Postcard Service (Python/FastAPI) ---
-  postcard-service:
-    <<: *python-base
-    container_name: ai-postcard-postcard-service
-    build:
-      context: ./src/postcard-service
-      dockerfile: Dockerfile.dev
-    volumes:
-      - ./src/postcard-service/app:/app/app  # 只挂载源代码，不挂载虚拟环境
-      - ./src/postcard-service/logs:/app/logs  # 挂载日志目录
-    ports:
-      - "8082:8000"
-    profiles:
-      - postcard
-      - all
-
-  # --- Postcard Service Tests ---
-  postcard-service-tests:
-    <<: *python-base
-    container_name: ai-postcard-postcard-service-tests
-    build:
-      context: ./src/postcard-service
-      dockerfile: Dockerfile.dev
-    volumes:
-      - ./src/postcard-service:/app
-      - ./src/postcard-service/.venv:/app/.venv
-    command: ["pytest"]
-    profiles:
-      - postcard-tests
-
-  # --- Gateway Service (Python/FastAPI) ---
-  gateway-service:
-    <<: *python-base
-    container_name: ai-postcard-gateway-service
-    build:
-      context: ./src/gateway-service
-      dockerfile: Dockerfile.dev
-    volumes:
-      - ./src/gateway-service/app:/app/app  # 只挂载源代码，不挂载虚拟环境
-      - ./src/gateway-service/logs:/app/logs  # 挂载日志目录
-    ports:
-      - "8083:8000"
-    profiles:
-      - gateway
-      - all
-
-  # --- Infrastructure Services ---
+  # =============================================================================
+  # 基础设施服务
+  # =============================================================================
   postgres:
+    <<: *common
     image: postgres:15-alpine
     container_name: ai-postcard-postgres
     environment:
-      - POSTGRES_DB=${DB_NAME:-ai_postcard}
-      - POSTGRES_USER=${DB_USER:-postgres}
-      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: ${DB_NAME:-ai_postcard}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports: ["${DB_PORT:-5432}:5432"]
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./data/postgres:/var/lib/postgresql/data
+      - ./backups/postgres:/backups
+      - ./scripts/init-database.sql:/docker-entrypoint-initdb.d/02-schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - app-network
 
   redis:
+    <<: *common
     image: redis:7-alpine
     container_name: ai-postcard-redis
-    command: redis-server --requirepass ${REDIS_PASSWORD:-redis}
-    ports:
-      - "6379:6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis} --appendonly yes --dir /data
+    ports: ["${REDIS_PORT:-6379}:6379"]
     volumes:
-      - redis_data:/data
+      - ./data/redis:/data
+      - ./backups/redis:/backups
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis}", "ping"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - app-network
+
+  # =============================================================================
+  # 应用服务
+  # =============================================================================
+  gateway-service:
+    <<: *app-service
+    container_name: ai-postcard-gateway-service
+    build:
+      context: ./src/gateway-service
+      dockerfile: Dockerfile
+    ports: ["${GATEWAY_PORT:-8083}:8000"]
+    volumes: [./logs/gateway:/app/logs]
+    profiles: [gateway, all]
+
+  user-service:
+    <<: *app-service
+    container_name: ai-postcard-user-service
+    build:
+      context: ./src/user-service
+      dockerfile: Dockerfile
+    ports: ["${USER_PORT:-8081}:8000"]
+    volumes: [./logs/user:/app/logs]
+    profiles: [user, all]
+
+  postcard-service:
+    <<: *app-service
+    container_name: ai-postcard-postcard-service
+    build:
+      context: ./src/postcard-service
+      dockerfile: Dockerfile
+    ports: ["${POSTCARD_PORT:-8082}:8000"]
+    volumes: [./logs/postcard:/app/logs]
+    profiles: [postcard, all]
+
+  ai-agent-service:
+    <<: *app-service
+    container_name: ai-postcard-ai-agent-service
+    build:
+      context: ./src/ai-agent-service
+      dockerfile: Dockerfile
+    ports: ["${AI_AGENT_PORT:-8080}:8000"]
+    volumes:
+      - ./logs/ai-agent:/app/logs
+      - ./data/ai-agent/static:/app/app/static
+    environment:
+      AI_AGENT_PUBLIC_URL: ${AI_AGENT_PUBLIC_URL}
+    profiles: [agent, all]
+
+  ai-agent-worker:
+    <<: *app-service
+    container_name: ai-postcard-ai-agent-worker
+    build:
+      context: ./src/ai-agent-service
+      dockerfile: Dockerfile
+    command: ["python", "-m", "app.worker"]
+    volumes:
+      - ./logs/ai-agent:/app/logs
+      - ./data/ai-agent/static:/app/app/static
+    profiles: [worker, all]
+
+  # =============================================================================
+  # 测试服务
+  # =============================================================================
+  user-service-tests:
+    <<: *common
+    container_name: ai-postcard-user-tests
+    build:
+      context: ./src/user-service
+      dockerfile: Dockerfile
+    command: ["pytest", "-v"]
+    depends_on: [postgres, redis]
+    profiles: [user-tests]
+
+  postcard-service-tests:
+    <<: *common
+    container_name: ai-postcard-postcard-tests
+    build:
+      context: ./src/postcard-service
+      dockerfile: Dockerfile
+    command: ["pytest", "-v"]
+    depends_on: [postgres, redis]
+    profiles: [postcard-tests]
+
+  ai-agent-service-tests:
+    <<: *common
+    container_name: ai-postcard-agent-tests
+    build:
+      context: ./src/ai-agent-service
+      dockerfile: Dockerfile
+    command: ["pytest", "-v"]
+    depends_on: [postgres, redis]
+    profiles: [agent-tests]
 
 # =============================================================================
-# 数据卷定义
-# =============================================================================
-volumes:
-  postgres_data:
-    driver: local
-  redis_data:
-    driver: local
-
-# =============================================================================
-# 网络定义 (可选，使用默认网络)
+# 网络
 # =============================================================================
 networks:
-  default:
-    name: ai-postcard-network
   app-network:
-    name: ai-postcard-app-network
+    name: ai-postcard-network
+    driver: bridge

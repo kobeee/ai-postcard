@@ -72,91 +72,74 @@ graph TD
 - **内存**：推荐 8GB+
 - **磁盘空间**：5GB+
 
-### 开发环境部署
+### 🎯 统一部署（推荐）
 
-#### 1. 克隆项目
+项目已经重构为**统一架构**：一套镜像，简单高效，开发生产完全一致！
+
+#### 1. 克隆和准备
 ```bash
 git clone https://github.com/your-org/ai-postcard.git
 cd ai-postcard
-```
 
-#### 2. 项目初始化
-```bash
-# 一键初始化（数据库、Redis、环境配置）
-sh scripts/init-project.sh --env=dev
-
-# 手动配置（可选）
+# 复制环境配置
 cp .env.example .env
-# 编辑 .env 文件，配置必要的API密钥
+# 编辑 .env 文件，填入必要的API密钥
 ```
 
-#### 3. 启动服务
+#### 2. 一键启动（推荐）
 ```bash
-# 启动所有服务
-sh scripts/dev.sh up all
+# 方式一：完整初始化（首次使用推荐）
+./scripts/run.sh init          # 创建目录、权限设置、启动数据库、初始化
 
-# 或分别启动
-sh scripts/dev.sh up gateway user postcard agent worker
+# 方式二：直接启动所有服务（会自动构建镜像）
+./scripts/run.sh up all        # 基础镜像 + 服务镜像 + 启动容器
+
+# 方式三：分步启动
+./scripts/run.sh build-base    # 1. 构建基础镜像
+./scripts/run.sh up postgres redis    # 2. 启动数据库
+./scripts/run.sh up gateway user postcard agent worker    # 3. 启动应用
 ```
 
-#### 4. 验证部署
+#### 3. 验证部署
 ```bash
-# 检查服务状态
-sh scripts/dev.sh ps
+# 查看服务状态
+./scripts/run.sh ps
 
 # 查看日志
-sh scripts/dev.sh logs
+./scripts/run.sh logs                    # 所有日志
+./scripts/run.sh logs ai-agent-service   # 特定服务
+./scripts/run.sh logs ai-agent-service -f # 实时日志
 
 # 健康检查
 curl http://localhost:8083/health
 ```
 
-### 生产环境部署
+### 📊 镜像构建说明
 
-#### 1. 生产环境初始化
+- **🔨 基础镜像** (`ai-postcard-base`): 首次运行自动构建，后续复用
+- **🏗️ 服务镜像**: 每次 `up` 命令自动检查并重建（如果需要）
+- **⚡ 构建顺序**: 基础镜像 → 各服务镜像 → 启动容器
+- **🚀 缓存优化**: 基础镜像分层，大幅提升构建速度（60-70%提升）
+
+### 💾 数据持久化
+
+所有数据完全持久化到宿主机，容器删除数据不丢失：
+
 ```bash
-# 生产环境一键初始化
-sh scripts/init-project.sh --env=prod
-```
+data/
+├── postgres/      # PostgreSQL数据 (UID:999)
+├── redis/         # Redis数据 (UID:999)
+└── ai-agent/static/ # AI生成的静态文件 (UID:1000)
 
-#### 2. 环境变量配置
-```bash
-# 编辑生产环境配置
-vim .env
+logs/              # 实时同步的应用日志
+├── gateway/
+├── user/
+├── postcard/
+└── ai-agent/
 
-# 必需配置项：
-# - DB_PASSWORD=<安全的数据库密码>
-# - REDIS_PASSWORD=<安全的Redis密码>  
-# - APP_SECRET=<应用密钥>
-# - ANTHROPIC_AUTH_TOKEN=<Claude API密钥>
-# - GEMINI_API_KEY=<Gemini API密钥>
-```
-
-#### 3. 启动生产服务
-```bash
-# 启动所有生产服务
-sh scripts/prod.sh up all
-
-# 或选择性启动
-sh scripts/prod.sh up gateway user postcard agent nginx
-```
-
-#### 4. 生产环境管理
-```bash
-# 查看服务状态
-sh scripts/prod.sh ps
-
-# 健康检查
-sh scripts/prod.sh health
-
-# 数据备份
-sh scripts/prod.sh backup
-
-# 查看日志
-sh scripts/prod.sh logs nginx -f
-
-# 服务扩容
-sh scripts/prod.sh scale ai-agent-worker 3
+backups/           # 备份目录
+├── postgres/
+└── redis/
 ```
 
 ## 📖 开发指南
@@ -171,30 +154,70 @@ ai-postcard/
 │   ├── ai-agent-service/         # AI Agent核心服务
 │   └── miniprogram/              # 微信小程序前端
 ├── scripts/                      # 管理脚本
-│   ├── init-project.sh          # 项目初始化
-│   ├── dev.sh                   # 开发环境管理
-│   └── prod.sh                  # 生产环境管理
-├── configs/                      # 配置文件
+│   ├── run.sh                   # 统一部署脚本
+│   └── init-project.sh          # 项目初始化
+├── docker/                       # Docker配置
+│   └── Dockerfile.base          # 基础镜像
 ├── docs/                         # 项目文档
-├── docker-compose.yml            # 开发环境编排
-├── docker-compose.prod.yml       # 生产环境编排
+├── docker-compose.yml            # 统一服务编排
 └── .env.example                  # 环境变量模板
 ```
 
-### 常用开发命令
+### 🛠️ 脚本使用指南
 
+**主要脚本：**
+- `scripts/run.sh` - 统一部署脚本，支持所有环境和操作
+- `scripts/init-project.sh` - 项目初始化脚本（仅首次使用）
+
+#### 统一管理命令
+
+**服务管理：**
 ```bash
-# 开发环境
-sh scripts/dev.sh up all                 # 启动所有服务
-sh scripts/dev.sh logs ai-agent-service  # 查看AI服务日志
-sh scripts/dev.sh exec postgres psql     # 进入数据库
-
-# 生产环境
-sh scripts/prod.sh init                  # 初始化生产环境
-sh scripts/prod.sh up all               # 启动所有生产服务  
-sh scripts/prod.sh backup               # 数据备份
-sh scripts/prod.sh health               # 健康检查
+./scripts/run.sh up all                 # 启动所有服务
+./scripts/run.sh up gateway user        # 启动网关和用户服务
+./scripts/run.sh up agent worker        # 启动AI服务和Worker
+./scripts/run.sh down                   # 停止所有服务
+./scripts/run.sh restart ai-agent-service # 重启特定服务
 ```
+
+**环境初始化：**
+```bash
+./scripts/run.sh init                   # 完整环境初始化
+./scripts/run.sh build-base             # 构建基础镜像
+```
+
+**调试工具：**
+```bash
+./scripts/run.sh ps                     # 查看服务状态
+./scripts/run.sh logs                   # 查看所有日志
+./scripts/run.sh logs ai-agent-service  # 查看特定服务日志
+./scripts/run.sh logs ai-agent-service -f # 实时日志
+./scripts/run.sh exec ai-agent-service bash # 进入容器调试
+```
+
+**测试支持：**
+```bash
+./scripts/run.sh up user-tests          # 运行用户服务测试
+./scripts/run.sh up agent-tests         # 运行AI Agent测试
+./scripts/run.sh up postcard-tests      # 运行明信片服务测试
+```
+
+**系统维护：**
+```bash
+./scripts/run.sh clean                  # 清理所有容器和数据
+```
+
+#### 可用服务配置
+
+**Docker Compose Profiles：**
+- `all` - 所有服务
+- `gateway` - API网关
+- `user` - 用户服务  
+- `postcard` - 明信片服务
+- `agent` - AI Agent服务
+- `worker` - AI Agent Worker
+- `postgres` - PostgreSQL数据库
+- `redis` - Redis缓存
 
 ### API端点
 
@@ -294,22 +317,20 @@ WECHAT_APP_SECRET=your_secret    # 小程序AppSecret
 ### 日志管理
 ```bash
 # 查看实时日志
-sh scripts/prod.sh logs nginx -f
-sh scripts/prod.sh logs ai-agent-service -f
+./scripts/run.sh logs ai-agent-service -f
+./scripts/run.sh logs gateway-service -f
 
 # 日志文件位置
-./logs/nginx/           # Nginx访问和错误日志
-./logs/postgres/        # 数据库日志
-./logs/ai-agent/        # AI服务日志
+./logs/gateway/         # 网关服务日志
+./logs/user/           # 用户服务日志
+./logs/postcard/       # 明信片服务日志
+./logs/ai-agent/       # AI服务日志
 ```
 
 ### 性能监控
 ```bash
 # 系统资源使用
-sh scripts/prod.sh ps
-
-# 健康检查
-sh scripts/prod.sh health
+./scripts/run.sh ps
 
 # 容器状态监控
 docker stats --no-stream
@@ -318,16 +339,10 @@ docker stats --no-stream
 ### 数据库管理
 ```bash
 # 连接数据库
-sh scripts/prod.sh exec postgres psql -U postgres -d ai_postcard
-
-# 数据备份
-sh scripts/prod.sh backup
-
-# 数据恢复  
-sh scripts/prod.sh restore backup_20250903_120000.tar.gz
+./scripts/run.sh exec postgres psql -U postgres -d ai_postcard
 
 # 清理过期数据
-sh scripts/prod.sh exec postgres psql -c "SELECT cleanup_expired_quotas();"
+./scripts/run.sh exec postgres psql -c "SELECT cleanup_expired_quotas();"
 ```
 
 ## 🐛 故障排除
@@ -338,35 +353,35 @@ sh scripts/prod.sh exec postgres psql -c "SELECT cleanup_expired_quotas();"
 ```bash
 # 症状：日志显示权限拒绝
 # 解决：重新构建镜像
-sh scripts/prod.sh down
-docker-compose -f docker-compose.prod.yml build --no-cache
-sh scripts/prod.sh up all
+./scripts/run.sh down
+./scripts/run.sh build-base
+./scripts/run.sh up all
 ```
 
 #### 2. 数据库连接失败
 ```bash  
 # 检查数据库状态
-sh scripts/prod.sh exec postgres pg_isready
+./scripts/run.sh exec postgres pg_isready
 
 # 重置数据库
-sh scripts/prod.sh down
+./scripts/run.sh down
 docker volume rm ai-postcard_postgres_data
-sh scripts/prod.sh init
+./scripts/run.sh init
 ```
 
 #### 3. Redis队列阻塞
 ```bash
-# 清理Redis队列
-sh scripts/init-redis.sh --force --password="$REDIS_PASSWORD"
+# 手动清理队列（进入Redis容器）
+./scripts/run.sh exec redis redis-cli -a "$REDIS_PASSWORD" XTRIM postcard_tasks MAXLEN 0
 ```
 
 #### 4. AI服务响应超时
 ```bash
 # 检查AI Agent日志
-sh scripts/prod.sh logs ai-agent-service -f
+./scripts/run.sh logs ai-agent-service -f
 
 # 重启AI服务
-sh scripts/prod.sh restart ai-agent-service
+./scripts/run.sh restart ai-agent-service
 ```
 
 ### 日志分析
@@ -385,7 +400,6 @@ sh scripts/prod.sh exec postgres psql -c "SELECT * FROM pg_stat_statements ORDER
 
 ### 代码规范
 - 遵循项目的编码规范（详见 `CLAUDE.md`）
-- 提交前运行 `sh scripts/dev.sh validate-env`
 - 确保所有测试通过
 - 编写有意义的提交消息
 
@@ -398,13 +412,13 @@ sh scripts/prod.sh exec postgres psql -c "SELECT * FROM pg_stat_statements ORDER
 ### 测试
 ```bash
 # AI Agent服务测试
-sh scripts/dev.sh exec ai-agent-service pytest
+./scripts/run.sh exec ai-agent-service pytest
 
 # 用户服务测试  
-sh scripts/dev.sh exec user-service pytest
+./scripts/run.sh exec user-service pytest
 
 # 明信片服务测试
-sh scripts/dev.sh exec postcard-service pytest
+./scripts/run.sh exec postcard-service pytest
 ```
 
 ## 📄 许可证

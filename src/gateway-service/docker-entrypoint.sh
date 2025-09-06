@@ -106,7 +106,6 @@ trap cleanup SIGTERM SIGINT SIGQUIT
 # 主函数
 main() {
     log_info "Gateway Service 容器启动中..."
-    log_info "环境: ${BUILD_ENV:-development}"
     
     check_environment
     wait_for_backend_services
@@ -118,20 +117,12 @@ main() {
     else
         log_info "启动 Gateway Service Web 服务..."
         
-        if [ "${BUILD_ENV}" = "production" ]; then
-            exec gunicorn app.main:app \
-                --workers 4 \
-                --worker-class uvicorn.workers.UvicornWorker \
-                --bind 0.0.0.0:8000 \
-                --access-logfile - \
-                --log-level info
-        else
-            exec uvicorn app.main:app \
-                --host 0.0.0.0 \
-                --port 8000 \
-                --reload \
-                --log-level debug
-        fi
+        # 统一使用uvicorn，支持热重载
+        exec uvicorn app.main:app \
+            --host 0.0.0.0 \
+            --port 8000 \
+            --reload \
+            --log-level info
     fi
 }
 
