@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.6
 # =============================================================================
 # AI Agent Service - 生产环境 Dockerfile
 # =============================================================================
@@ -26,20 +27,23 @@ RUN apt-get update && apt-get install -y \
 # 设置工作目录
 WORKDIR /build
 
-# 构建前端应用
+# 构建前端应用（使用 npm 缓存与确定性安装）
 COPY app/frontend/package*.json ./frontend/
-RUN cd frontend && npm ci --include=dev
+RUN --mount=type=cache,target=/root/.npm \
+    cd frontend && npm ci --include=dev --prefer-offline --no-audit --progress=false
 
 COPY app/frontend/ ./frontend/
-RUN cd frontend && npm run build
+RUN --mount=type=cache,target=/root/.npm \
+    cd frontend && npm run build
 
 # =============================================================================
 # 阶段2: Python依赖构建
 # =============================================================================
 FROM python:3.11-slim as python-builder
 
-# 安装构建依赖
-RUN apt-get update && apt-get install -y \
+# 安装构建依赖（apt 缓存 + 最小化）
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     && rm -rf /var/lib/apt/lists/*
@@ -47,11 +51,12 @@ RUN apt-get update && apt-get install -y \
 # 设置工作目录
 WORKDIR /build
 
-# 创建虚拟环境并安装Python依赖
+# 创建虚拟环境并安装Python依赖（pip 缓存 + 重试）
 COPY requirements.txt .
-RUN python -m venv /opt/venv \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir --upgrade pip \
-    && /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
+    && /opt/venv/bin/pip install --no-cache-dir --retries 5 --timeout 60 -r requirements.txt
 
 # =============================================================================
 # 阶段3: 运行时环境
@@ -60,8 +65,10 @@ FROM python:3.11-slim as runtime
 
 # 构建参数
 ARG BUILD_ENV=production
-ARG USER_ID=1000
-ARG GROUP_ID=1000
+ARG APP_UID=1000
+ARG APP_GID=1000
+ARG USER_ID=${APP_UID}
+ARG GROUP_ID=${APP_GID}
 
 # 设置环境变量
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -70,56 +77,19 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     NODE_ENV=production \
     BUILD_ENV=${BUILD_ENV}
 
-# 安装运行时系统依赖
-RUN apt-get update && apt-get install -y \
-    # Node.js 18 LTS
-    curl \
-    gnupg \
-    ca-certificates \
-    # Puppeteer依赖
+# 安装运行时系统依赖（最小化：Chromium + 基础工具）
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     chromium \
     fonts-liberation \
-    libappindicator3-1 \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libatk1.0-0 \
-    libc6 \
-    libcairo2 \
-    libcups2 \
-    libdbus-1-3 \
-    libexpat1 \
-    libfontconfig1 \
-    libgbm1 \
-    libgcc1 \
-    libglib2.0-0 \
-    libgtk-3-0 \
-    libnspr4 \
-    libnss3 \
-    libpango-1.0-0 \
-    libpangocairo-1.0-0 \
-    libstdc++6 \
-    libx11-6 \
-    libx11-xcb1 \
-    libxcb1 \
-    libxcomposite1 \
-    libxcursor1 \
-    libxdamage1 \
-    libxext6 \
-    libxfixes3 \
-    libxi6 \
-    libxrandr2 \
-    libxrender1 \
-    libxss1 \
-    libxtst6 \
-    lsb-release \
-    wget \
-    xdg-utils \
-    # 清理
+    curl \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装Node.js 18
-RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
-    && apt-get install -y nodejs \
+# 安装 Node.js（使用发行版源，避免外部脚本）
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+    nodejs npm \
     && rm -rf /var/lib/apt/lists/*
 
 # 创建应用用户和组
@@ -130,8 +100,12 @@ RUN groupadd -g ${GROUP_ID} appuser \
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
-# 安装全局Node.js包
-RUN npm install -g @anthropic-ai/claude-code puppeteer
+# npm 下载健壮性与缓存；安装必要的全局包
+RUN npm config set fetch-retries 5 \
+    && npm config set fetch-retry-mintimeout 10000 \
+    && npm config set fetch-retry-maxtimeout 600000
+RUN --mount=type=cache,target=/root/.npm \
+    npm install -g --no-audit --progress=false @anthropic-ai/claude-code puppeteer
 
 # 设置工作目录
 WORKDIR /app

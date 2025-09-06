@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.6
 # =============================================================================
 # User Service - 生产环境 Dockerfile
 # =============================================================================
@@ -8,7 +9,8 @@
 FROM python:3.11-slim as builder
 
 # 安装构建依赖
-RUN apt-get update && apt-get install -y \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     libpq-dev \
@@ -17,9 +19,10 @@ RUN apt-get update && apt-get install -y \
 # 创建虚拟环境并安装依赖
 WORKDIR /build
 COPY requirements.txt .
-RUN python -m venv /opt/venv \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir --upgrade pip \
-    && /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
+    && /opt/venv/bin/pip install --no-cache-dir --retries 5 --timeout 60 -r requirements.txt
 
 # =============================================================================
 # 阶段2: 运行时环境
@@ -28,8 +31,10 @@ FROM python:3.11-slim as runtime
 
 # 构建参数
 ARG BUILD_ENV=production
-ARG USER_ID=1000
-ARG GROUP_ID=1000
+ARG APP_UID=1000
+ARG APP_GID=1000
+ARG USER_ID=${APP_UID}
+ARG GROUP_ID=${APP_GID}
 
 # 设置环境变量
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -38,9 +43,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     BUILD_ENV=${BUILD_ENV}
 
 # 安装运行时依赖
-RUN apt-get update && apt-get install -y \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     curl \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # 创建应用用户
