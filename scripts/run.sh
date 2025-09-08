@@ -121,33 +121,108 @@ clean_user_data() {
     log_info "清理 PostgreSQL 中的用户数据..."
     docker-compose exec -T postgres psql -U postgres -d ai_postcard -v ON_ERROR_STOP=1 -c "DO $$
 DECLARE
-    sys_id TEXT;
+    sys_user_uuid UUID;
+    sys_user_str TEXT;
+    deleted_users INTEGER := 0;
+    deleted_quotas INTEGER := 0;  
+    deleted_postcards INTEGER := 0;
+    total_users_before INTEGER;
+    total_quotas_before INTEGER;
+    total_postcards_before INTEGER;
 BEGIN
-    SELECT COALESCE(id::text,'00000000-0000-0000-0000-000000000000') INTO sys_id
+    -- 统计清理前的数据量
+    SELECT COUNT(*) INTO total_users_before FROM users;
+    SELECT COUNT(*) INTO total_quotas_before FROM user_quotas;
+    SELECT COUNT(*) INTO total_postcards_before FROM postcards;
+    
+    RAISE NOTICE '=== 数据清理开始 ===';
+    RAISE NOTICE '清理前统计 - 用户:%条, 配额:%条, 明信片:%条', total_users_before, total_quotas_before, total_postcards_before;
+    
+    -- 查找系统用户ID（UUID类型）
+    SELECT id INTO sys_user_uuid
     FROM users
-    WHERE openid = 'system_user'
-       OR id = '00000000-0000-0000-0000-000000000000'
+    WHERE openid = 'system_user' OR id = '00000000-0000-0000-0000-000000000000'::UUID
     LIMIT 1;
+    
+    -- 处理系统用户ID，转换为字符串用于VARCHAR字段比较
+    IF sys_user_uuid IS NOT NULL THEN
+        sys_user_str := sys_user_uuid::TEXT;
+        RAISE NOTICE '找到系统用户 - UUID:%s, 字符串:%s', sys_user_uuid, sys_user_str;
+    ELSE
+        -- 创建系统用户（如果不存在）
+        sys_user_uuid := '00000000-0000-0000-0000-000000000000'::UUID;
+        sys_user_str := sys_user_uuid::TEXT;
+        INSERT INTO users (id, openid, nickname, is_active) 
+        VALUES (sys_user_uuid, 'system_user', '系统用户', true)
+        ON CONFLICT (openid) DO NOTHING;
+        RAISE NOTICE '创建系统用户 - UUID:%s, 字符串:%s', sys_user_uuid, sys_user_str;
+    END IF;
 
-    -- 删除除系统用户外的所有用户
-    DELETE FROM users WHERE id::text <> sys_id;
+    -- 1. 删除除系统用户外的所有用户（使用UUID类型比较）
+    DELETE FROM users 
+    WHERE id != sys_user_uuid;
+    GET DIAGNOSTICS deleted_users = ROW_COUNT;
+    RAISE NOTICE '✓ 删除普通用户记录: %条', deleted_users;
 
-    -- 删除除系统用户外的所有配额
-    DELETE FROM user_quotas WHERE user_id IS DISTINCT FROM sys_id;
+    -- 2. 删除所有非系统用户的配额记录（使用字符串类型比较，彻底清除每日限制）
+    DELETE FROM user_quotas 
+    WHERE user_id != sys_user_str;
+    GET DIAGNOSTICS deleted_quotas = ROW_COUNT;
+    RAISE NOTICE '✓ 删除用户配额记录: %条', deleted_quotas;
 
-    -- 删除除系统用户外的所有明信片（包含无用户归属的记录）
-    DELETE FROM postcards WHERE user_id IS DISTINCT FROM sys_id;
-END$$;" >/dev/null 2>&1 || true
+    -- 3. 删除所有非系统用户的明信片（使用字符串类型比较）
+    DELETE FROM postcards 
+    WHERE user_id != sys_user_str;
+    GET DIAGNOSTICS deleted_postcards = ROW_COUNT;
+    RAISE NOTICE '✓ 删除用户明信片记录: %条', deleted_postcards;
+    
+    -- 4. 清理孤立记录（没有user_id的记录）
+    DELETE FROM user_quotas WHERE user_id IS NULL;
+    DELETE FROM postcards WHERE user_id IS NULL;
+    RAISE NOTICE '✓ 清理孤立记录完成';
+    
+    -- 最终统计
+    DECLARE
+        remaining_users INTEGER;
+        remaining_quotas INTEGER;
+        remaining_postcards INTEGER;
+    BEGIN
+        SELECT COUNT(*) INTO remaining_users FROM users;
+        SELECT COUNT(*) INTO remaining_quotas FROM user_quotas;
+        SELECT COUNT(*) INTO remaining_postcards FROM postcards;
+        
+        RAISE NOTICE '=== 数据清理完成 ===';
+        RAISE NOTICE '清理后统计 - 用户:%条, 配额:%条, 明信片:%条', remaining_users, remaining_quotas, remaining_postcards;
+        RAISE NOTICE '实际删除量 - 用户:%条, 配额:%条, 明信片:%条', deleted_users, deleted_quotas, deleted_postcards;
+    END;
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE '❌ 数据清理过程中发生错误: %', SQLERRM;
+        RAISE;
+END$$;" 2>&1
     log_success "PostgreSQL 用户数据清理完成"
 
-    # 清理 Redis 用户数据（保守：仅清理已知业务键，避免 FLUSHALL）
+    # 清理 Redis 用户数据（清理用户相关的缓存和会话）
     # 可用环境变量 CLEAN_REDIS_PATTERNS 自定义需清理的键（空格分隔通配模式）
     local patterns
-    patterns=${CLEAN_REDIS_PATTERNS:-"postcard_tasks"}
+    patterns=${CLEAN_REDIS_PATTERNS:-"postcard_tasks cache:user:* session:* temp:user:* quota:*"}
 
     log_info "清理 Redis 中的用户数据键: ${patterns}"
+    
+    # 逐个清理不同的键模式
     for pattern in ${patterns}; do
-        docker-compose exec -T redis sh -lc "redis-cli -a \"\${REDIS_PASSWORD:-redis}\" --no-auth-warning KEYS '${pattern}' | xargs -r redis-cli -a \"\${REDIS_PASSWORD:-redis}\" --no-auth-warning DEL" >/dev/null 2>&1 || true
+        log_info "清理模式: ${pattern}"
+        # 获取匹配的键数量（用于日志显示）
+        local key_count
+        key_count=$(docker-compose exec -T redis sh -lc "redis-cli -a \"\${REDIS_PASSWORD:-redis}\" --no-auth-warning KEYS '${pattern}' | wc -l" 2>/dev/null || echo "0")
+        
+        if [ "${key_count}" -gt 0 ]; then
+            log_info "找到 ${key_count} 个匹配的键"
+            docker-compose exec -T redis sh -lc "redis-cli -a \"\${REDIS_PASSWORD:-redis}\" --no-auth-warning KEYS '${pattern}' | xargs -r redis-cli -a \"\${REDIS_PASSWORD:-redis}\" --no-auth-warning DEL" >/dev/null 2>&1 || true
+        else
+            log_info "未找到匹配的键"
+        fi
     done
 
     # 业务所需流与消费者组：删除后需要恢复

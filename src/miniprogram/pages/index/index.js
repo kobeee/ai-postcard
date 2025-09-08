@@ -41,7 +41,13 @@ Page({
     userCards: [],
     // 调试浮层受控开关（默认关闭）
     envDebug: false,
-    showDebug: false
+    showDebug: false,
+    
+    // 新的用户信息设置（2024年微信小程序最新方案）
+    showProfileSetup: false,
+    tempAvatarUrl: '',
+    tempNickname: '',
+    canCompleteSetup: false
   },
 
   onLoad(options) {
@@ -352,16 +358,20 @@ Page({
     const userInfo = wx.getStorageSync('userInfo');
     
     if (userToken && userInfo) {
+      // 增强用户信息处理逻辑
+      const enhancedUserInfo = this.processUserInfo(userInfo);
+      
       this.setData({
-        userInfo: userInfo,
+        userInfo: enhancedUserInfo,
         hasUserInfo: true
       });
       
-      // 设置个性化问候语
-      const nickname = userInfo.nickname || userInfo.nickName || '';
-      if (nickname) {
+      // 设置个性化问候语 - 优化昵称获取逻辑
+      const nickname = this.getUserNickname(enhancedUserInfo);
+      if (nickname && nickname !== '微信用户') {
+        const baseGreeting = this.data.greetingText.replace(/^.*，/, ''); // 移除现有昵称
         this.setData({
-          greetingText: `${nickname}，${this.data.greetingText}`
+          greetingText: `${nickname}，${baseGreeting}`
         });
       }
       
@@ -376,6 +386,53 @@ Page({
         hasUserInfo: false
       });
     }
+  },
+
+  /**
+   * 处理用户信息，确保包含必要字段
+   */
+  processUserInfo(userInfo) {
+    if (!userInfo) return null;
+    
+    // 确保头像URL字段统一
+    const avatarUrl = userInfo.avatarUrl || userInfo.avatar_url || userInfo.headimgurl || '';
+    
+    // 确保昵称字段统一
+    const nickName = userInfo.nickName || userInfo.nickname || userInfo.nick_name || '';
+    
+    return {
+      ...userInfo,
+      avatarUrl: avatarUrl,
+      nickName: nickName,
+      // 兼容性字段
+      avatar_url: avatarUrl,
+      nickname: nickName
+    };
+  },
+
+  /**
+   * 获取用户昵称
+   */
+  getUserNickname(userInfo) {
+    if (!userInfo) return '';
+    
+    // 按优先级尝试不同的昵称字段
+    const possibleNicknames = [
+      userInfo.nickName,      // 微信小程序标准字段
+      userInfo.nickname,      // 后端可能转换的字段
+      userInfo.nick_name,     // 下划线格式
+      userInfo.name,          // 通用name字段
+      userInfo.displayName,   // 显示名称
+      userInfo.userName       // 用户名
+    ];
+    
+    for (const name of possibleNicknames) {
+      if (name && typeof name === 'string' && name.trim() !== '' && name !== '微信用户') {
+        return name.trim();
+      }
+    }
+    
+    return ''; // 如果都没有有效昵称，返回空字符串
   },
 
   /**
@@ -658,7 +715,157 @@ Page({
 
 
   /**
-   * 用户登录 - 必须在用户点击事件中直接调用
+   * 快速登录 - 使用openid登录，不获取用户信息
+   */
+  async handleQuickLogin() {
+    try {
+      wx.showLoading({ title: '登录中...', mask: true });
+
+      // 1. 获取微信登录code
+      const loginResult = await new Promise((resolve, reject) => {
+        wx.login({ success: resolve, fail: reject });
+      });
+
+      // 2. 发送到后端进行认证（不传真实用户信息，只传基础信息）
+      const basicUserInfo = {
+        nickName: '微信用户',
+        avatarUrl: '',
+        // 标记这是快速登录
+        _isQuickLogin: true
+      };
+      const authResult = await authAPI.login(loginResult.code, basicUserInfo);
+
+      // 3. 保存认证信息
+      wx.setStorageSync('userToken', authResult.token);
+      wx.setStorageSync('userInfo', authResult.userInfo);
+      if (authResult.refreshToken) {
+        wx.setStorageSync('refreshToken', authResult.refreshToken);
+      }
+
+      // 4. 检查是否需要完善用户信息
+      if (!authResult.userInfo.nickName || authResult.userInfo.nickName === '微信用户') {
+        // 显示个人信息完善界面
+        this.setData({ showProfileSetup: true });
+      } else {
+        // 直接设置用户信息
+        const enhancedUserInfo = this.processUserInfo(authResult.userInfo);
+        this.setData({
+          userInfo: enhancedUserInfo,
+          hasUserInfo: true
+        });
+        this.checkUserStatus();
+      }
+
+      wx.hideLoading();
+
+    } catch (error) {
+      wx.hideLoading();
+      wx.showToast({
+        title: error.message || '登录失败，请重试',
+        icon: 'none',
+        duration: 2000
+      });
+      envConfig.error('快速登录失败:', error);
+    }
+  },
+
+  /**
+   * 选择头像回调
+   */
+  onChooseAvatar(e) {
+    const { avatarUrl } = e.detail;
+    this.setData({ 
+      tempAvatarUrl: avatarUrl,
+      canCompleteSetup: !!(avatarUrl && this.data.tempNickname)
+    });
+    envConfig.log('用户选择头像:', avatarUrl);
+  },
+
+  /**
+   * 昵称输入回调
+   */
+  onNicknameInput(e) {
+    const nickname = e.detail.value.trim();
+    this.setData({ 
+      tempNickname: nickname,
+      canCompleteSetup: !!(nickname && this.data.tempAvatarUrl)
+    });
+  },
+
+  /**
+   * 完成个人信息设置
+   */
+  async completeProfileSetup() {
+    const { tempAvatarUrl, tempNickname } = this.data;
+    
+    if (!tempAvatarUrl || !tempNickname) {
+      wx.showToast({
+        title: '请完善头像和昵称',
+        icon: 'none'
+      });
+      return;
+    }
+
+    try {
+      wx.showLoading({ title: '保存中...', mask: true });
+
+      // 1. 上传头像到服务器（如果需要）
+      let finalAvatarUrl = tempAvatarUrl;
+      // TODO: 这里可以添加上传头像到服务器的逻辑
+      // const uploadResult = await this.uploadAvatar(tempAvatarUrl);
+      // finalAvatarUrl = uploadResult.url;
+
+      // 2. 更新用户信息
+      const updatedUserInfo = {
+        ...this.data.userInfo,
+        nickName: tempNickname,
+        avatarUrl: finalAvatarUrl,
+        // 兼容性字段
+        nickname: tempNickname,
+        avatar_url: finalAvatarUrl
+      };
+
+      // 3. 保存到本地和设置页面状态
+      wx.setStorageSync('userInfo', updatedUserInfo);
+      const enhancedUserInfo = this.processUserInfo(updatedUserInfo);
+      
+      this.setData({
+        userInfo: enhancedUserInfo,
+        hasUserInfo: true,
+        showProfileSetup: false,
+        tempAvatarUrl: '',
+        tempNickname: '',
+        canCompleteSetup: false
+      });
+
+      wx.hideLoading();
+      wx.showToast({
+        title: '设置完成',
+        icon: 'success'
+      });
+
+      // 4. 更新问候语
+      const baseGreeting = '夜深了，记录今天的心情。';
+      this.setData({
+        greetingText: `${tempNickname}，${baseGreeting}`
+      });
+      
+      // 5. 继续初始化流程
+      this.loadUserCards();
+      this.checkTodayCard();
+
+    } catch (error) {
+      wx.hideLoading();
+      wx.showToast({
+        title: '保存失败，请重试',
+        icon: 'none'
+      });
+      envConfig.error('保存用户信息失败:', error);
+    }
+  },
+
+  /**
+   * 用户登录 - 必须在用户点击事件中直接调用（兼容旧方法）
    */
   async handleLogin(e) {
     try {
@@ -688,15 +895,26 @@ Page({
       // 3. 发送登录请求到后端
       const authResult = await authAPI.login(loginResult.code, userProfile.userInfo);
 
-      // 4. 保存用户信息到本地存储
+      // 4. 处理并保存用户信息到本地存储
+      // 优先使用原始的微信用户信息，后端信息作为补充
+      const finalUserInfo = {
+        ...userProfile.userInfo, // 微信原始信息
+        ...authResult.userInfo,  // 后端处理信息
+        // 确保关键字段正确
+        nickName: userProfile.userInfo.nickName || authResult.userInfo.nickName || authResult.userInfo.nickname || '',
+        avatarUrl: userProfile.userInfo.avatarUrl || authResult.userInfo.avatarUrl || authResult.userInfo.avatar_url || ''
+      };
+      
       wx.setStorageSync('userToken', authResult.token);
-      wx.setStorageSync('userInfo', authResult.userInfo);
+      wx.setStorageSync('userInfo', finalUserInfo);
       if (authResult.refreshToken) {
         wx.setStorageSync('refreshToken', authResult.refreshToken);
       }
       
+      // 处理用户信息并设置到页面数据
+      const enhancedUserInfo = this.processUserInfo(finalUserInfo);
       this.setData({
-        userInfo: authResult.userInfo,
+        userInfo: enhancedUserInfo,
         hasUserInfo: true
       });
 

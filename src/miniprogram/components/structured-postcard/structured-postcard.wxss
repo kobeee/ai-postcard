@@ -143,13 +143,32 @@
   /* 内容层负责内容的布局和背景 */
 }
 
-/* 背面内容层特殊样式 */
+/* 背面内容层特殊样式 - 支持滚动，隐藏滚动条 */
 .back-content {
   background: linear-gradient(135deg, 
     rgba(255, 255, 255, 0.95) 0%,
     rgba(248, 250, 252, 0.95) 50%,
     rgba(255, 255, 255, 0.95) 100%);
   backdrop-filter: blur(12rpx);
+  
+  /* 启用垂直滚动 */
+  overflow-y: auto;
+  overflow-x: hidden;
+  
+  /* 隐藏滚动条 - 兼容各种浏览器 */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+  
+  /* 滚动行为优化 */
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch; /* iOS滚动优化 */
+}
+
+/* 隐藏 Webkit 浏览器滚动条 */
+.back-content::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 /* ================== 内容样式（保持原有设计） ================== */
@@ -676,8 +695,8 @@
   position: fixed;
   top: -9999rpx;
   left: -9999rpx;
-  width: 750rpx;
-  height: 1000rpx;
+  width: 690rpx;  /* 与卡片尺寸保持一致 */
+  height: 1100rpx; /* 与卡片尺寸保持一致 */
   z-index: -999;
   opacity: 0;
   pointer-events: none;

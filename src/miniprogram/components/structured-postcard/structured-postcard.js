@@ -673,9 +673,10 @@ Component({
           const canvasId = 'screenshot-canvas'
           const ctx = wx.createCanvasContext(canvasId, this)
           
-          // Canvas尺寸 (按实际卡片比例)
-          const canvasWidth = 375 // 逻辑像素
-          const canvasHeight = 500
+          // Canvas尺寸 - 使用与卡片相同的比例，避免白边
+          // 参照 .card-scene 的尺寸：690rpx × 1100rpx
+          const canvasWidth = 345 // 690rpx / 2 (转换为逻辑像素)
+          const canvasHeight = 550 // 1100rpx / 2
           
           // 1. 首先绘制Gemini背景图片（如果有的话）
           if (backgroundImagePath) {
