@@ -12,6 +12,14 @@ FROM node:20-slim as frontend-builder
 # 设置工作目录
 WORKDIR /build
 
+# 配置npm国内镜像源以优化网络连接
+RUN npm config set registry https://registry.npmmirror.com \
+    && npm config set fetch-retries 10 \
+    && npm config set fetch-retry-mintimeout 30000 \
+    && npm config set fetch-retry-maxtimeout 300000 \
+    && npm config set progress false \
+    && npm config set audit false
+
 # 复制前端package文件并安装依赖（利用Docker层缓存）
 COPY app/frontend/package*.json ./
 RUN --mount=type=cache,target=/root/.npm \
@@ -27,6 +35,11 @@ RUN --mount=type=cache,target=/root/.npm \
 # =============================================================================
 FROM python:3.11-slim as deps-builder
 
+# 配置 APT 镜像与网络参数（国内镜像 + IPv4）
+RUN set -eux; \
+    printf 'Acquire::Retries "5";\nAcquire::http::Timeout "30";\nAcquire::ForceIPv4 "true";\n' > /etc/apt/apt.conf.d/99network && \
+    sed -ri 's|http://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g; s|http://security.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list || true
+
 # 安装构建依赖
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
@@ -37,10 +50,17 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # 创建虚拟环境并安装Python依赖
 WORKDIR /build
 COPY requirements.txt .
+
+# 配置pip镜像源以优化网络连接和增强稳定性
 RUN --mount=type=cache,target=/root/.cache/pip \
     python -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir --upgrade pip \
-    && /opt/venv/bin/pip install --no-cache-dir --retries 5 --timeout 60 -r requirements.txt
+    && /opt/venv/bin/pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple \
+    && /opt/venv/bin/pip config set global.trusted-host pypi.tuna.tsinghua.edu.cn \
+    && /opt/venv/bin/pip config set global.extra-index-url https://mirrors.aliyun.com/pypi/simple \
+    && /opt/venv/bin/pip config set global.timeout 120 \
+    && /opt/venv/bin/pip config set global.retries 10 \
+    && /opt/venv/bin/pip install --no-cache-dir --retries 10 --timeout 120 -r requirements.txt
 
 # =============================================================================
 # 阶段3: 运行时镜像
@@ -62,10 +82,13 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
-# 配置npm的健壮性设置
-RUN npm config set fetch-retries 5 \
-    && npm config set fetch-retry-mintimeout 10000 \
-    && npm config set fetch-retry-maxtimeout 600000
+# 配置npm国内镜像源优化网络连接
+RUN npm config set registry https://registry.npmmirror.com \
+    && npm config set fetch-retries 10 \
+    && npm config set fetch-retry-mintimeout 30000 \
+    && npm config set fetch-retry-maxtimeout 300000 \
+    && npm config set progress false \
+    && npm config set audit false
 
 # 安装全局Node.js包
 RUN --mount=type=cache,target=/root/.npm \

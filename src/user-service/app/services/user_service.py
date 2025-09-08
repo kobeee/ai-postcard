@@ -35,7 +35,16 @@ class UserService:
     async def create_miniprogram_user(self, user_data: Dict[str, Any]) -> User:
         """创建小程序用户"""
         try:
-            user = User(**user_data)
+            # 仅保留模型定义的字段，避免传入未知字段导致报错（如 role 等）
+            allowed_fields = {
+                "openid", "unionid", "session_key",
+                "nickname", "avatar_url", "gender",
+                "country", "province", "city", "language",
+                "is_active", "is_premium",
+                "created_at", "updated_at", "last_login_at"
+            }
+            sanitized = {k: v for k, v in user_data.items() if k in allowed_fields}
+            user = User(**sanitized)
             self.db.add(user)
             self.db.commit()
             self.db.refresh(user)

@@ -10,6 +10,7 @@ from ..models.postcard import Postcard, TaskStatus
 from ..models.task import PostcardGenerationTask, PostcardRequest, TaskStatusResponse
 from .queue_service import QueueService
 from .quota_service import QuotaService
+from .concurrent_quota_service import ConcurrentSafeQuotaService
 
 logger = logging.getLogger(__name__)
 
@@ -18,12 +19,27 @@ class PostcardService:
         self.db = db
         self.queue_service = QueueService()
         self.quota_service = QuotaService(db)
+        # 🔥 并发安全配额服务（双模式支持）
+        self.concurrent_quota_service = ConcurrentSafeQuotaService(db)
+    
+    def _get_quota_service(self):
+        """获取配额服务实例（优先使用并发安全版本）"""
+        import os
+        use_concurrent_quota = os.getenv('QUOTA_LOCKS_ENABLED', 'false').lower() == 'true'
+        
+        if use_concurrent_quota:
+            logger.debug("🔒 使用并发安全配额服务")
+            return self.concurrent_quota_service
+        else:
+            logger.debug("🔄 使用传统配额服务")
+            return self.quota_service
 
     async def create_task(self, request: PostcardRequest) -> str:
         """创建新的明信片生成任务"""
         try:
-            # 🔥 检查用户每日生成配额
-            quota_check = await self.quota_service.check_generation_quota(request.user_id)
+            # 🔥 检查用户每日生成配额（自动选择服务）
+            quota_service = self._get_quota_service()
+            quota_check = await quota_service.check_generation_quota(request.user_id)
             if not quota_check["can_generate"]:
                 raise Exception(f"每日生成次数已用完。{quota_check['message']}")
             
@@ -74,8 +90,14 @@ class PostcardService:
             # 发布到消息队列
             await self.queue_service.publish_task(task)
             
-            # 🔥 消耗用户配额 - 传递卡片ID
-            await self.quota_service.consume_generation_quota(request.user_id, postcard.id)
+            # 🔥 消耗用户配额 - 传递卡片ID（自动选择服务）
+            quota_service = self._get_quota_service()
+            if hasattr(quota_service, 'consume_generation_quota_safe'):
+                # 使用并发安全版本
+                await quota_service.consume_generation_quota_safe(request.user_id, postcard.id)
+            else:
+                # 使用传统版本
+                await quota_service.consume_generation_quota(request.user_id, postcard.id)
             
             logger.info(f"✅ 任务创建成功: {task_id}")
             return task_id
@@ -162,6 +184,18 @@ class PostcardService:
                 postcard.completed_at = datetime.now()
             elif status == TaskStatus.FAILED:
                 postcard.retry_count += 1
+                # 🔥 任务失败时恢复配额，允许用户重新生成（自动选择服务）
+                try:
+                    quota_service = self._get_quota_service()
+                    if hasattr(quota_service, 'handle_task_failure_safe'):
+                        # 使用并发安全版本
+                        await quota_service.handle_task_failure_safe(postcard.user_id, postcard.id)
+                    else:
+                        # 使用传统版本
+                        await quota_service.handle_task_failure(postcard.user_id, postcard.id)
+                    logger.info(f"✅ 任务失败，已恢复配额: {task_id}")
+                except Exception as quota_error:
+                    logger.error(f"⚠️ 恢复配额失败: {task_id} - {quota_error}")
             
             self.db.commit()
             logger.info(f"✅ 任务状态更新: {task_id} -> {status.value}")
@@ -286,8 +320,14 @@ class PostcardService:
             self.db.delete(postcard)
             self.db.commit()
             
-            # 🔥 释放今日卡片位置（不恢复生成次数）
-            await self.quota_service.release_card_position(user_id, postcard_id)
+            # 🔥 释放今日卡片位置（不恢复生成次数）（自动选择服务）
+            quota_service = self._get_quota_service()
+            if hasattr(quota_service, 'release_card_position_safe'):
+                # 使用并发安全版本
+                await quota_service.release_card_position_safe(user_id, postcard_id)
+            else:
+                # 使用传统版本
+                await quota_service.release_card_position(user_id, postcard_id)
             
             logger.info(f"✅ 明信片删除成功: {postcard_id}")
             return True

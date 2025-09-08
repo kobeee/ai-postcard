@@ -8,6 +8,11 @@
 # 阶段1: 依赖构建
 FROM python:3.11-slim as deps-builder
 
+# 配置 APT 镜像与网络参数（国内镜像 + IPv4）
+RUN set -eux; \
+    printf 'Acquire::Retries "5";\nAcquire::http::Timeout "30";\nAcquire::ForceIPv4 "true";\n' > /etc/apt/apt.conf.d/99network && \
+    sed -ri 's|http://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g; s|http://security.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list || true
+
 # 安装构建依赖（包括PostgreSQL客户端）
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
@@ -19,10 +24,17 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # 创建虚拟环境并安装Python依赖
 WORKDIR /build
 COPY requirements.txt .
+
+# 配置pip镜像源以优化网络连接和增强稳定性
 RUN --mount=type=cache,target=/root/.cache/pip \
     python -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir --upgrade pip \
-    && /opt/venv/bin/pip install --no-cache-dir --retries 5 --timeout 60 -r requirements.txt
+    && /opt/venv/bin/pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple \
+    && /opt/venv/bin/pip config set global.trusted-host pypi.tuna.tsinghua.edu.cn \
+    && /opt/venv/bin/pip config set global.extra-index-url https://mirrors.aliyun.com/pypi/simple \
+    && /opt/venv/bin/pip config set global.timeout 120 \
+    && /opt/venv/bin/pip config set global.retries 10 \
+    && /opt/venv/bin/pip install --no-cache-dir --retries 10 --timeout 120 -r requirements.txt
 
 # =============================================================================
 # 阶段2: 运行时镜像

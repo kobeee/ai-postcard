@@ -11,3 +11,11 @@ python-jose[cryptography]
 passlib[bcrypt]
 python-multipart
 httpx
+
+# 安全组件依赖
+bleach
+pycryptodome
+
+# 监控组件依赖
+psutil
+httpx

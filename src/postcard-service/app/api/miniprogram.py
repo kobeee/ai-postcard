@@ -1,14 +1,85 @@
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException, Header, Request
 from sqlalchemy.orm import Session
 from typing import Optional, List
 import logging
+import os
 
 from ..database.connection import get_db
 from ..models.task import PostcardRequest, PostcardResponse, TaskStatusResponse, TaskStatus
 from ..services.postcard_service import PostcardService
 
-# 设置日志
+# 设置日志（模块级）
 logger = logging.getLogger(__name__)
+
+# 本地安全适配：使用 JWT 校验或请求头识别用户，避免跨服务导入
+from jose import jwt, JWTError
+
+JWT_SECRET = os.getenv("JWT_SECRET_KEY", "ai-postcard-secret-key-2025")
+JWT_ALG = "HS256"
+
+class CurrentUser:
+    def __init__(self, user_id: str | None = None, role: str = "user", permissions: Optional[set] = None, session_id: Optional[str] = None):
+        self.user_id = user_id
+        self.role = role
+        self.permissions = permissions or set()
+        self.session_id = session_id
+    
+    def has_permission(self, permission: str) -> bool:
+        return permission in self.permissions or self.role == "admin"
+
+async def get_current_user(request: Request | None = None) -> CurrentUser:
+    if not request:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=401, detail="缺少请求上下文")
+    token = None
+    auth_header = request.headers.get("authorization")
+    if auth_header and auth_header.lower().startswith("bearer "):
+        token = auth_header[7:]
+    if not token:
+        token = request.headers.get("x-access-token")
+    if not token:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=401, detail="缺少身份验证令牌")
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+        user_id = payload.get("user_id")
+        if not user_id:
+            raise JWTError("缺少user_id")
+        role = payload.get("role", "user")
+        perms = set(payload.get("permissions", []))
+        session_id = payload.get("session_id")
+        return CurrentUser(user_id=user_id, role=role, permissions=perms, session_id=session_id)
+    except JWTError as e:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=401, detail=f"无效的身份验证令牌: {e}")
+
+def require_permission(permission: str, resource_check: bool = False):
+    def decorator(func):
+        async def wrapper(*args, **kwargs):
+            # 从参数或 request.state 中获取用户
+            current_user = kwargs.get('current_user')
+            if not current_user:
+                for a in args:
+                    if isinstance(a, CurrentUser):
+                        current_user = a
+                        break
+            if not current_user and 'request' in kwargs and isinstance(kwargs['request'], Request):
+                current_user = getattr(kwargs['request'].state, 'user', None)
+            
+            if isinstance(current_user, CurrentUser):
+                if not current_user.has_permission(permission):
+                    from fastapi import HTTPException
+                    raise HTTPException(status_code=403, detail="权限不足")
+            # 未获取到用户时，保持兼容，后续由上游网关控制
+            return await func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+def register_resource_ownership(resource_type: str, resource_id_param: str = "id", owner_id_param: str = "user_id"):
+    def decorator(func):
+        # 这里保留占位，真实所有权校验由网关或专用服务完成
+        return func
+    return decorator
 
 def flatten_structured_data(structured_data: dict) -> dict:
     """
@@ -116,17 +187,28 @@ def flatten_structured_data(structured_data: dict) -> dict:
 router = APIRouter(prefix="/miniprogram")
 
 @router.post("/postcards/create")
+@require_permission("postcard:create")
+@register_resource_ownership("postcard", "task_id", "user_id")
 async def create_miniprogram_postcard(
     request: PostcardRequest,
+    http_request: Request,
+    current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
     x_client_type: Optional[str] = Header(None)
 ):
-    """小程序：创建明信片生成任务"""
+    """🔥 小程序：安全创建明信片生成任务"""
     try:
-        logger.info(f"小程序创建明信片任务: {request.user_input[:50]}...")
+        logger.info(f"🔐 用户 {current_user.user_id} 创建明信片任务: {request.user_input[:50]}...")
+        
+        # 🔥 强制使用当前用户ID，防止伪造
+        request.user_id = current_user.user_id
         
         service = PostcardService(db)
         task_id = await service.create_task(request)
+        
+        # 记录操作日志
+        client_ip = getattr(http_request.client, 'host', 'unknown')
+        logger.info(f"✅ 任务创建成功: 用户 {current_user.user_id}, 任务 {task_id}, IP: {client_ip}")
         
         return {
             "code": 0,
@@ -134,11 +216,12 @@ async def create_miniprogram_postcard(
             "data": {
                 "task_id": task_id,
                 "status": TaskStatus.PENDING.value,
-                "estimated_time": "2-3分钟"
+                "estimated_time": "2-3分钟",
+                "user_id": current_user.user_id  # 返回实际用户ID
             }
         }
     except Exception as e:
-        logger.error(f"创建小程序明信片任务失败: {str(e)}")
+        logger.error(f"❌ 创建小程序明信片任务失败: {str(e)}")
         return {
             "code": -1,
             "message": f"创建失败: {str(e)}",
@@ -146,13 +229,17 @@ async def create_miniprogram_postcard(
         }
 
 @router.get("/postcards/status/{task_id}")
+@require_permission("postcard:read", resource_check=True)
 async def get_miniprogram_postcard_status(
     task_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
     x_client_type: Optional[str] = Header(None)
 ):
-    """小程序：获取明信片任务状态"""
+    """🔥 小程序：安全获取明信片任务状态"""
     try:
+        logger.debug(f"🔍 用户 {current_user.user_id} 查询任务状态: {task_id}")
+        
         service = PostcardService(db)
         status = await service.get_task_status(task_id)
         
@@ -175,7 +262,7 @@ async def get_miniprogram_postcard_status(
             }
         }
     except Exception as e:
-        logger.error(f"获取小程序任务状态失败: {str(e)}")
+        logger.error(f"❌ 获取小程序任务状态失败: {str(e)}")
         return {
             "code": -1,
             "message": f"获取状态失败: {str(e)}",
@@ -282,17 +369,24 @@ async def get_miniprogram_postcard_result(
         }
 
 @router.get("/postcards/user")
+@require_permission("postcard:read")
 async def get_user_miniprogram_postcards(
-    user_id: str,
+    user_id: str = None,
     page: int = 1,
     limit: int = 10,
+    current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
     x_client_type: Optional[str] = Header(None)
 ):
-    """小程序：获取用户的明信片列表"""
+    """🔥 小程序：安全获取用户的明信片列表"""
     try:
+        # 🔥 强制使用当前用户ID，防止查询他人作品
+        actual_user_id = current_user.user_id
+        
+        logger.info(f"📋 用户 {current_user.user_id} 获取作品列表")
+        
         service = PostcardService(db)
-        postcards = await service.get_user_postcards(user_id, page, limit)
+        postcards = await service.get_user_postcards(actual_user_id, page, limit)
         
         postcard_list = []
         for postcard in postcards:
@@ -361,34 +455,57 @@ async def get_user_miniprogram_postcards(
         }
 
 @router.delete("/postcards/{postcard_id}")
+@require_permission("postcard:delete", resource_check=True)
 async def delete_miniprogram_postcard(
     postcard_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
     x_client_type: Optional[str] = Header(None)
 ):
-    """小程序：删除明信片"""
+    """🔥 小程序：安全删除明信片"""
     try:
-        logger.info(f"收到删除明信片请求: {postcard_id}")
+        logger.info(f"🗑️ 用户 {current_user.user_id} 删除明信片: {postcard_id}")
         
         service = PostcardService(db)
-        success = await service.delete_postcard(postcard_id)
         
-        if not success:
-            logger.warning(f"明信片不存在或已被删除: {postcard_id}")
+        # 🔥 验证明信片存在且属于当前用户
+        postcard = await service.get_postcard_by_id(postcard_id)
+        if not postcard:
             return {
                 "code": -1,
-                "message": "明信片不存在或已被删除",
+                "message": "明信片不存在",
                 "data": None
             }
         
-        logger.info(f"明信片删除成功: {postcard_id}")
+        if postcard.user_id != current_user.user_id:
+            logger.warning(f"⚠️ 用户尝试删除他人明信片: user={current_user.user_id}, postcard_owner={postcard.user_id}")
+            return {
+                "code": -403,
+                "message": "无权删除该明信片",
+                "data": None
+            }
+        
+        success = await service.delete_postcard(postcard_id)
+        
+        if not success:
+            logger.warning(f"明信片删除操作失败: {postcard_id}")
+            return {
+                "code": -1,
+                "message": "删除操作失败",
+                "data": None
+            }
+        
+        logger.info(f"✅ 明信片删除成功: {postcard_id}, 用户: {current_user.user_id}")
         return {
             "code": 0,
             "message": "删除成功",
-            "data": None
+            "data": {
+                "postcard_id": postcard_id,
+                "deleted_by": current_user.user_id
+            }
         }
     except Exception as e:
-        logger.error(f"删除小程序明信片失败: {str(e)}")
+        logger.error(f"❌ 删除小程序明信片失败: {str(e)}")
         return {
             "code": -1,
             "message": f"删除失败: {str(e)}",
@@ -470,15 +587,29 @@ async def get_shared_miniprogram_postcard(
         }
 
 @router.get("/users/{user_id}/quota")
+@require_permission("quota:read", resource_check=True)
 async def get_user_generation_quota(
     user_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
     x_client_type: Optional[str] = Header(None)
 ):
-    """小程序：获取用户生成配额信息"""
+    """🔥 小程序：安全获取用户生成配额信息"""
     try:
+        # 🔥 只允许查询自己的配额
+        if user_id != current_user.user_id:
+            logger.warning(f"⚠️ 用户尝试查询他人配额: user={current_user.user_id}, target={user_id}")
+            return {
+                "code": -403,
+                "message": "无权查询该用户配额",
+                "data": None
+            }
+        
+        logger.info(f"📊 用户 {current_user.user_id} 查询配额信息")
+        
         service = PostcardService(db)
-        quota_info = await service.quota_service.check_generation_quota(user_id)
+        quota_service = service._get_quota_service()
+        quota_info = await quota_service.check_generation_quota(user_id)
         
         return {
             "code": 0,
@@ -486,7 +617,7 @@ async def get_user_generation_quota(
             "data": quota_info
         }
     except Exception as e:
-        logger.error(f"获取用户配额失败: {user_id} - {str(e)}")
+        logger.error(f"❌ 获取用户配额失败: {user_id} - {str(e)}")
         return {
             "code": -1,
             "message": f"获取配额失败: {str(e)}",

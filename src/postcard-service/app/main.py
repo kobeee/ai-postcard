@@ -8,6 +8,9 @@ from dotenv import load_dotenv
 
 from .database.connection import init_database
 from .services.queue_service import QueueService
+from .middleware.api_security_middleware import APISecurityMiddleware
+from .middleware.auth_middleware import AuthenticationMiddleware
+from .middleware.audit_monitoring_middleware import AuditMonitoringMiddleware
 from .api.postcards import router as postcards_router
 from .api.miniprogram import router as miniprogram_router
 
@@ -71,10 +74,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Postcard Service",
-    description="AI明信片生成任务管理服务",
-    version="1.0.0",
+    description="🔒 AI明信片生成任务管理服务 - 企业级安全架构",
+    version="2.0.0",
     lifespan=lifespan
 )
+
+# 🔥 添加安全中间件（顺序：审计监控->API安全检查）
+app.add_middleware(AuditMonitoringMiddleware)
+app.add_middleware(APISecurityMiddleware)
+app.add_middleware(AuthenticationMiddleware)
 
 # 配置CORS
 app.add_middleware(

@@ -2,8 +2,8 @@
 const ENV_CONFIG = {
   // 开发环境配置
   development: {
-    baseURL: 'https://ai.elvis1949.cloudns.pro/postcard', // 网关服务端口
-    // baseURL: 'http://localhost:8083', // 网关服务端口
+    // baseURL: 'https://ai.elvis1949.cloudns.pro/postcard', // 网关服务端口
+    baseURL: 'http://localhost:8083', // 网关服务端口
     apiPrefix: '/api/v1',
     timeout: 60000, // 延长到60秒，支持大模型调用和准确性优先
     debug: true

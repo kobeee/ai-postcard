@@ -7,11 +7,20 @@ python-dotenv
 sqlalchemy
 alembic
 redis
+PyJWT
 python-jose[cryptography]
 passlib[bcrypt]
 python-multipart
 httpx
 requests
+
+# 安全组件依赖
+bleach
+pycryptodome
+
+# 监控组件依赖
+psutil
+httpx
 
 # Testing
 pytest

@@ -13,6 +13,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH" \
     DEBIAN_FRONTEND=noninteractive
 
+# 预先配置 APT：
+# - 使用国内镜像以减少网络抖动
+# - 强制 IPv4，提升在部分网络环境下的解析与连接成功率
+RUN set -eux; \
+    printf 'Acquire::Retries "5";\nAcquire::http::Timeout "30";\nAcquire::ForceIPv4 "true";\n' > /etc/apt/apt.conf.d/99network && \
+    sed -ri 's|http://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g; s|http://security.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list || true
+
 # 安装系统依赖和运行时工具
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \

@@ -15,6 +15,7 @@ class UserQuota(Base):
     current_card_exists = Column(Boolean, default=False)  # 当前是否有今日卡片
     current_card_id = Column(String, nullable=True)  # 当前卡片ID（可选引用）
     max_daily_quota = Column(Integer, default=2)  # 每日最大生成次数
+    version = Column(Integer, default=1)  # 乐观锁版本号
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

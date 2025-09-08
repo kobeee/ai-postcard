@@ -8,6 +8,13 @@ x-common: &common
   env_file: .env
   networks: [app-network]
   restart: unless-stopped
+  # 全局DNS配置，解决容器内DNS解析问题
+  dns:
+    - 8.8.8.8
+    - 8.8.4.4
+    - 114.114.114.114
+  dns_search:
+    - .
 
 x-app-service: &app-service
   <<: *common
@@ -64,6 +71,7 @@ services:
     build:
       context: ./src/gateway-service
       dockerfile: Dockerfile
+      network: host  # 使用主机网络进行构建，避免DNS问题
     ports: ["${GATEWAY_PORT:-8083}:8000"]
     volumes: [./logs/gateway:/app/logs]
     profiles: [gateway, all]
@@ -74,6 +82,7 @@ services:
     build:
       context: ./src/user-service
       dockerfile: Dockerfile
+      network: host
     ports: ["${USER_PORT:-8081}:8000"]
     volumes: [./logs/user:/app/logs]
     profiles: [user, all]
@@ -84,6 +93,7 @@ services:
     build:
       context: ./src/postcard-service
       dockerfile: Dockerfile
+      network: host
     ports: ["${POSTCARD_PORT:-8082}:8000"]
     volumes: [./logs/postcard:/app/logs]
     profiles: [postcard, all]
@@ -94,6 +104,7 @@ services:
     build:
       context: ./src/ai-agent-service
       dockerfile: Dockerfile
+      network: host
     ports: ["${AI_AGENT_PORT:-8080}:8000"]
     volumes:
       - ./logs/ai-agent:/app/logs
@@ -108,6 +119,7 @@ services:
     build:
       context: ./src/ai-agent-service
       dockerfile: Dockerfile
+      network: host
     command: ["python", "-m", "app.worker"]
     volumes:
       - ./logs/ai-agent:/app/logs
@@ -123,6 +135,7 @@ services:
     build:
       context: ./src/user-service
       dockerfile: Dockerfile
+      network: host
     command: ["pytest", "-v"]
     depends_on: [postgres, redis]
     profiles: [user-tests]
@@ -133,6 +146,7 @@ services:
     build:
       context: ./src/postcard-service
       dockerfile: Dockerfile
+      network: host
     command: ["pytest", "-v"]
     depends_on: [postgres, redis]
     profiles: [postcard-tests]
@@ -143,6 +157,7 @@ services:
     build:
       context: ./src/ai-agent-service
       dockerfile: Dockerfile
+      network: host
     command: ["pytest", "-v"]
     depends_on: [postgres, redis]
     profiles: [agent-tests]

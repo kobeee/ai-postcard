@@ -31,7 +31,12 @@ check_dependencies() {
         exit 1
     fi
     
-    if ! command -v docker-compose &> /dev/null; then
+    # 检查Docker Compose（支持新旧两个版本）
+    if command -v docker-compose &> /dev/null; then
+        DOCKER_COMPOSE_CMD="docker-compose"
+    elif docker compose version &> /dev/null; then
+        DOCKER_COMPOSE_CMD="docker compose"
+    else
         log_error "Docker Compose 未安装"
         exit 1
     fi
@@ -119,7 +124,7 @@ clean_user_data() {
 
     # 清理 PostgreSQL 用户数据
     log_info "清理 PostgreSQL 中的用户数据..."
-    docker-compose exec -T postgres psql -U postgres -d ai_postcard -v ON_ERROR_STOP=1 -c "DO $$
+    $DOCKER_COMPOSE_CMD exec -T postgres psql -U postgres -d ai_postcard -v ON_ERROR_STOP=1 -c "DO $$
 DECLARE
     sys_user_uuid UUID;
     sys_user_str TEXT;
@@ -215,11 +220,11 @@ END$$;" 2>&1
         log_info "清理模式: ${pattern}"
         # 获取匹配的键数量（用于日志显示）
         local key_count
-        key_count=$(docker-compose exec -T redis sh -lc "redis-cli -a \"\${REDIS_PASSWORD:-redis}\" --no-auth-warning KEYS '${pattern}' | wc -l" 2>/dev/null || echo "0")
+        key_count=$($DOCKER_COMPOSE_CMD exec -T redis sh -lc "redis-cli -a \"\${REDIS_PASSWORD:-redis}\" --no-auth-warning KEYS '${pattern}' | wc -l" 2>/dev/null || echo "0")
         
         if [ "${key_count}" -gt 0 ]; then
             log_info "找到 ${key_count} 个匹配的键"
-            docker-compose exec -T redis sh -lc "redis-cli -a \"\${REDIS_PASSWORD:-redis}\" --no-auth-warning KEYS '${pattern}' | xargs -r redis-cli -a \"\${REDIS_PASSWORD:-redis}\" --no-auth-warning DEL" >/dev/null 2>&1 || true
+            $DOCKER_COMPOSE_CMD exec -T redis sh -lc "redis-cli -a \"\${REDIS_PASSWORD:-redis}\" --no-auth-warning KEYS '${pattern}' | xargs -r redis-cli -a \"\${REDIS_PASSWORD:-redis}\" --no-auth-warning DEL" >/dev/null 2>&1 || true
         else
             log_info "未找到匹配的键"
         fi
@@ -227,7 +232,7 @@ END$$;" 2>&1
 
     # 业务所需流与消费者组：删除后需要恢复
     # 恢复 postcard_tasks 流与消费者组 ai_agent_workers（若已存在则忽略错误）
-    docker-compose exec -T redis sh -lc "redis-cli -a \"\${REDIS_PASSWORD:-redis}\" --no-auth-warning XGROUP CREATE postcard_tasks ai_agent_workers 0 MKSTREAM" >/dev/null 2>&1 || true
+    $DOCKER_COMPOSE_CMD exec -T redis sh -lc "redis-cli -a \"\${REDIS_PASSWORD:-redis}\" --no-auth-warning XGROUP CREATE postcard_tasks ai_agent_workers 0 MKSTREAM" >/dev/null 2>&1 || true
     log_success "Redis 用户数据清理完成"
 }
 
@@ -252,17 +257,17 @@ up() {
         profile_args="$profile_args --profile $profile"
     done
     
-    docker-compose $profile_args up -d --build
+    $DOCKER_COMPOSE_CMD $profile_args up -d --build
     
     log_success "服务启动完成"
-    docker-compose ps
+    $DOCKER_COMPOSE_CMD ps
 }
 
 # 停止服务
 down() {
     log_info "停止所有服务..."
     # 常规下线
-    docker-compose down || true
+    $DOCKER_COMPOSE_CMD down || true
     
     # 兜底：强制移除当前项目下仍在运行/存在的容器（避免遗留占用网络）
     local project_name
@@ -291,15 +296,15 @@ logs() {
     fi
     
     if [ -z "$service" ]; then
-        docker-compose logs $follow --tail=100
+        $DOCKER_COMPOSE_CMD logs $follow --tail=100
     else
-        docker-compose logs $follow --tail=100 "$service"
+        $DOCKER_COMPOSE_CMD logs $follow --tail=100 "$service"
     fi
 }
 
 # 查看状态
 ps() {
-    docker-compose ps
+    $DOCKER_COMPOSE_CMD ps
 }
 
 # 在容器中执行命令
@@ -317,7 +322,7 @@ exec() {
         cmd=("bash")
     fi
     
-    docker-compose exec "$service" "${cmd[@]}"
+    $DOCKER_COMPOSE_CMD exec "$service" "${cmd[@]}"
 }
 
 # 重启服务
@@ -328,7 +333,7 @@ restart() {
         exit 1
     fi
     
-    docker-compose restart "$service"
+    $DOCKER_COMPOSE_CMD restart "$service"
     log_success "服务 $service 已重启"
 }
 
@@ -339,7 +344,7 @@ init() {
     ensure_directories_and_permissions
     
     # 启动数据库和缓存
-    docker-compose up -d postgres redis
+    $DOCKER_COMPOSE_CMD up -d postgres redis
     
     # 等待就绪
     log_info "等待数据库和Redis就绪..."
@@ -347,7 +352,7 @@ init() {
     
     # 验证服务状态
     for i in {1..30}; do
-        if docker-compose exec -T postgres pg_isready -U postgres >/dev/null 2>&1; then
+        if $DOCKER_COMPOSE_CMD exec -T postgres pg_isready -U postgres >/dev/null 2>&1; then
             log_success "PostgreSQL 就绪"
             break
         fi
@@ -356,7 +361,7 @@ init() {
     done
     
     for i in {1..30}; do
-        if docker-compose exec -T redis redis-cli -a "${REDIS_PASSWORD:-redis}" ping >/dev/null 2>&1; then
+        if $DOCKER_COMPOSE_CMD exec -T redis redis-cli -a "${REDIS_PASSWORD:-redis}" ping >/dev/null 2>&1; then
             log_success "Redis 就绪"
             break
         fi
@@ -364,13 +369,24 @@ init() {
         sleep 2
     done
     
-    # 初始化数据库（通过挂载的脚本自动执行，这里验证并打印表）
-    log_info "验证数据库初始化..."
-    if docker-compose exec -T postgres psql -U postgres -d ai_postcard -c "SELECT 1;" >/dev/null 2>&1; then
-        COUNT=$(docker-compose exec -T postgres psql -U postgres -d ai_postcard -At -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';" 2>/dev/null || echo "N/A")
+    # 初始化数据库表结构
+    log_info "初始化数据库表结构..."
+    if [ -f "scripts/init/database_schema.sql" ]; then
+        log_info "执行数据库初始化..."
+        if cat scripts/init/database_schema.sql | $DOCKER_COMPOSE_CMD exec -T postgres psql -U postgres -d ai_postcard; then
+            log_success "数据库初始化完成"
+        else
+            log_error "数据库初始化失败"
+            exit 1
+        fi
+    fi
+    
+    # 验证数据库初始化
+    if $DOCKER_COMPOSE_CMD exec -T postgres psql -U postgres -d ai_postcard -c "SELECT 1;" >/dev/null 2>&1; then
+        COUNT=$($DOCKER_COMPOSE_CMD exec -T postgres psql -U postgres -d ai_postcard -At -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';" 2>/dev/null || echo "N/A")
         log_success "数据库连接正常，public 表数量: ${COUNT}"
         log_info "已建表列表:"
-        docker-compose exec -T postgres psql -U postgres -d ai_postcard -At -c "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY 1;" 2>/dev/null | sed 's/^/  - /'
+        $DOCKER_COMPOSE_CMD exec -T postgres psql -U postgres -d ai_postcard -At -c "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY 1;" 2>/dev/null | sed 's/^/  - /'
     else
         log_warning "数据库连接失败或权限异常"
         log_warning "若提示 'global/pg_filenode.map: Permission denied'，通常为数据目录权限问题"
@@ -381,12 +397,14 @@ init() {
         echo "  docker compose down postgres && docker compose up -d postgres"
     fi
     
-    # 初始化Redis队列
+    # 初始化Redis队列和配置
     log_info "初始化Redis Stream队列..."
-    docker-compose exec -T redis redis-cli -a "${REDIS_PASSWORD:-redis}" XGROUP CREATE postcard_tasks ai_agent_workers 0 MKSTREAM >/dev/null 2>&1 || log_info "队列已存在"
+    $DOCKER_COMPOSE_CMD exec -T redis redis-cli -a "${REDIS_PASSWORD:-redis}" XGROUP CREATE postcard_tasks ai_agent_workers 0 MKSTREAM >/dev/null 2>&1 || log_info "队列已存在"
     
-    log_success "环境初始化完成"
+    log_success "🎉 环境初始化完成！"
+    log_info "✅ 系统已集成完整的安全功能（JWT认证、RBAC权限、审计日志等）"
 }
+
 
 # 清理系统
 clean() {
@@ -395,7 +413,7 @@ clean() {
     echo
     
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        docker-compose down -v --remove-orphans
+        $DOCKER_COMPOSE_CMD down -v --remove-orphans
         docker system prune -f
         log_success "清理完成"
     fi
@@ -442,6 +460,13 @@ help() {
     echo "  $0 up gateway user            启动网关和用户服务"
     echo "  $0 logs ai-agent-service -f   查看AI服务实时日志"
     echo "  $0 exec postgres bash         进入数据库容器"
+    echo ""
+    echo "🔒 系统内置功能:"
+    echo "  • JWT身份验证和Token管理"
+    echo "  • RBAC权限控制系统" 
+    echo "  • 并发安全的配额管理"
+    echo "  • API输入验证和限流"
+    echo "  • 审计日志和安全监控"
 }
 
 # 主函数
