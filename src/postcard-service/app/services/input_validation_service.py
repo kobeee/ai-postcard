@@ -280,13 +280,15 @@ class RequestValidationMiddleware:
         }
         
         try:
-            # 验证用户ID
-            user_id_result = self.validator.validate_user_id(request_data.get('user_id', ''))
-            if not user_id_result["is_valid"]:
-                result["is_valid"] = False
-                result["errors"].extend(user_id_result["errors"])
-            else:
-                result["sanitized_data"]["user_id"] = user_id_result["sanitized_user_id"]
+            # 验证用户ID（在JWT方案下为可选，若由认证中间件注入则无需校验请求体）
+            incoming_user_id = request_data.get('user_id', '')
+            if incoming_user_id:
+                user_id_result = self.validator.validate_user_id(incoming_user_id)
+                if not user_id_result["is_valid"]:
+                    result["is_valid"] = False
+                    result["errors"].extend(user_id_result["errors"])
+                else:
+                    result["sanitized_data"]["user_id"] = user_id_result["sanitized_user_id"]
             
             # 验证用户输入
             user_input_result = self.validator.validate_and_sanitize_user_input(

@@ -181,6 +181,21 @@ class EnhancedRequestManager {
         error.statusCode = response.statusCode;
         error.config = response.config;
         return Promise.reject(error);
+      } else if (response.statusCode === 429) {
+        // 429错误特殊处理：不自动重试，给用户友好提示
+        const error = new NetworkError('请求过于频繁，请稍后重试');
+        error.statusCode = response.statusCode;
+        error.config = response.config;
+        error.retryAfter = response.data?.details?.retry_after || 60;
+        
+        // 显示友好的错误提示
+        wx.showToast({
+          title: '请求过于频繁',
+          icon: 'none',
+          duration: 3000
+        });
+        
+        return Promise.reject(error);
       } else {
         // HTTP错误
         const error = new NetworkError(`网络错误: ${response.statusCode}`);
@@ -198,8 +213,8 @@ class EnhancedRequestManager {
     // 生成缓存键
     const cacheKey = this.generateCacheKey(options);
     
-    // 检查缓存
-    if (this.config.enableCache && options.method?.toUpperCase() === 'GET') {
+    // 检查缓存（允许按请求关闭缓存）
+    if (this.config.enableCache && options.method?.toUpperCase() === 'GET' && options.enableCache !== false) {
       const cached = this.getCache(cacheKey);
       if (cached) {
         envConfig.log('使用缓存响应:', cacheKey);
@@ -270,12 +285,29 @@ class EnhancedRequestManager {
     
     envConfig.error(`请求失败 (${requestId}):`, error);
     
-    // 认证错误处理
-    if (error instanceof AuthError && this.config.authRetry) {
-      const retried = await this.handleAuthError(error, options);
-      if (retried) {
-        return await this.executeRequest(options, retryCount);
+    // 认证错误处理（加入熔断与退避，防止401风暴）
+    if (error instanceof AuthError) {
+      // 读取（或初始化）全局401熔断状态
+      if (!this._authCircuit) {
+        this._authCircuit = { open: false, lastOpenedAt: 0, coolDownMs: 5000 };
       }
+      const nowTs = Date.now();
+      if (this._authCircuit.open && (nowTs - this._authCircuit.lastOpenedAt) < this._authCircuit.coolDownMs) {
+        // 熔断开启期间直接失败，避免再次触发
+        return Promise.reject(error);
+      }
+      // 尝试刷新（带单飞、内部节流由 enhanced-auth 保证）
+      if (this.config.authRetry) {
+        const retried = await this.handleAuthError(error, options);
+        if (retried) {
+          return await this.executeRequest(options, retryCount);
+        }
+      }
+      // 刷新失败，打开熔断并短期内不再重试
+      this._authCircuit.open = true;
+      this._authCircuit.lastOpenedAt = nowTs;
+      setTimeout(() => { this._authCircuit.open = false; }, this._authCircuit.coolDownMs);
+      return Promise.reject(error);
     }
     
     // 网络错误重试
@@ -456,6 +488,11 @@ class EnhancedRequestManager {
   
   shouldRetry(error, retryCount) {
     if (retryCount >= this.config.maxRetries) return false;
+    
+    // 429错误不自动重试，需要特殊处理
+    if (error.statusCode === 429) {
+      return false;
+    }
     
     // 网络错误可重试
     if (this.isNetworkError(error)) return true;
@@ -645,12 +682,28 @@ module.exports = {
   // 增强API封装
   postcardAPI: {
     create: (data) => enhancedRequestManager.post(envConfig.getApiUrl('/miniprogram/postcards/create'), data),
-    getStatus: (taskId) => enhancedRequestManager.get(envConfig.getApiUrl(`/miniprogram/postcards/status/${taskId}`)),
-    getResult: (taskId) => enhancedRequestManager.get(envConfig.getApiUrl(`/miniprogram/postcards/result/${taskId}`)),
+    // 任务状态与结果查询：禁用缓存并追加时间戳强制刷新
+    getStatus: (taskId) => {
+      const url = envConfig.getApiUrl(`/miniprogram/postcards/status/${taskId}`);
+      return enhancedRequestManager.get(url, { _t: Date.now() }, { enableCache: false });
+    },
+    getResult: (taskId) => {
+      const url = envConfig.getApiUrl(`/miniprogram/postcards/result/${taskId}`);
+      return enhancedRequestManager.get(url, { _t: Date.now() }, { enableCache: false });
+    },
     getUserPostcards: (userId, page = 1, limit = 10) => 
-      enhancedRequestManager.get(envConfig.getApiUrl('/miniprogram/postcards/user'), { user_id: userId, page, limit }),
+      enhancedRequestManager.get(
+        envConfig.getApiUrl('/miniprogram/postcards/user'),
+        { user_id: userId, page, limit, _t: Date.now() },
+        { enableCache: false }
+      ),
     delete: (postcardId) => enhancedRequestManager.delete(envConfig.getApiUrl(`/miniprogram/postcards/${postcardId}`)),
-    getUserQuota: (userId) => enhancedRequestManager.get(envConfig.getApiUrl(`/miniprogram/users/${userId}/quota`))
+    getUserQuota: (userId) => 
+      enhancedRequestManager.get(
+        envConfig.getApiUrl(`/miniprogram/users/${userId}/quota`),
+        { _t: Date.now() },
+        { enableCache: false }
+      )
   },
   
   authAPI: {

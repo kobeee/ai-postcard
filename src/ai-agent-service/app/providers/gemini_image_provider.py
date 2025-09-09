@@ -16,14 +16,14 @@ class GeminiImageProvider(BaseImageProvider):
         super().__init__()
         
         # 配置API
-        api_key = os.getenv("GEMINI_API_KEY")
+        api_key = os.getenv("META_API_KEY")
         if not api_key:
             # 不再抛出异常，允许走占位图fallback
-            self.logger.warning("⚠️ GEMINI_API_KEY 未配置，将使用占位图片fallback")
+            self.logger.warning("⚠️ META_API_KEY 未配置，将使用占位图片fallback")
             api_key = ""
             
         self.api_key = api_key
-        self.base_url = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com")
+        self.base_url = os.getenv("META_BASE_URL", "https://generativelanguage.googleapis.com")
         self.model_name = os.getenv("GEMINI_IMAGE_MODEL", "gemini-2.0-flash-preview-image-generation")
         self.default_size = os.getenv("GEMINI_IMAGE_SIZE", "1024x1024")
         self.default_quality = os.getenv("GEMINI_IMAGE_QUALITY", "standard")

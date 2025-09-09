@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
 import os
@@ -69,7 +70,7 @@ async def proxy_request(
     path: str,
     request: Request,
     timeout: int = 30
-) -> Dict[Any, Any]:
+) -> Response:
     """代理HTTP请求到目标服务"""
     try:
         # 构建完整URL
@@ -104,18 +105,26 @@ async def proxy_request(
             
             logger.info(f"代理请求: {method} {full_url} -> {response.status_code}")
             
-            # 返回响应
+            # 转发上游状态码与响应体
+            upstream_headers = dict(response.headers)
+            # 过滤不应转发的头
+            for hop_header in ["content-encoding", "transfer-encoding", "connection"]:
+                upstream_headers.pop(hop_header, None)
+
+            content_type = upstream_headers.get("content-type", "application/json")
             try:
-                return response.json()
-            except:
-                return {"code": 0, "message": "成功", "data": response.text}
+                data = response.json()
+                return JSONResponse(content=data, status_code=response.status_code, headers=upstream_headers)
+            except Exception:
+                # 非JSON，原样转发字节内容
+                return Response(content=response.content, status_code=response.status_code, headers=upstream_headers, media_type=content_type)
                 
     except httpx.TimeoutException:
         logger.error(f"请求超时: {target_url}{path}")
-        return {"code": -1, "message": "服务请求超时", "data": None}
+        return JSONResponse(status_code=504, content={"code": 504, "message": "服务请求超时", "data": None})
     except Exception as e:
         logger.error(f"代理请求失败: {str(e)}")
-        return {"code": -1, "message": f"服务暂时不可用: {str(e)}", "data": None}
+        return JSONResponse(status_code=502, content={"code": 502, "message": f"服务暂时不可用: {str(e)}", "data": None})
 
 # 小程序用户认证路由
 @app.api_route("/api/v1/miniprogram/auth/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])

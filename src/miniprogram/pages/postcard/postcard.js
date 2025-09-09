@@ -1,5 +1,5 @@
 // pages/postcard/postcard.js - 明信片详情页
-const { postcardAPI } = require('../../utils/request.js');
+const { postcardAPI } = require('../../utils/enhanced-request.js');
 const { parseCardData } = require('../../utils/data-parser.js');
 const envConfig = require('../../config/env.js');
 
@@ -263,6 +263,63 @@ Page({
           });
         });
         localFilePath = downloadRes.tempFilePath;
+      }
+      
+      // 🔥 先检查相册权限
+      app.utils.showLoading('检查权限...');
+      const authResult = await new Promise(resolve => {
+        wx.getSetting({
+          success: (res) => {
+            if (res.authSetting['scope.writePhotosAlbum'] === false) {
+              // 用户之前拒绝过，需要引导到设置
+              resolve({ needAuth: true, denied: true });
+            } else if (res.authSetting['scope.writePhotosAlbum'] === undefined) {
+              // 还没有授权过，可以直接申请
+              resolve({ needAuth: true, denied: false });
+            } else {
+              // 已经授权
+              resolve({ needAuth: false });
+            }
+          },
+          fail: () => resolve({ needAuth: true, denied: false })
+        });
+      });
+      
+      if (authResult.needAuth) {
+        if (authResult.denied) {
+          // 用户之前拒绝过，引导到设置
+          app.utils.hideLoading();
+          wx.showModal({
+            title: '需要相册权限',
+            content: '保存卡片到相册需要相册访问权限，请在设置中开启',
+            confirmText: '去设置',
+            success: (res) => {
+              if (res.confirm) {
+                wx.openSetting();
+              }
+            }
+          });
+          return;
+        } else {
+          // 可以申请权限
+          try {
+            await new Promise((resolve, reject) => {
+              wx.authorize({
+                scope: 'scope.writePhotosAlbum',
+                success: resolve,
+                fail: reject
+              });
+            });
+          } catch (error) {
+            app.utils.hideLoading();
+            wx.showModal({
+              title: '需要相册权限',
+              content: '保存卡片到相册需要相册访问权限',
+              showCancel: false
+            });
+            return;
+          }
+        }
       }
       
       app.utils.showLoading('保存中...');

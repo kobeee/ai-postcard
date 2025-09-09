@@ -301,14 +301,22 @@ async def miniprogram_logout(
 async def exchange_wechat_code(code: str) -> dict:
     """使用微信code换取session_key和openid"""
     # 开发环境检测：使用测试AppID时，所有code都走模拟模式
-    is_test_env = WECHAT_APP_ID in ["wx1d61d190473ed728", "wx1234567890abcdef"] or WECHAT_APP_SECRET in ["test_secret_for_development", "your_app_secret_here"]
+    is_test_env = (
+        not WECHAT_APP_ID or 
+        not WECHAT_APP_SECRET or
+        WECHAT_APP_ID in ["wx1d61d190473ed728", "wx1234567890abcdef"] or 
+        WECHAT_APP_SECRET in ["test_secret_for_development", "your_app_secret_here"]
+    )
     
     # 测试环境下，如果code以test_开头，或者使用测试AppID，返回模拟数据
     if code.startswith("test_") or is_test_env:
-        logger.info(f"使用测试模式处理微信登录，code: {code[:10]}...")
+        logger.info(f"🧪 开发测试模式：微信登录模拟成功，code: {code[:10]}...")
+        # 生成稳定的测试数据，方便开发调试
+        import hashlib
+        stable_id = hashlib.md5(code.encode()).hexdigest()[:8]
         return {
-            "openid": f"test_openid_{code[-6:] if len(code) > 6 else code}",
-            "session_key": f"test_session_{code[-6:] if len(code) > 6 else code}",
+            "openid": f"dev_openid_{stable_id}",
+            "session_key": f"dev_session_{stable_id}",
             "unionid": None
         }
     

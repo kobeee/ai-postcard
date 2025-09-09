@@ -13,6 +13,8 @@ class PostcardWorkflow:
     def __init__(self):
         self.postcard_service_url = os.getenv("POSTCARD_SERVICE_URL", "http://postcard-service:8000")
         self.logger = logging.getLogger(self.__class__.__name__)
+        # 用于跨服务认证的内部服务令牌
+        self.internal_service_token = os.getenv("INTERNAL_SERVICE_TOKEN", "")
         
         # 将在子类中初始化工作流步骤
         self.steps = []
@@ -79,7 +81,10 @@ class PostcardWorkflow:
                 data["error_message"] = error_message
 
             # 增加重试，提升可靠性，延长超时时间适应大模型响应
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            headers = {}
+            if self.internal_service_token:
+                headers["X-Internal-Service-Token"] = self.internal_service_token
+            async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
                 for attempt in range(3):
                     try:
                         response = await client.post(url, json=data)
@@ -126,7 +131,10 @@ class PostcardWorkflow:
                     payload[key] = results[key]
 
             url = f"{self.postcard_service_url}/api/v1/postcards/status/{task_id}"
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            headers = {}
+            if self.internal_service_token:
+                headers["X-Internal-Service-Token"] = self.internal_service_token
+            async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
                 resp = await client.post(url, json=payload)
                 if resp.status_code == 200:
                     self.logger.info("✅ 最终结果提交成功")

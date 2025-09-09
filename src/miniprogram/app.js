@@ -1,257 +1,218 @@
-// app.js - AI明信片小程序主应用
-const authUtil = require('./utils/auth.js');
+// app.js - AI明信片小程序主应用（增强版为默认）
+// 集成安全认证、错误处理、兼容性管理等企业级功能
+
 const envConfig = require('./config/env.js');
 const { taskPollingManager } = require('./utils/task-polling.js');
 
+// 增强功能模块
+const { enhancedAuthManager } = require('./utils/enhanced-auth.js');
+const { errorHandler } = require('./utils/error-handler.js');
+const { compatibilityManager } = require('./utils/compatibility-manager.js');
+const { enhancedRequestManager } = require('./utils/enhanced-request.js');
+
 App({
   async onLaunch(options) {
-    envConfig.log('AI明信片小程序启动', options);
-    
-    // 初始化认证系统
-    await this.initAuth();
-    
-    // 获取系统信息
-    this.getSystemInfo();
-    
-    // 检查小程序版本更新
-    this.checkForUpdate();
-    
-    // 提前预取定位与环境信息（并发触发，减少首页等待）
-    this.prefetchEnvironment();
-
-    // 记录启动日志
-    this.recordLaunchLog();
+    envConfig.log('🚀 AI明信片小程序启动（增强版默认）', options);
+    try {
+      await this.initCoreSystem();
+      await this.initEnhancedFeatures();
+      this.getSystemInfo();
+      this.checkForUpdate();
+      this.prefetchEnvironment();
+      this.recordLaunchLog();
+      envConfig.log('✅ 小程序启动完成');
+    } catch (error) {
+      envConfig.error('❌ 小程序启动失败:', error);
+      errorHandler.handle(error, { context: 'app_launch', showUser: true, message: '应用启动失败，正在尝试修复...' });
+      await this.fallbackInit();
+    }
   },
 
   onShow(options) {
-    envConfig.log('小程序显示', options);
-    
-    // 记录显示时间
+    envConfig.log('📱 小程序显示', options);
     this.globalData.lastShowTime = Date.now();
-    
-    // 如果从分享进入，处理分享参数
+    this.checkAuthState?.();
     if (options.scene === 1007 || options.scene === 1008) {
       this.handleShareParams(options);
+    }
+    if (options.scene === 1011) {
+      this.handleQRCode?.(options);
     }
   },
 
   onHide() {
-    envConfig.log('小程序隐藏');
-    
-    // 记录使用时长
+    envConfig.log('🔽 小程序隐藏');
     if (this.globalData.lastShowTime) {
       const duration = Date.now() - this.globalData.lastShowTime;
-      envConfig.log('本次使用时长:', duration + 'ms');
+      this.recordUsageMetrics?.(duration);
     }
+    this.saveAppState?.();
   },
 
   onError(msg) {
-    envConfig.error('小程序发生错误:', msg);
-    
-    // 可以在这里上报错误到监控系统
-    this.reportError(msg);
+    envConfig.error('💥 小程序发生错误:', msg);
+    errorHandler.handleGlobalError('app_error', { message: msg, timestamp: Date.now(), stack: new Error().stack });
   },
-  
+
+  onUnhandledRejection(res) {
+    envConfig.error('🚫 未处理的Promise拒绝:', res);
+    errorHandler.handleGlobalError('unhandled_rejection', {
+      message: res.reason?.message || String(res.reason),
+      stack: res.reason?.stack,
+      timestamp: Date.now()
+    });
+  },
+
   /**
-   * 初始化认证系统
+   * 初始化核心系统（统一增强认证）
    */
-  async initAuth() {
-    try {
-      await authUtil.init();
-      envConfig.log('认证系统初始化完成');
-      
-      // 如果用户已登录，触发登录成功事件
-      if (authUtil.isLoggedIn()) {
-        this.onUserLogin(authUtil.getCurrentUser());
-      }
-    } catch (error) {
-      envConfig.error('认证系统初始化失败:', error);
-    }
+  async initCoreSystem() {
+    await compatibilityManager.init?.();
+    envConfig.log('✅ 兼容性管理器初始化完成');
+    await enhancedAuthManager.init();
+    envConfig.log('✅ 增强认证系统初始化完成');
   },
-  
+
   /**
-   * 获取系统信息
+   * 初始化增强功能
+   */
+  async initEnhancedFeatures() {
+    // 错误处理监听
+    enhancedAuthManager.on('error', (error) => {
+      errorHandler.handle(error, { context: 'auth', showUser: true });
+    });
+    enhancedRequestManager.on?.('error', (error) => {
+      errorHandler.handleNetworkError(error);
+    });
+
+    // 网络状态监听
+    wx.onNetworkStatusChange((res) => {
+      const networkStatus = res.isConnected ? 'online' : 'offline';
+      envConfig.log('🌐 网络状态变化:', { status: networkStatus, networkType: res.networkType });
+      this.globalData.networkStatus = networkStatus;
+      this.globalData.networkType = res.networkType;
+      if (networkStatus === 'online' && this.globalData.previousNetworkStatus === 'offline') {
+        this.onNetworkRecover?.();
+      }
+      this.globalData.previousNetworkStatus = networkStatus;
+    });
+
+    // 性能监控
+    if (typeof wx.onMemoryWarning === 'function') {
+      wx.onMemoryWarning(() => {
+        envConfig.log('⚠️ 内存警告');
+        this.handleMemoryWarning?.();
+      });
+    }
+
+    // 启动性能记录
+    const launchTime = Date.now() - (this.globalData.startTime || Date.now());
+    this.recordPerformanceMetric?.('app_launch_time', launchTime);
+
+    envConfig.log('✅ 增强功能初始化完成');
+  },
+
+  /**
+   * 系统信息
    */
   getSystemInfo() {
     wx.getSystemInfo({
       success: (res) => {
         this.globalData.systemInfo = res;
         envConfig.log('系统信息获取成功:', res);
-        
-        // 根据系统信息做一些适配
         this.adaptToSystem(res);
       },
-      fail: (error) => {
-        envConfig.error('获取系统信息失败:', error);
-      }
+      fail: (error) => { envConfig.error('获取系统信息失败:', error); }
     });
   },
-  
+
   /**
-   * 检查小程序更新
+   * 版本更新
    */
   checkForUpdate() {
-    if (wx.getUpdateManager) {
-      const updateManager = wx.getUpdateManager();
-      
-      updateManager.onCheckForUpdate((res) => {
-        if (res.hasUpdate) {
-          envConfig.log('发现新版本');
-        }
+    if (!wx.getUpdateManager) return;
+    const updateManager = wx.getUpdateManager();
+    updateManager.onCheckForUpdate((res) => { if (res.hasUpdate) envConfig.log('发现新版本'); });
+    updateManager.onUpdateReady(() => {
+      wx.showModal({
+        title: '更新提示',
+        content: '新版本已准备好，是否重启应用？',
+        success: (res) => { if (res.confirm) updateManager.applyUpdate(); }
       });
-      
-      updateManager.onUpdateReady(() => {
-        wx.showModal({
-          title: '更新提示',
-          content: '新版本已准备好，是否重启应用？',
-          success: (res) => {
-            if (res.confirm) {
-              updateManager.applyUpdate();
-            }
-          }
-        });
-      });
-      
-      updateManager.onUpdateFailed(() => {
-        envConfig.error('更新失败');
-      });
-    }
+    });
+    updateManager.onUpdateFailed(() => { envConfig.error('更新失败'); });
   },
-  
+
   /**
-   * 记录启动日志
+   * 日志
    */
   recordLaunchLog() {
     const logs = wx.getStorageSync('logs') || [];
     logs.unshift(Date.now());
-    
-    // 只保留最近50条日志
-    if (logs.length > 50) {
-      logs.splice(50);
-    }
-    
+    while (logs.length > 50) logs.pop();
     wx.setStorageSync('logs', logs);
   },
-  
+
   /**
-   * 根据系统信息进行适配
-   */
-  adaptToSystem(systemInfo) {
-    // 适配不同屏幕尺寸
-    const { windowWidth, windowHeight, pixelRatio } = systemInfo;
-    
-    this.globalData.screenInfo = {
-      width: windowWidth,
-      height: windowHeight,
-      pixelRatio,
-      isSmallScreen: windowWidth < 350
-    };
-    
-    // 适配iOS刘海屏
-    if (systemInfo.safeArea) {
-      this.globalData.safeArea = systemInfo.safeArea;
-    }
-    
-    envConfig.log('屏幕适配信息:', this.globalData.screenInfo);
-  },
-  
-  /**
-   * 处理分享参数
+   * 分享参数
    */
   handleShareParams(options) {
-    const { query, path } = options;
-    
-    if (query) {
-      // 处理分享携带的参数
-      if (query.postcardId) {
-        // 如果是分享的明信片，记录下来
-        this.globalData.sharedPostcardId = query.postcardId;
-        envConfig.log('从分享进入，明信片ID:', query.postcardId);
-      }
-      
-      if (query.inviteCode) {
-        // 如果是邀请分享
-        this.globalData.inviteCode = query.inviteCode;
-        envConfig.log('邀请码:', query.inviteCode);
-      }
-    }
+    try {
+      const query = options.query || {};
+      this.globalData.sharedPostcardId = query.postcardId || null;
+      this.globalData.inviteCode = query.invite || null;
+    } catch (_) {}
   },
-  
+
   /**
-   * 用户登录成功事件
+   * 适配
+   */
+  adaptToSystem(res) {
+    this.globalData.screenInfo = { width: res.windowWidth, height: res.windowHeight, pixelRatio: res.pixelRatio };
+    this.globalData.safeArea = res.safeArea || null;
+  },
+
+  /**
+   * 用户事件
    */
   onUserLogin(userInfo) {
     envConfig.log('用户登录成功:', userInfo);
     this.globalData.userInfo = userInfo;
-    
-    // 可以在这里进行一些登录后的初始化操作
-    this.afterUserLogin(userInfo);
+    this.afterUserLogin?.(userInfo);
   },
-  
-  /**
-   * 用户退出登录事件
-   */
+
   onUserLogout() {
     envConfig.log('用户退出登录');
     this.globalData.userInfo = null;
     this.globalData.currentTask = null;
-    
-    // 停止所有轮询任务
     taskPollingManager.stopAllPolling();
-    
-    // 清除相关缓存数据
     this.clearUserRelatedData();
   },
-  
-  /**
-   * 登录后的初始化操作
-   */
-  afterUserLogin(userInfo) {
-    // 可以在这里获取用户的个人设置、作品列表等
-    // 示例：预加载用户作品
-    // this.preloadUserPostcards(userInfo.id);
-  },
-  
-  /**
-   * 清除用户相关数据
-   */
+
+  afterUserLogin() {},
+
   clearUserRelatedData() {
-    // 清除可能缓存的用户数据
     wx.removeStorageSync('userPostcards');
     wx.removeStorageSync('userPreferences');
   },
-  
-  /**
-   * 错误上报
-   */
-  reportError(error) {
-    // 这里可以集成错误监控服务
-    // 如：Sentry, Fundebug 等
-    envConfig.error('上报错误:', error);
-  },
 
   /**
-   * 预取定位与环境信息（准确性优先，不降级）
+   * 环境预取
    */
   prefetchEnvironment() {
     try {
-      const { envAPI } = require('./utils/request.js');
+      const { envAPI } = require('./utils/enhanced-request.js');
       wx.getSetting({
         success: (setting) => {
           const hasAuth = setting.authSetting && setting.authSetting['scope.userLocation'];
-          if (hasAuth === false) {
-            // 未授权则不预取，等待页面引导
-            return;
-          }
+          if (hasAuth === false) return;
           wx.getLocation({
             type: 'gcj02',
             isHighAccuracy: true,
             highAccuracyExpireTime: 3000,
             success: async (loc) => {
               try {
-                const latitude = loc.latitude;
-                const longitude = loc.longitude;
-                // 并行查询城市与天气（长超时由封装保证）
+                const { latitude, longitude } = loc;
                 const [cityRes, weatherRes] = await Promise.all([
                   envAPI.reverseGeocode(latitude, longitude, 'zh'),
                   envAPI.getWeather(latitude, longitude)
@@ -260,144 +221,80 @@ App({
                 const weatherText = (weatherRes && weatherRes.weather_text) || '';
                 const temperature = weatherRes && weatherRes.temperature;
                 const weatherInfo = typeof temperature === 'number' ? `${weatherText} · ${temperature}°C` : weatherText;
-                const cache = {
-                  ts: Date.now(),
-                  location: { latitude, longitude },
-                  cityName,
-                  weatherInfo
-                };
-                wx.setStorage({ key: 'envCache', data: cache });
-              } catch (e) {
-                // 静默失败，避免影响启动
-              }
+                wx.setStorage({ key: 'envCache', data: { ts: Date.now(), location: { latitude, longitude }, cityName, weatherInfo } });
+              } catch (_) {}
             },
-            fail: () => {
-              // 静默失败
-            }
+            fail: () => {}
           });
         },
         fail: () => {}
       });
-    } catch (e) {}
+    } catch (_) {}
   },
-  
+
+  // 预留钩子
+  onNetworkRecover() {},
+  handleMemoryWarning() {},
+  recordPerformanceMetric() {},
+  recordUsageMetrics() {},
+  saveAppState() {},
+  async fallbackInit() {},
+
   /**
-   * 全局数据
+   * 全局数据（增强版）
    */
   globalData: {
-    userInfo: null,           // 用户信息
-    systemInfo: null,         // 系统信息
-    screenInfo: null,         // 屏幕适配信息
-    safeArea: null,           // 安全区域信息
-    currentTask: null,        // 当前进行的明信片生成任务
-    sharedPostcardId: null,   // 分享进入的明信片ID
-    inviteCode: null,         // 邀请码
-    lastShowTime: null,       // 最后显示时间
-    
-    // 应用配置
+    startTime: Date.now(),
+    sessionId: Date.now().toString(36) + Math.random().toString(36).substr(2),
+    userInfo: null,
+    loginTime: null,
+    systemInfo: null,
+    screenInfo: null,
+    safeArea: null,
+    networkStatus: 'unknown',
+    networkType: 'unknown',
+    previousNetworkStatus: 'unknown',
+    currentTask: null,
+    shareParams: null,
+    sharedPostcardId: null,
+    inviteCode: null,
+    qrData: null,
+    lastShowTime: null,
+    lastMessage: null,
     config: {
-      version: '1.0.0',
-      environment: envConfig.currentEnv
+      version: '2.0.0',
+      environment: envConfig.currentEnv,
+      features: { enhanced_auth: true, error_handling: true, compatibility: true, analytics: true }
     }
   },
-  
+
   /**
-   * 工具方法
+   * 增强工具方法
    */
   utils: {
-    // 显示加载提示
-    showLoading(title = '加载中...') {
-      wx.showLoading({
-        title,
-        mask: true
-      });
+    showLoading: (title = '加载中...') => wx.showLoading({ title, mask: true }),
+    hideLoading: () => wx.hideLoading(),
+    showSuccess: (title, duration = 1500) => wx.showToast({ title, icon: 'success', duration }),
+    showError: (title, duration = 2000) => wx.showToast({ title, icon: 'none', duration }),
+    showConfirm: (content, title = '提示') => new Promise((resolve) => {
+      wx.showModal({ title, content, success: (res) => resolve(res.confirm), fail: () => resolve(false) });
+    }),
+    handleError: (error, options = {}) => errorHandler.handle(error, options),
+    safeRequest: async (requestFn, fallback = null) => {
+      try { return await requestFn(); } catch (error) { errorHandler.handleSilentError(error); return fallback; }
     },
-
-    // 隐藏加载提示
-    hideLoading() {
-      wx.hideLoading();
-    },
-
-    // 显示成功提示
-    showSuccess(title, duration = 1500) {
-      wx.showToast({
-        title,
-        icon: 'success',
-        duration
-      });
-    },
-
-    // 显示错误提示
-    showError(title, duration = 2000) {
-      wx.showToast({
-        title,
-        icon: 'none',
-        duration
-      });
-    },
-
-    // 确认对话框
-    showConfirm(content, title = '提示') {
-      return new Promise((resolve) => {
-        wx.showModal({
-          title,
-          content,
-          success(res) {
-            resolve(res.confirm);
-          },
-          fail() {
-            resolve(false);
-          }
-        });
-      });
-    },
-
-    // 格式化时间
-    formatTime(date) {
+    formatTime: (date) => {
       if (!date) return '';
-      
       const now = new Date();
       const target = new Date(date);
       const diff = now - target;
-      
-      // 1分钟内
-      if (diff < 60000) {
-        return '刚刚';
-      }
-      
-      // 1小时内
-      if (diff < 3600000) {
-        return Math.floor(diff / 60000) + '分钟前';
-      }
-      
-      // 今天
-      if (now.toDateString() === target.toDateString()) {
-        return target.toTimeString().substr(0, 5);
-      }
-      
-      // 其他
+      if (diff < 60000) return '刚刚';
+      if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前';
+      if (now.toDateString() === target.toDateString()) return target.toTimeString().substr(0, 5);
       return target.toLocaleDateString();
     },
-    
-    // 防抖函数
-    debounce(func, delay) {
-      let timer = null;
-      return function(...args) {
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(() => func.apply(this, args), delay);
-      };
-    },
-    
-    // 节流函数
-    throttle(func, delay) {
-      let last = 0;
-      return function(...args) {
-        const now = Date.now();
-        if (now - last >= delay) {
-          func.apply(this, args);
-          last = now;
-        }
-      };
-    }
+    debounce: (func, delay) => { let timer=null; return function(...args){ if (timer) clearTimeout(timer); timer=setTimeout(()=>func.apply(this,args),delay);} },
+    throttle: (func, delay) => { let last=0; return function(...args){ const now=Date.now(); if (now-last>=delay){ func.apply(this,args); last=now; } } }
   }
 });
+

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Header, Request
+import functools
 from sqlalchemy.orm import Session
 from typing import Optional, List
 import logging
@@ -27,10 +28,7 @@ class CurrentUser:
     def has_permission(self, permission: str) -> bool:
         return permission in self.permissions or self.role == "admin"
 
-async def get_current_user(request: Request | None = None) -> CurrentUser:
-    if not request:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=401, detail="缺少请求上下文")
+async def get_current_user(request: Request) -> CurrentUser:
     token = None
     auth_header = request.headers.get("authorization")
     if auth_header and auth_header.lower().startswith("bearer "):
@@ -55,6 +53,7 @@ async def get_current_user(request: Request | None = None) -> CurrentUser:
 
 def require_permission(permission: str, resource_check: bool = False):
     def decorator(func):
+        @functools.wraps(func)
         async def wrapper(*args, **kwargs):
             # 从参数或 request.state 中获取用户
             current_user = kwargs.get('current_user')

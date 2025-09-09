@@ -39,48 +39,9 @@
       <text class="brand-subtitle">每一天，都值得被温柔记录</text>
     </view>
     
-    <!-- 使用新的头像昵称填写能力 -->
-    <view class="profile-setup" wx:if="{{showProfileSetup}}">
-      <view class="profile-header">
-        <text class="profile-title">完善个人信息</text>
-        <text class="profile-subtitle">让我们更好地为你提供服务</text>
-      </view>
-      
-      <!-- 头像选择 -->
-      <view class="avatar-setup">
-        <text class="setup-label">选择头像</text>
-        <button class="avatar-btn" open-type="chooseAvatar" bind:chooseavatar="onChooseAvatar">
-          <image class="preview-avatar" src="{{tempAvatarUrl}}" mode="aspectFill" wx:if="{{tempAvatarUrl}}"></image>
-          <view class="default-avatar" wx:else>
-            <text class="avatar-placeholder">头像</text>
-          </view>
-          <view class="avatar-overlay">
-            <text class="avatar-hint">点击选择头像</text>
-          </view>
-        </button>
-      </view>
-      
-      <!-- 昵称输入 -->
-      <view class="nickname-setup">
-        <text class="setup-label">输入昵称</text>
-        <input 
-          class="nickname-input" 
-          type="nickname" 
-          placeholder="请输入昵称" 
-          value="{{tempNickname}}"
-          bindinput="onNicknameInput"
-          maxlength="20"
-        />
-      </view>
-      
-      <button class="complete-btn" bindtap="completeProfileSetup" disabled="{{!canCompleteSetup}}">
-        <text class="complete-text">完成设置</text>
-      </button>
-    </view>
-    
-    <!-- 一键登录按钮 -->
-    <button class="login-btn" bindtap="handleQuickLogin" hover-class="login-btn-hover" wx:else>
-      <text class="login-text">开始你的旅程</text>
+    <!-- 登录按钮：直接发起微信授权并登录 -->
+    <button class="login-btn" bindtap="handleLogin" hover-class="login-btn-hover">
+      <text class="login-text">使用微信登录</text>
     </button>
   </view>
 

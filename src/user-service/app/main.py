@@ -14,10 +14,10 @@ app = FastAPI(
     version="2.0.0"
 )
 
-# 🔥 添加安全中间件（注意顺序：审计监控->API安全检查->JWT认证）
+# 🔥 添加安全中间件（顺序：审计监控->JWT认证->API安全检查）
 app.add_middleware(AuditMonitoringMiddleware)
-app.add_middleware(APISecurityMiddleware)
 app.add_middleware(AuthenticationMiddleware)
+app.add_middleware(APISecurityMiddleware)
 
 # 日志配置
 log_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "logs"))

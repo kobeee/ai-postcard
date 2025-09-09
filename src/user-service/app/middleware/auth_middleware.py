@@ -6,6 +6,7 @@ JWT身份验证中间件
 
 import os
 import json
+import uuid
 import logging
 from typing import Optional
 from fastapi import Request, HTTPException
@@ -269,13 +270,18 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             db = next(get_db())
             
             # 查询用户
-            user = db.query(User).filter(User.id == user_id).first()
+            # 兼容字符串与UUID类型
+            try:
+                user_uuid = uuid.UUID(str(user_id))
+            except Exception:
+                user_uuid = user_id  # 回退到原值，避免因异常中断
+            user = db.query(User).filter(User.id == user_uuid).first()
             if user:
                 return {
                     "id": user.id,
                     "openid": user.openid,
                     "nickname": user.nickname,
-                    "avatar": user.avatar,
+                    "avatar": user.avatar_url,
                     "role": getattr(user, 'role', 'user'),
                     "created_at": user.created_at.isoformat() if user.created_at else None
                 }

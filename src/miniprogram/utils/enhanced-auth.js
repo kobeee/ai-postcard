@@ -1,5 +1,6 @@
 // utils/enhanced-auth.js - 增强版用户认证工具
-const { requestManager } = require('./request.js');
+// 使用增强请求管理器以获得重试与统一错误处理
+const { enhancedRequestManager } = require('./enhanced-request.js');
 const envConfig = require('../config/env.js');
 
 /**
@@ -15,6 +16,8 @@ class EnhancedAuthManager {
     this.isLoggingIn = false;
     this.isRefreshing = false;
     this.refreshPromise = null;
+    this.loginPromise = null; // 防重复登录的单飞开关
+    this.lastLoginAt = 0;     // 登录节流时间戳
     
     // 配置参数
     this.config = {
@@ -74,24 +77,12 @@ class EnhancedAuthManager {
   }
   
   /**
-   * 检测服务器认证模式
+   * 检测服务器认证模式 - 简化为直接使用JWT模式
    */
   async detectAuthMode() {
-    try {
-      // 尝试获取服务器配置信息
-      const response = await requestManager.get('/api/v1/auth/config', {}, {
-        timeout: 5000,
-        header: { 'X-Skip-Auth': 'true' } // 跳过认证检查
-      });
-      
-      this.config.legacyMode = !response.jwt_enabled;
-      envConfig.log('检测到认证模式:', this.config.legacyMode ? 'Legacy' : 'JWT');
-      
-    } catch (error) {
-      // 无法连接或旧版本服务器，使用兼容模式
-      this.config.legacyMode = true;
-      envConfig.log('检测认证模式失败，使用兼容模式');
-    }
+    // 直接使用JWT认证模式，不需要检测
+    this.config.legacyMode = false;
+    envConfig.log('使用JWT认证模式');
   }
   
   /**
@@ -168,13 +159,24 @@ class EnhancedAuthManager {
    * 增强版微信登录
    */
   async login() {
-    if (this.isLoggingIn) {
-      envConfig.log('登录进行中，请稍候');
-      return null;
+    // 单飞：已有登录流程，复用同一个Promise
+    if (this.loginPromise) {
+      envConfig.log('已有登录流程进行中，复用同一Promise');
+      return await this.loginPromise;
     }
+    // 节流：5秒内避免重复触发，缓解429
+    const now = Date.now();
+    const cooldown = 5000;
+    if (now - this.lastLoginAt < cooldown) {
+      envConfig.log('登录节流中，返回上次用户信息');
+      return this.userInfo || null;
+    }
+    this.lastLoginAt = now;
     
     try {
       this.isLoggingIn = true;
+      // 建立单飞Promise
+      this.loginPromise = (async () => {
       
       // 1. 获取微信登录code
       const loginResult = await this.wxLogin();
@@ -193,6 +195,8 @@ class EnhancedAuthManager {
       this.emit('login', this.userInfo);
       
       return this.userInfo;
+      })();
+      return await this.loginPromise;
       
     } catch (error) {
       envConfig.error('增强登录失败:', error);
@@ -204,6 +208,7 @@ class EnhancedAuthManager {
       throw error;
     } finally {
       this.isLoggingIn = false;
+      this.loginPromise = null;
     }
   }
   
@@ -216,34 +221,33 @@ class EnhancedAuthManager {
       userInfo: userProfile
     };
     
-    let lastError = null;
-    
-    for (let attempt = 1; attempt <= this.config.maxRetries; attempt++) {
-      try {
-        envConfig.log(`尝试登录 (${attempt}/${this.config.maxRetries})`);
-        
-        const response = await requestManager.post(
-          envConfig.getApiUrl('/miniprogram/auth/login'),
-          loginData,
-          { timeout: 15000 }
-        );
-        
-        return response;
-        
-      } catch (error) {
-        lastError = error;
-        
-        if (this.isRetryableError(error) && attempt < this.config.maxRetries) {
-          envConfig.log(`登录失败，${this.config.retryDelay}ms后重试:`, error.message);
-          await this.delay(this.config.retryDelay * attempt);
-          continue;
+    try {
+      envConfig.log('执行登录请求');
+      
+      const response = await enhancedRequestManager.post(
+        envConfig.getApiUrl('/miniprogram/auth/login'),
+        loginData,
+        { 
+          timeout: 15000,
+          // 禁用重试，避免与enhanced-request.js的重试机制冲突
+          maxRetries: 0,
+          enableCache: false
         }
-        
+      );
+      
+      return response;
+      
+    } catch (error) {
+      // 429错误不在认证层重试，直接抛出
+      if (error.statusCode === 429) {
+        envConfig.warn('登录遇到限流，请稍后重试');
         throw error;
       }
+      
+      // 其他错误也不在认证层重试，交由enhanced-request处理
+      envConfig.error('登录失败:', error.message);
+      throw error;
     }
-    
-    throw lastError;
   }
   
   /**
@@ -358,15 +362,29 @@ class EnhancedAuthManager {
         throw new Error('无刷新token');
       }
       
-      const response = await requestManager.post(
+      // 刷新节流：10秒内只允许一次刷新
+      if (!this._lastRefreshAt) this._lastRefreshAt = 0;
+      const now = Date.now();
+      if (now - this._lastRefreshAt < 10000) {
+        envConfig.log('跳过频繁刷新（节流中）');
+        return false;
+      }
+      this._lastRefreshAt = now;
+
+      const response = await enhancedRequestManager.post(
         envConfig.getApiUrl('/miniprogram/auth/refresh'),
         { refreshToken: this.refreshToken },
         { timeout: 10000 }
       );
       
-      const { token, userInfo, expiresIn } = response;
+      const { token, refreshToken, userInfo, expiresIn } = response;
       
       this.token = token;
+      // 同步更新新的刷新令牌（后端会轮换refreshToken）
+      if (refreshToken) {
+        this.refreshToken = refreshToken;
+        wx.setStorageSync('refreshToken', refreshToken);
+      }
       this.userInfo = userInfo;
       this.tokenExpiry = expiresIn ? Date.now() + (expiresIn * 1000) : null;
       
@@ -379,6 +397,7 @@ class EnhancedAuthManager {
       
     } catch (error) {
       envConfig.error('Token刷新失败:', error);
+      // 刷新失败后清理，避免后续请求继续401风暴
       await this.clearAuth();
       return false;
     }
@@ -394,7 +413,7 @@ class EnhancedAuthManager {
         return this.userInfo;
       }
       
-      const userInfo = await requestManager.get(
+      const userInfo = await enhancedRequestManager.get(
         envConfig.getApiUrl('/miniprogram/auth/userinfo'),
         {},
         { timeout: 8000 }
@@ -483,7 +502,7 @@ class EnhancedAuthManager {
       // 如果支持JWT，通知服务器logout
       if (!this.config.legacyMode && this.token) {
         try {
-          await requestManager.post(
+          await enhancedRequestManager.post(
             envConfig.getApiUrl('/miniprogram/auth/logout'),
             {},
             { timeout: 5000 }

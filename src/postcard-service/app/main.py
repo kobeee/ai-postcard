@@ -81,8 +81,9 @@ app = FastAPI(
 
 # 🔥 添加安全中间件（顺序：审计监控->API安全检查）
 app.add_middleware(AuditMonitoringMiddleware)
-app.add_middleware(APISecurityMiddleware)
+# 先进行身份认证，再进行API安全检查，确保安全中间件可获取 request.state.user_id
 app.add_middleware(AuthenticationMiddleware)
+app.add_middleware(APISecurityMiddleware)
 
 # 配置CORS
 app.add_middleware(

@@ -60,13 +60,18 @@ class APISecurityMiddleware(BaseHTTPMiddleware):
             # 1. 增加并发计数
             concurrent_count = await self.rate_limiter.increment_concurrent_requests()
             
-            # 2. 限流检查
-            rate_limit_result = await self.rate_limiter.check_rate_limit(
-                user_id=user_id,
-                ip_address=client_ip,
-                endpoint=endpoint,
-                action=self._get_action_from_endpoint(endpoint)
-            )
+            # 2. 限流检查（对低风险查询类接口放宽/跳过）
+            action = self._get_action_from_endpoint(endpoint)
+            skip_rate_limit = action in {"query_quota"}
+
+            rate_limit_result = {"allowed": True}
+            if not skip_rate_limit:
+                rate_limit_result = await self.rate_limiter.check_rate_limit(
+                    user_id=user_id,
+                    ip_address=client_ip,
+                    endpoint=endpoint,
+                    action=action
+                )
             
             if not rate_limit_result["allowed"]:
                 security_result["allowed"] = False
@@ -156,7 +161,7 @@ class APISecurityMiddleware(BaseHTTPMiddleware):
             success = 200 <= response.status_code < 400
             response_time = time.time() - start_time
             
-            await self.rate_limiter.record_request_result(success, response_time)
+            await self.rate_limiter.record_request_result(success, response_time, response.status_code)
             
             # 7. 添加安全响应头
             self._add_security_headers(response)
@@ -293,18 +298,36 @@ class APISecurityMiddleware(BaseHTTPMiddleware):
     
     def _get_action_from_endpoint(self, endpoint: str) -> str:
         """从端点推断动作类型"""
-        path = endpoint.lower()
+        ep = endpoint.lower()
+        # 拆分方法与路径，例如 "GET /api/..."
+        try:
+            method, path = ep.split(" ", 1)
+        except ValueError:
+            method, path = "get", ep
         
-        if "login" in path:
+        # 优先匹配更具体的任务端点
+        if "/postcards/status" in path:
+            return "task_status"
+        if "/postcards/result" in path:
+            return "task_result"
+        
+        # 登录与配额
+        if "/auth/login" in path:
             return "login"
-        elif "create" in path or "post" in path:
-            return "create_postcard"
-        elif "quota" in path:
+        if "/users/" in path and "/quota" in path:
             return "query_quota"
-        elif "list" in path or "postcards" in path:
+        
+        # 创建明信片：必须是 POST 方法，或明确的 /postcards/create
+        if method == "post" and "/postcards" in path:
+            return "create_postcard"
+        if "/postcards/create" in path:
+            return "create_postcard"
+        
+        # 列表/查询类
+        if "/postcards/user" in path or "/postcards" in path or "list" in path:
             return "list_postcards"
-        else:
-            return "default"
+        
+        return "default"
     
     def _check_input_size_limits(self, data: Any) -> bool:
         """检查输入大小限制"""

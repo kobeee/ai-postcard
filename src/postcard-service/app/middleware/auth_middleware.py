@@ -21,10 +21,21 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         self.jwt_secret = os.getenv("JWT_SECRET_KEY", "ai-postcard-secret-key-2025")
         self.jwt_alg = "HS256"
         self.excluded_paths = {"/health", "/docs", "/openapi.json", "/redoc"}
+        # 内部服务调用令牌（用于跨服务安全调用）
+        self.internal_service_token = os.getenv("INTERNAL_SERVICE_TOKEN", "")
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
         if path in self.excluded_paths or path.startswith("/docs"):
+            return await call_next(request)
+
+        # 内部服务令牌放行（用于AI Agent Worker等跨服务调用）
+        internal_token = request.headers.get("x-internal-service-token") or request.headers.get("x-service-token")
+        if internal_token and self.internal_service_token and internal_token == self.internal_service_token:
+            # 标注为内部服务调用
+            request.state.user_id = "internal_service"
+            request.state.user_role = "service"
+            request.state.session_id = None
             return await call_next(request)
 
         token = self._extract_token(request)
@@ -59,4 +70,3 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         if token:
             return token
         return None
-

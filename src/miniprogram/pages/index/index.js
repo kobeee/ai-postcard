@@ -1,6 +1,6 @@
 // pages/index/index.js - 情绪罗盘首页
-const { postcardAPI, authAPI, envAPI } = require('../../utils/request.js');
-const authUtil = require('../../utils/auth.js');
+const { postcardAPI, authAPI, envAPI } = require('../../utils/enhanced-request.js');
+const { enhancedAuthManager: authUtil } = require('../../utils/enhanced-auth.js');
 const { startPolling, POLLING_CONFIGS } = require('../../utils/task-polling.js');
 const { parseCardData } = require('../../utils/data-parser.js');
 const envConfig = require('../../config/env.js');
@@ -43,7 +43,7 @@ Page({
     envDebug: false,
     showDebug: false,
     
-    // 新的用户信息设置（2024年微信小程序最新方案）
+    // 用户信息设置UI已移除，改为直接微信授权
     showProfileSetup: false,
     tempAvatarUrl: '',
     tempNickname: '',
@@ -287,7 +287,7 @@ Page({
       });
 
       // 并行获取城市与天气
-      const { envAPI } = require('../../utils/request.js');
+      const { envAPI } = require('../../utils/enhanced-request.js');
       const [cityRes, weatherRes] = await Promise.all([
         envAPI.reverseGeocode(latitude, longitude, 'zh'),
         envAPI.getWeather(latitude, longitude)
@@ -453,6 +453,27 @@ Page({
    */
   async checkTodayCard() {
     try {
+      // 确保用户已登录且有有效的用户信息
+      if (!this.data.userInfo || !this.data.userInfo.id) {
+        envConfig.warn('用户未登录，跳过配额检查');
+        this.setData({
+          needEmotionInput: false,  // 未登录时不显示画布，引导登录
+          todayCard: null
+        });
+        return;
+      }
+      
+      // 🔥 检查token是否存在，避免401错误
+      const token = wx.getStorageSync('userToken');
+      if (!token) {
+        envConfig.warn('用户token不存在，跳过配额检查');
+        this.setData({
+          needEmotionInput: false,  // 无token时不显示画布，引导重新登录
+          todayCard: null
+        });
+        return;
+      }
+      
       const userId = this.data.userInfo.id;
       
       // 🔥 使用配额API检查状态
@@ -492,7 +513,33 @@ Page({
       
     } catch (error) {
       envConfig.error('检查今日卡片失败:', error);
-      // 出错时默认显示画布
+      
+      // 🔥 如果是401错误，清理过期token并引导重新登录
+      if (error.statusCode === 401 || error.code === 401) {
+        envConfig.warn('Token已过期，清理认证信息');
+        wx.removeStorageSync('userToken');
+        wx.removeStorageSync('refreshToken');
+        wx.removeStorageSync('userInfo');
+        
+        // 🔥 同步清理enhancedAuthManager状态
+        try {
+          const { enhancedAuthManager } = require('../../utils/enhanced-auth.js');
+          await enhancedAuthManager.clearAuth();
+          envConfig.log('✅ 已同步清理enhancedAuthManager状态');
+        } catch (error) {
+          envConfig.error('同步清理认证状态失败:', error);
+        }
+        
+        this.setData({
+          userInfo: null,
+          hasUserInfo: false,
+          needEmotionInput: false,  // 不显示画布，引导重新登录
+          todayCard: null
+        });
+        return;
+      }
+      
+      // 其他错误时默认显示画布
       this.setData({
         needEmotionInput: true,
         todayCard: null
@@ -741,20 +788,24 @@ Page({
       if (authResult.refreshToken) {
         wx.setStorageSync('refreshToken', authResult.refreshToken);
       }
-
-      // 4. 检查是否需要完善用户信息
-      if (!authResult.userInfo.nickName || authResult.userInfo.nickName === '微信用户') {
-        // 显示个人信息完善界面
-        this.setData({ showProfileSetup: true });
-      } else {
-        // 直接设置用户信息
-        const enhancedUserInfo = this.processUserInfo(authResult.userInfo);
-        this.setData({
-          userInfo: enhancedUserInfo,
-          hasUserInfo: true
-        });
-        this.checkUserStatus();
+      
+      // 🔥 关键修复：更新enhancedAuthManager的token状态
+      try {
+        const { enhancedAuthManager } = require('../../utils/enhanced-auth.js');
+        await enhancedAuthManager.restoreAuthState();
+        envConfig.log('✅ 已同步认证状态到enhancedAuthManager');
+      } catch (error) {
+        envConfig.error('同步认证状态失败:', error);
       }
+
+      // 直接设置用户信息（不再引导完善资料）
+      const enhancedUserInfo = this.processUserInfo(authResult.userInfo);
+      this.setData({
+        userInfo: enhancedUserInfo,
+        hasUserInfo: true,
+        showProfileSetup: false
+      });
+      this.checkUserStatus();
 
       wx.hideLoading();
 
@@ -773,95 +824,26 @@ Page({
    * 选择头像回调
    */
   onChooseAvatar(e) {
-    const { avatarUrl } = e.detail;
-    this.setData({ 
-      tempAvatarUrl: avatarUrl,
-      canCompleteSetup: !!(avatarUrl && this.data.tempNickname)
-    });
-    envConfig.log('用户选择头像:', avatarUrl);
+    // 已弃用：不再使用手动选择头像流程
+    const { avatarUrl } = e.detail || {};
+    envConfig.log('选择头像事件(已忽略):', avatarUrl);
   },
 
   /**
    * 昵称输入回调
    */
   onNicknameInput(e) {
-    const nickname = e.detail.value.trim();
-    this.setData({ 
-      tempNickname: nickname,
-      canCompleteSetup: !!(nickname && this.data.tempAvatarUrl)
-    });
+    // 已弃用：不再手动输入昵称
+    const nickname = e.detail?.value?.trim?.() || '';
+    envConfig.log('昵称输入事件(已忽略):', nickname);
   },
 
   /**
    * 完成个人信息设置
    */
   async completeProfileSetup() {
-    const { tempAvatarUrl, tempNickname } = this.data;
-    
-    if (!tempAvatarUrl || !tempNickname) {
-      wx.showToast({
-        title: '请完善头像和昵称',
-        icon: 'none'
-      });
-      return;
-    }
-
-    try {
-      wx.showLoading({ title: '保存中...', mask: true });
-
-      // 1. 上传头像到服务器（如果需要）
-      let finalAvatarUrl = tempAvatarUrl;
-      // TODO: 这里可以添加上传头像到服务器的逻辑
-      // const uploadResult = await this.uploadAvatar(tempAvatarUrl);
-      // finalAvatarUrl = uploadResult.url;
-
-      // 2. 更新用户信息
-      const updatedUserInfo = {
-        ...this.data.userInfo,
-        nickName: tempNickname,
-        avatarUrl: finalAvatarUrl,
-        // 兼容性字段
-        nickname: tempNickname,
-        avatar_url: finalAvatarUrl
-      };
-
-      // 3. 保存到本地和设置页面状态
-      wx.setStorageSync('userInfo', updatedUserInfo);
-      const enhancedUserInfo = this.processUserInfo(updatedUserInfo);
-      
-      this.setData({
-        userInfo: enhancedUserInfo,
-        hasUserInfo: true,
-        showProfileSetup: false,
-        tempAvatarUrl: '',
-        tempNickname: '',
-        canCompleteSetup: false
-      });
-
-      wx.hideLoading();
-      wx.showToast({
-        title: '设置完成',
-        icon: 'success'
-      });
-
-      // 4. 更新问候语
-      const baseGreeting = '夜深了，记录今天的心情。';
-      this.setData({
-        greetingText: `${tempNickname}，${baseGreeting}`
-      });
-      
-      // 5. 继续初始化流程
-      this.loadUserCards();
-      this.checkTodayCard();
-
-    } catch (error) {
-      wx.hideLoading();
-      wx.showToast({
-        title: '保存失败，请重试',
-        icon: 'none'
-      });
-      envConfig.error('保存用户信息失败:', error);
-    }
+    // 已弃用：不再存在完善资料流程
+    wx.showToast({ title: '请直接使用微信授权登录', icon: 'none' });
   },
 
   /**
@@ -878,7 +860,7 @@ Page({
       // 1. 先获取用户信息授权（必须在用户点击事件中同步调用）
       const userProfile = await new Promise((resolve, reject) => {
         wx.getUserProfile({
-          desc: '用于完善用户体验',
+          desc: '用于展示头像昵称',
           success: resolve,
           fail: reject
         });
@@ -909,6 +891,15 @@ Page({
       wx.setStorageSync('userInfo', finalUserInfo);
       if (authResult.refreshToken) {
         wx.setStorageSync('refreshToken', authResult.refreshToken);
+      }
+      
+      // 🔥 关键修复：更新enhancedAuthManager的token状态
+      try {
+        const { enhancedAuthManager } = require('../../utils/enhanced-auth.js');
+        await enhancedAuthManager.restoreAuthState();
+        envConfig.log('✅ 已同步认证状态到enhancedAuthManager');
+      } catch (error) {
+        envConfig.error('同步认证状态失败:', error);
       }
       
       // 处理用户信息并设置到页面数据
@@ -1407,7 +1398,26 @@ Page({
     // 🔥 检查用户生成配额
     try {
       const app = getApp();
-      const userId = app.globalData.user?.id || 'test_user';
+      const userId = this.data.userInfo && this.data.userInfo.id;
+      if (!userId) {
+        wx.showModal({
+          title: '需要登录',
+          content: '请先登录以便检查生成配额',
+          showCancel: false
+        });
+        return;
+      }
+      
+      // 🔥 检查token是否存在
+      const token = wx.getStorageSync('userToken');
+      if (!token) {
+        wx.showModal({
+          title: '需要重新登录',
+          content: '请先重新登录以便检查生成配额',
+          showCancel: false
+        });
+        return;
+      }
       
       wx.showLoading({
         title: '检查生成次数...',
@@ -1448,7 +1458,38 @@ Page({
     } catch (error) {
       wx.hideLoading();
       envConfig.error('检查配额失败:', error);
-      // 配额检查失败时不阻断用户操作，显示警告即可
+      
+      // 🔥 如果是401错误，清理过期token并引导重新登录
+      if (error.statusCode === 401 || error.code === 401) {
+        envConfig.warn('Token已过期，清理认证信息');
+        wx.removeStorageSync('userToken');
+        wx.removeStorageSync('refreshToken');
+        wx.removeStorageSync('userInfo');
+        
+        // 🔥 同步清理enhancedAuthManager状态
+        try {
+          const { enhancedAuthManager } = require('../../utils/enhanced-auth.js');
+          await enhancedAuthManager.clearAuth();
+          envConfig.log('✅ 已同步清理enhancedAuthManager状态');
+        } catch (error) {
+          envConfig.error('同步清理认证状态失败:', error);
+        }
+        
+        this.setData({
+          userInfo: null,
+          hasUserInfo: false
+        });
+        
+        wx.showModal({
+          title: '需要重新登录',
+          content: '登录状态已过期，请重新登录后再生成卡片',
+          showCancel: false,
+          confirmText: '我知道了'
+        });
+        return;
+      }
+      
+      // 其他配额检查失败时不阻断用户操作，显示警告即可
       wx.showToast({
         title: '配额检查失败，将继续生成',
         icon: 'none',
@@ -1523,7 +1564,8 @@ Page({
         } else {
           // 先行截图，完成后再显示加载遮罩
           const imageData = await this.getCanvasBase64Data();
-          emotionImageBase64 = imageData.base64;
+          const fmt = (imageData && imageData.format) ? imageData.format : 'png';
+          emotionImageBase64 = `data:image/${fmt};base64,${imageData.base64}`;
           envConfig.log('情绪墨迹base64数据提取成功，数据长度:', emotionImageBase64.length);
         }
       } catch (imageError) {
@@ -1564,7 +1606,7 @@ Page({
       // 获取热点话题用于AI创意生成
       let trendingTopics = '';
       try {
-        const { envAPI } = require('../../utils/request.js');
+        const { envAPI } = require('../../utils/enhanced-request.js');
         const cityName = this.data.cityName || '本地';
         const trendingRes = await envAPI.getTrending(cityName);
         const items = (trendingRes && trendingRes.items) || [];

@@ -56,6 +56,9 @@ class RateLimitConfig:
         RateLimitType.ENDPOINT: {
             "create_postcard": {"limit": 100, "window": 60},     # 100次/分钟
             "login": {"limit": 200, "window": 60},               # 200次/分钟
+            # 🆕 对查询类接口单独放宽，避免小程序轮询触发429
+            "task_status": {"limit": 2000, "window": 60},        # 2000次/分钟（只读、轻量）
+            "task_result": {"limit": 1000, "window": 60},        # 1000次/分钟
         },
         
         # 全局限流
@@ -80,6 +83,12 @@ class RateLimitingService:
     
     def __init__(self):
         self.config = RateLimitConfig()
+        # 命名空间与紧急刹车配置
+        self.service_namespace = os.getenv('SERVICE_NAMESPACE', 'postcard-service')
+        self.key_prefix = f"rl:{self.service_namespace}"
+        self.emergency_enabled = os.getenv('EMERGENCY_BRAKE_ENABLED', 'true').lower() == 'true'
+        self.emergency_error_rate_threshold = float(os.getenv('EMERGENCY_ERROR_RATE_THRESHOLD', str(self.config.EMERGENCY_LIMITS.get('error_rate_threshold', 0.5))))
+        self.emergency_min_samples = int(os.getenv('EMERGENCY_MIN_SAMPLES', '50'))
         
         # Redis连接
         redis_host = os.getenv('REDIS_HOST', 'localhost')
@@ -196,7 +205,7 @@ class RateLimitingService:
         limits = self.config.DEFAULT_LIMITS[RateLimitType.USER]
         limit_config = limits.get(action, limits.get("default", {"limit": 100, "window": 60}))
         
-        key = f"rate_limit:user:{user_id}:{action}"
+        key = f"{self.key_prefix}:rate_limit:user:{user_id}:{action}"
         return await self._sliding_window_check(key, limit_config, current_time)
     
     async def _check_ip_rate_limit(self, ip_address: str, action: str, current_time: float) -> Dict[str, Any]:
@@ -207,7 +216,7 @@ class RateLimitingService:
         limits = self.config.DEFAULT_LIMITS[RateLimitType.IP]
         limit_config = limits.get(action, limits.get("default", {"limit": 500, "window": 60}))
         
-        key = f"rate_limit:ip:{ip_hash}:{action}"
+        key = f"{self.key_prefix}:rate_limit:ip:{ip_hash}:{action}"
         return await self._sliding_window_check(key, limit_config, current_time)
     
     async def _check_endpoint_rate_limit(self, endpoint: str, action: str, current_time: float) -> Dict[str, Any]:
@@ -215,7 +224,7 @@ class RateLimitingService:
         limits = self.config.DEFAULT_LIMITS[RateLimitType.ENDPOINT]
         limit_config = limits.get(action, {"limit": 1000, "window": 60})
         
-        key = f"rate_limit:endpoint:{endpoint}:{action}"
+        key = f"{self.key_prefix}:rate_limit:endpoint:{endpoint}:{action}"
         return await self._sliding_window_check(key, limit_config, current_time)
     
     async def _check_global_rate_limit(self, action: str, current_time: float) -> Dict[str, Any]:
@@ -223,7 +232,7 @@ class RateLimitingService:
         limits = self.config.DEFAULT_LIMITS[RateLimitType.GLOBAL]
         limit_config = limits.get(action, limits["default"])
         
-        key = f"rate_limit:global:{action}"
+        key = f"{self.key_prefix}:rate_limit:global:{action}"
         return await self._sliding_window_check(key, limit_config, current_time)
     
     async def _sliding_window_check(self, key: str, limit_config: Dict[str, int], current_time: float) -> Dict[str, Any]:
@@ -283,8 +292,10 @@ class RateLimitingService:
     async def _check_emergency_brake(self) -> Dict[str, Any]:
         """紧急刹车检查"""
         try:
+            if not self.emergency_enabled:
+                return {"allowed": True}
             # 检查当前并发请求数
-            concurrent_key = "emergency:concurrent_requests"
+            concurrent_key = f"{self.key_prefix}:emergency:concurrent_requests"
             concurrent_count = int(await self.redis_client.get(concurrent_key) or 0)
             
             if concurrent_count > self.config.EMERGENCY_LIMITS["concurrent_requests"]:
@@ -296,10 +307,10 @@ class RateLimitingService:
                 }
             
             # 检查错误率（这里简化实现，实际可以更复杂）
-            error_rate_key = "emergency:error_rate"
-            error_rate = float(await self.redis_client.get(error_rate_key) or 0)
+            error_rate_key = f"{self.key_prefix}:emergency:error_rate"
+            error_rate = float(await self.redis_client.get(error_rate_key) or 0.0)
             
-            if error_rate > self.config.EMERGENCY_LIMITS["error_rate_threshold"]:
+            if error_rate > self.emergency_error_rate_threshold:
                 logger.critical(f"🚨 紧急刹车触发 - 错误率过高: {error_rate}")
                 return {
                     "allowed": False,
@@ -316,7 +327,7 @@ class RateLimitingService:
     async def increment_concurrent_requests(self) -> int:
         """增加并发请求计数"""
         try:
-            key = "emergency:concurrent_requests"
+            key = f"{self.key_prefix}:emergency:concurrent_requests"
             current = await self.redis_client.incr(key)
             await self.redis_client.expire(key, 60)  # 1分钟过期
             return current
@@ -327,25 +338,26 @@ class RateLimitingService:
     async def decrement_concurrent_requests(self) -> int:
         """减少并发请求计数"""
         try:
-            key = "emergency:concurrent_requests"
+            key = f"{self.key_prefix}:emergency:concurrent_requests"
             current = await self.redis_client.decr(key)
             return max(0, current)
         except Exception as e:
             logger.error(f"❌ 减少并发计数失败: {str(e)}")
             return 0
     
-    async def record_request_result(self, success: bool, response_time: float):
+    async def record_request_result(self, success: bool, response_time: float, status_code: Optional[int] = None):
         """记录请求结果，用于统计"""
         try:
             current_time = int(time.time())
-            window_key = f"stats:{current_time // 60}"  # 按分钟分组
+            window_key = f"{self.key_prefix}:stats:{current_time // 60}"  # 按分钟分组
             
             pipe = self.redis_client.pipeline()
             
             # 记录请求统计
             pipe.hincrby(window_key, "total_requests", 1)
-            if not success:
-                pipe.hincrby(window_key, "error_requests", 1)
+            # 仅统计 5xx 为服务器错误
+            if status_code is not None and 500 <= int(status_code) < 600:
+                pipe.hincrby(window_key, "server_error_requests", 1)
             
             # 记录响应时间
             pipe.lpush(f"response_times:{window_key}", response_time)
@@ -369,11 +381,10 @@ class RateLimitingService:
             stats = await self.redis_client.hgetall(window_key)
             if stats:
                 total = int(stats.get("total_requests", 0))
-                errors = int(stats.get("error_requests", 0))
-                
-                if total > 0:
-                    error_rate = errors / total
-                    await self.redis_client.setex("emergency:error_rate", 300, error_rate)
+                errors = int(stats.get("server_error_requests", 0))
+                if total >= self.emergency_min_samples:
+                    error_rate = errors / total if total > 0 else 0.0
+                    await self.redis_client.setex(f"{self.key_prefix}:emergency:error_rate", 60, error_rate)
         except Exception as e:
             logger.error(f"❌ 更新错误率失败: {str(e)}")
     
@@ -387,18 +398,18 @@ class RateLimitingService:
             }
             
             # 获取并发请求数
-            concurrent_key = "emergency:concurrent_requests"
+            concurrent_key = f"{self.key_prefix}:emergency:concurrent_requests"
             stats["concurrent_requests"] = int(await self.redis_client.get(concurrent_key) or 0)
             
             # 获取错误率
-            error_rate_key = "emergency:error_rate"
+            error_rate_key = f"{self.key_prefix}:emergency:error_rate"
             stats["error_rate"] = float(await self.redis_client.get(error_rate_key) or 0.0)
             
             # 获取用户限流信息
             if user_id:
                 current_time = time.time()
                 for action in ["create_postcard", "login", "query_quota"]:
-                    key = f"rate_limit:user:{user_id}:{action}"
+                    key = f"{self.key_prefix}:rate_limit:user:{user_id}:{action}"
                     limit_config = self.config.DEFAULT_LIMITS[RateLimitType.USER].get(action, {})
                     
                     if limit_config:
