@@ -394,8 +394,8 @@ Page({
   processUserInfo(userInfo) {
     if (!userInfo) return null;
     
-    // 确保头像URL字段统一
-    const avatarUrl = userInfo.avatarUrl || userInfo.avatar_url || userInfo.headimgurl || '';
+    // 确保头像URL字段统一，提供默认头像
+    const avatarUrl = userInfo.avatarUrl || userInfo.avatar_url || userInfo.headimgurl || this.getDefaultAvatarUrl();
     
     // 确保昵称字段统一
     const nickName = userInfo.nickName || userInfo.nickname || userInfo.nick_name || '';
@@ -433,6 +433,14 @@ Page({
     }
     
     return ''; // 如果都没有有效昵称，返回空字符串
+  },
+
+  /**
+   * 获取默认头像 URL
+   */
+  getDefaultAvatarUrl() {
+    // 返回一个默认头像或者使用 base64 编码的默认头像
+    return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMzIiIGN5PSIzMiIgcj0iMzIiIGZpbGw9IiNGNUY1RjUiLz4KPGNpcmNsZSBjeD0iMzIiIGN5PSIyNCIgcj0iMTAiIGZpbGw9IiNEOUQ5RDkiLz4KPHBhdGggZD0iTTEyIDUyQzEyIDQ0IDIwIDM4IDMyIDM4UzUyIDQ0IDUyIDUyIiBzdHJva2U9IiNEOUQ5RDkiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjwvc3ZnPgo=';
   },
 
   /**
@@ -821,129 +829,72 @@ Page({
   },
 
   /**
-   * 选择头像回调
+   * 点击头像更换 - 简化版
    */
-  onChooseAvatar(e) {
-    // 已弃用：不再使用手动选择头像流程
+  async onChooseAvatar(e) {
     const { avatarUrl } = e.detail || {};
-    envConfig.log('选择头像事件(已忽略):', avatarUrl);
-  },
-
-  /**
-   * 昵称输入回调
-   */
-  onNicknameInput(e) {
-    // 已弃用：不再手动输入昵称
-    const nickname = e.detail?.value?.trim?.() || '';
-    envConfig.log('昵称输入事件(已忽略):', nickname);
-  },
-
-  /**
-   * 完成个人信息设置
-   */
-  async completeProfileSetup() {
-    // 已弃用：不再存在完善资料流程
-    wx.showToast({ title: '请直接使用微信授权登录', icon: 'none' });
-  },
-
-  /**
-   * 用户登录 - 必须在用户点击事件中直接调用（兼容旧方法）
-   */
-  async handleLogin(e) {
+    if (!avatarUrl) return;
+    
+    envConfig.log('用户选择新头像:', avatarUrl);
+    
     try {
-      // 显示加载状态
-      wx.showLoading({
-        title: '登录中...',
-        mask: true
-      });
-
-      // 1. 先获取用户信息授权（必须在用户点击事件中同步调用）
-      const userProfile = await new Promise((resolve, reject) => {
-        wx.getUserProfile({
-          desc: '用于展示头像昵称',
-          success: resolve,
-          fail: reject
-        });
-      });
-
-      // 2. 再进行微信登录
-      const loginResult = await new Promise((resolve, reject) => {
-        wx.login({
-          success: resolve,
-          fail: reject
-        });
-      });
-
-      // 3. 发送登录请求到后端
-      const authResult = await authAPI.login(loginResult.code, userProfile.userInfo);
-
-      // 4. 处理并保存用户信息到本地存储
-      // 优先使用原始的微信用户信息，后端信息作为补充
-      const finalUserInfo = {
-        ...userProfile.userInfo, // 微信原始信息
-        ...authResult.userInfo,  // 后端处理信息
-        // 确保关键字段正确
-        nickName: userProfile.userInfo.nickName || authResult.userInfo.nickName || authResult.userInfo.nickname || '',
-        avatarUrl: userProfile.userInfo.avatarUrl || authResult.userInfo.avatarUrl || authResult.userInfo.avatar_url || ''
+      // 直接更新用户信息中的头像
+      const updatedUserInfo = {
+        ...this.data.userInfo,
+        avatarUrl: avatarUrl,
+        avatar_url: avatarUrl
       };
       
-      wx.setStorageSync('userToken', authResult.token);
-      wx.setStorageSync('userInfo', finalUserInfo);
-      if (authResult.refreshToken) {
-        wx.setStorageSync('refreshToken', authResult.refreshToken);
-      }
-      
-      // 🔥 关键修复：更新enhancedAuthManager的token状态
-      try {
-        const { enhancedAuthManager } = require('../../utils/enhanced-auth.js');
-        await enhancedAuthManager.restoreAuthState();
-        envConfig.log('✅ 已同步认证状态到enhancedAuthManager');
-      } catch (error) {
-        envConfig.error('同步认证状态失败:', error);
-      }
-      
-      // 处理用户信息并设置到页面数据
-      const enhancedUserInfo = this.processUserInfo(finalUserInfo);
+      // 更新页面显示
       this.setData({
-        userInfo: enhancedUserInfo,
-        hasUserInfo: true
+        userInfo: updatedUserInfo
       });
-
-      wx.hideLoading();
+      
+      // 保存到本地存储
+      wx.setStorageSync('userInfo', updatedUserInfo);
+      
       wx.showToast({
-        title: '登录成功',
+        title: '头像更新成功',
         icon: 'success',
         duration: 1500
       });
       
-      // 重新初始化页面
-      this.checkUserStatus();
-      
     } catch (error) {
-      wx.hideLoading();
-      
-      if (error.errMsg && error.errMsg.includes('getUserProfile:fail auth deny')) {
-        wx.showModal({
-          title: '需要授权',
-          content: '需要获取您的基本信息来提供个性化体验',
-          showCancel: false
-        });
-      } else if (error.errMsg && error.errMsg.includes('getUserProfile:fail can only be invoked by user TAP gesture')) {
-        wx.showModal({
-          title: '提示',
-          content: '请直接点击按钮进行登录',
-          showCancel: false
-        });
-      } else {
-        wx.showToast({
-          title: error.message || '登录失败，请重试',
-          icon: 'none',
-          duration: 2000
-        });
-      }
-      
-      envConfig.error('登录失败:', error);
+      envConfig.error('更新头像失败:', error);
+      wx.showToast({
+        title: '头像更新失败',
+        icon: 'none'
+      });
     }
+  },
+
+  /**
+   * 昵称输入回调 - 保留但不使用
+   */
+  onNicknameInput(e) {
+    // 保留方法，但不再使用
+    envConfig.log('昵称输入事件(已禁用):', e.detail?.value);
+  },
+
+  /**
+   * 简化版完成设置 - 不再使用
+   */
+  async completeProfileSetup() {
+    // 保留方法，但不再使用
+    wx.showToast({ title: '请使用快速登录', icon: 'none' });
+  },
+
+  /**
+   * 旧版登录方法 - 已废弃，保留仅供兼容
+   */
+  async handleLogin(e) {
+    // 提示用户使用新版登录方式
+    wx.showModal({
+      title: '登录方式已更新',
+      content: '请使用“设置头像昵称”按钮进行完整登录，或点击“快速体验”直接开始使用。',
+      confirmText: '知道了',
+      showCancel: false
+    });
   },
 
   /**

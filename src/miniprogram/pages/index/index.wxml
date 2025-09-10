@@ -8,9 +8,10 @@
 
   <!-- 用户状态区域 -->
   <view class="user-status" wx:if="{{hasUserInfo}}">
-    <view class="avatar-ring">
-      <image class="user-avatar" src="{{userInfo.avatar_url || userInfo.avatarUrl}}" mode="aspectFill"></image>
-      <view class="ring-glow"></view>
+    <!-- 简洁头像：使用圆形容器 + 透明按钮覆盖，避免按钮样式影响形状 -->
+    <view class="avatar-circle" aria-label="更换头像">
+      <image class="avatar-image" src="{{userInfo.avatarUrl || userInfo.avatar_url}}" mode="aspectFill"></image>
+      <button class="avatar-overlay-btn" open-type="chooseAvatar" bind:chooseavatar="onChooseAvatar"></button>
     </view>
     <text class="greeting-text">{{greetingText}}</text>
     <view class="date-info-container">
@@ -39,9 +40,9 @@
       <text class="brand-subtitle">每一天，都值得被温柔记录</text>
     </view>
     
-    <!-- 登录按钮：直接发起微信授权并登录 -->
-    <button class="login-btn" bindtap="handleLogin" hover-class="login-btn-hover">
-      <text class="login-text">使用微信登录</text>
+    <!-- 简化登录按钮 -->
+    <button class="login-btn" bindtap="handleQuickLogin" hover-class="login-btn-hover">
+      <text class="login-text">开始体验</text>
     </button>
   </view>
 

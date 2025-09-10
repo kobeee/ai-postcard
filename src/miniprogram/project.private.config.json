@@ -5,7 +5,7 @@
   "compileType": "miniprogram",
   "setting": {
     "compileHotReLoad": true,
-    "urlCheck": false,
+    "urlCheck": true,
     "ignoreHttpReqCheck": true,
     "ignoreHttpsCheck": true,
     "coverView": true,
