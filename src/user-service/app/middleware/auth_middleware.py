@@ -72,7 +72,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             if auth_result.success and auth_result.user:
                 # 注入用户信息到请求上下文
                 request.state.user = CurrentUser(
-                    user_id=auth_result.user["id"],
+                    user_id=str(auth_result.user["id"]),
                     openid=auth_result.user.get("openid", ""),
                     role=auth_result.user.get("role", "user"),
                     permissions=set(self.auth_service._get_user_permissions(
@@ -82,9 +82,8 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
                 )
                 
                 # 添加认证信息到请求头（用于下游服务）
-                request.headers.__dict__.setdefault("_list", []).append(
-                    (b"x-authenticated-user", auth_result.user["id"].encode())
-                )
+                # 不再直接修改请求头，避免底层Headers实现差异导致异常
+                # 下游如需用户信息，请使用 request.state.user 获取
                 
                 logger.debug(f"✅ 用户认证成功: {auth_result.user['id']}")
             

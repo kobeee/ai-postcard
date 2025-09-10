@@ -205,18 +205,18 @@ class SecurityMonitoringService:
             
             # 记录登录尝试
             attempt_key = f"login_attempts:{user_id}:{ip_address}"
-            self.redis_client.zadd(attempt_key, {str(current_time): current_time})
-            self.redis_client.zremrangebyscore(attempt_key, 0, window_start)
-            self.redis_client.expire(attempt_key, self.anomaly_config["time_window"])
+            await self.redis_client.zadd(attempt_key, {str(current_time): current_time})
+            await self.redis_client.zremrangebyscore(attempt_key, 0, window_start)
+            await self.redis_client.expire(attempt_key, self.anomaly_config["time_window"])
             
             # 统计失败次数
             if not success:
                 fail_key = f"login_failures:{user_id}:{ip_address}"
-                self.redis_client.zadd(fail_key, {str(current_time): current_time})
-                self.redis_client.zremrangebyscore(fail_key, 0, window_start)
-                self.redis_client.expire(fail_key, self.anomaly_config["time_window"])
+                await self.redis_client.zadd(fail_key, {str(current_time): current_time})
+                await self.redis_client.zremrangebyscore(fail_key, 0, window_start)
+                await self.redis_client.expire(fail_key, self.anomaly_config["time_window"])
                 
-                failure_count = self.redis_client.zcard(fail_key)
+                failure_count = await self.redis_client.zcard(fail_key)
                 
                 if failure_count >= self.anomaly_config["login_attempts_threshold"]:
                     return SecurityEvent(
@@ -252,11 +252,11 @@ class SecurityMonitoringService:
             
             # 1. 检测异常请求频率
             freq_key = f"request_frequency:{user_id}"
-            self.redis_client.zadd(freq_key, {str(current_time): current_time})
-            self.redis_client.zremrangebyscore(freq_key, 0, window_start)
-            self.redis_client.expire(freq_key, self.anomaly_config["time_window"])
+            await self.redis_client.zadd(freq_key, {str(current_time): current_time})
+            await self.redis_client.zremrangebyscore(freq_key, 0, window_start)
+            await self.redis_client.expire(freq_key, self.anomaly_config["time_window"])
             
-            request_count = self.redis_client.zcard(freq_key)
+            request_count = await self.redis_client.zcard(freq_key)
             
             if request_count > self.anomaly_config["request_frequency_threshold"]:
                 return SecurityEvent(
@@ -279,10 +279,10 @@ class SecurityMonitoringService:
             # 2. 检测多IP登录
             if endpoint == "login":
                 ip_key = f"login_ips:{user_id}"
-                self.redis_client.sadd(ip_key, ip_address)
-                self.redis_client.expire(ip_key, self.anomaly_config["time_window"])
+                await self.redis_client.sadd(ip_key, ip_address)
+                await self.redis_client.expire(ip_key, self.anomaly_config["time_window"])
                 
-                ip_count = self.redis_client.scard(ip_key)
+                ip_count = await self.redis_client.scard(ip_key)
                 
                 if ip_count > self.anomaly_config["different_ip_threshold"]:
                     return SecurityEvent(
@@ -342,7 +342,7 @@ class SecurityMonitoringService:
             one_hour_ago = current_time - 3600
             
             level_key = f"security_events:level:{event.threat_level.value}"
-            recent_count = self.redis_client.zcount(level_key, one_hour_ago, current_time)
+            recent_count = await self.redis_client.zcount(level_key, one_hour_ago, current_time)
             
             threshold = self.alert_threshold.get(event.threat_level, float('inf'))
             
@@ -365,11 +365,11 @@ class SecurityMonitoringService:
             
             # 存储告警记录
             alert_key = f"security_alert:{int(time.time())}"
-            self.redis_client.hset(alert_key, mapping=alert_data)
-            self.redis_client.expire(alert_key, 86400 * 7)  # 7天过期
+            await self.redis_client.hset(alert_key, mapping=alert_data)
+            await self.redis_client.expire(alert_key, 86400 * 7)  # 7天过期
             
             # 添加到告警时间线
-            self.redis_client.zadd("security_alerts:timeline", {alert_key: time.time()})
+            await self.redis_client.zadd("security_alerts:timeline", {alert_key: time.time()})
             
             # 记录日志
             logger.critical(f"🚨 {alert_data['message']}")
@@ -407,44 +407,44 @@ class SecurityMonitoringService:
             }
             
             # 统计事件总数
-            total_events = self.redis_client.zcount("security_events:timeline", window_start, current_time)
+            total_events = await self.redis_client.zcount("security_events:timeline", window_start, current_time)
             dashboard["events"]["total"] = total_events
             
             # 按类型统计
             for event_type in SecurityEventType:
                 type_key = f"security_events:type:{event_type.value}"
-                count = self.redis_client.zcount(type_key, window_start, current_time)
+                count = await self.redis_client.zcount(type_key, window_start, current_time)
                 if count > 0:
                     dashboard["events"]["by_type"][event_type.value] = count
             
             # 按级别统计
             for threat_level in ThreatLevel:
                 level_key = f"security_events:level:{threat_level.value}"
-                count = self.redis_client.zcount(level_key, window_start, current_time)
+                count = await self.redis_client.zcount(level_key, window_start, current_time)
                 if count > 0:
                     dashboard["events"]["by_level"][threat_level.value] = count
             
             # 获取最近告警
-            recent_alerts = self.redis_client.zrevrangebyscore(
+            recent_alerts = await self.redis_client.zrevrangebyscore(
                 "security_alerts:timeline", current_time, window_start, 
                 start=0, num=10, withscores=True
             )
             
             for alert_key, timestamp in recent_alerts:
-                alert_data = self.redis_client.hgetall(alert_key)
+                alert_data = await self.redis_client.hgetall(alert_key)
                 if alert_data:
                     alert_data["timestamp"] = timestamp
                     dashboard["alerts"].append(alert_data)
             
             # 获取最近事件
-            recent_event_ids = self.redis_client.zrevrangebyscore(
+            recent_event_ids = await self.redis_client.zrevrangebyscore(
                 "security_events:timeline", current_time, window_start,
                 start=0, num=20
             )
             
             for event_id in recent_event_ids:
                 event_key = f"security_event:{event_id}"
-                event_data = self.redis_client.hgetall(event_key)
+                event_data = await self.redis_client.hgetall(event_key)
                 if event_data:
                     dashboard["recent_events"].append(event_data)
             
@@ -533,17 +533,17 @@ class SecurityMonitoringService:
             cutoff_time = time.time() - (days * 24 * 3600)
             
             # 清理时间线索引
-            self.redis_client.zremrangebyscore("security_events:timeline", 0, cutoff_time)
-            self.redis_client.zremrangebyscore("security_alerts:timeline", 0, cutoff_time)
+            await self.redis_client.zremrangebyscore("security_events:timeline", 0, cutoff_time)
+            await self.redis_client.zremrangebyscore("security_alerts:timeline", 0, cutoff_time)
             
             # 清理各种索引
             for event_type in SecurityEventType:
                 type_key = f"security_events:type:{event_type.value}"
-                self.redis_client.zremrangebyscore(type_key, 0, cutoff_time)
+                await self.redis_client.zremrangebyscore(type_key, 0, cutoff_time)
             
             for threat_level in ThreatLevel:
                 level_key = f"security_events:level:{threat_level.value}"
-                self.redis_client.zremrangebyscore(level_key, 0, cutoff_time)
+                await self.redis_client.zremrangebyscore(level_key, 0, cutoff_time)
             
             logger.info(f"✅ 已清理 {days} 天前的安全事件")
             

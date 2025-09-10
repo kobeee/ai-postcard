@@ -648,6 +648,57 @@ WHERE id = 'e138bef4-4677-48a9-bd02-a4b0ea963796' AND status = 'pending';
 
 ---
 
+## 🔧 用户服务 500 与监控异步修复 (2025-09-10)
+
+### 背景与现象
+- 小程序启动及运行过程中，受保护端点 `/api/v1/miniprogram/auth/userinfo` 偶发/连续返回 500（Internal Server Error）。
+- 容器最新日志显示位于安全中间件链路的 Redis 异步调用存在 `RuntimeWarning: coroutine ... was never awaited`，同时网关透传上游 500。
+
+### 根因分析
+- **鉴权中间件（AuthenticationMiddleware）问题**：
+  - 在认证成功后尝试直接向请求头注入 `x-authenticated-user`，不同运行环境下 Headers 底层实现差异可能触发异常；
+  - `CurrentUser.user_id` 未统一为字符串，后续处理链路中对类型的假设导致潜在错误。
+- **安全监控服务（SecurityMonitoringService）问题**：
+  - 多处 `redis.asyncio` 调用（`zadd/zcard/zcount/zrevrangebyscore/sadd/scard/expire/hset/hgetall/zremrangebyscore` 等）缺失 `await`，由于服务置于中间件路径上，未等待的协程引发运行时异常并干扰请求处理。
+
+### 变更内容
+- 用户服务（user-service）
+  - 文件：`src/user-service/app/middleware/auth_middleware.py`
+    - 移除对请求头的直接修改，改为仅通过 `request.state.user` 在服务内部传递认证用户。
+    - 统一 `CurrentUser.user_id` 为 `str`，避免 UUID 等非字符串类型在下游引发隐式编码问题。
+  - 文件：`src/user-service/app/services/security_monitoring_service.py`
+    - 为 Redis 异步方法补齐 `await`：`zadd`、`zremrangebyscore`、`expire`、`zcard`、`sadd`、`scard`、`zcount`、`hset`、`zrevrangebyscore`、`hgetall` 等。
+
+### 验证步骤（容器内）
+```bash
+# 1) 获取登录 token（开发模式 code 使用 test_ 前缀或任意固定值）
+curl -s -X POST http://localhost:8081/api/v1/miniprogram/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"code":"test_cli_fix","userInfo":{"nickName":"Dev","avatarUrl":"","gender":0}}' | jq -r .data.token
+
+# 2) 携带 Authorization 访问 userinfo，应返回 200 且包含用户信息
+curl -i http://localhost:8081/api/v1/miniprogram/auth/userinfo \
+  -H "Authorization: Bearer <上一步输出的token>"
+
+# 3) 携带无效 token，应返回 401（而非 500）
+curl -i http://localhost:8081/api/v1/miniprogram/auth/userinfo \
+  -H 'Authorization: Bearer invalid.jwt.token'
+```
+
+### 运维与发布
+- 仅需重建并重启用户服务以生效：
+```bash
+docker compose up -d --build user-service
+```
+
+### 影响评估
+- 修复后：
+  - 小程序启动阶段 `/auth/userinfo` 端点不再出现 500；
+  - 安全监控相关 `RuntimeWarning` 消失或显著减少；
+  - 行为向后兼容，无 API 变更。
+
+---
+
 ## 🧩 小程序 UI 简化与回廊刷新一致性修复 (2025-09-09)
 
 ### 1) 记忆回廊删除后偶发仍显示已删卡片（缓存不一致）
