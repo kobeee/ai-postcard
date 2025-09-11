@@ -36,7 +36,6 @@ services:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
       PGDATA: /var/lib/postgresql/data/pgdata
-    ports: ["${DB_PORT:-5432}:5432"]
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
       - ./backups/postgres:/backups
@@ -52,7 +51,6 @@ services:
     image: redis:7-alpine
     container_name: ai-postcard-redis
     command: redis-server --requirepass ${REDIS_PASSWORD:-redis} --appendonly yes --dir /data
-    ports: ["${REDIS_PORT:-6379}:6379"]
     volumes:
       - ./data/redis:/data
       - ./backups/redis:/backups
