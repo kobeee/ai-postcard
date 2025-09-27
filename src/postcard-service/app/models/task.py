@@ -12,6 +12,11 @@ class TaskStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
 
+class QuizAnswer(BaseModel):
+    question_id: str
+    option_id: str
+    option_label: str
+
 class PostcardGenerationTask(BaseModel):
     task_id: str
     task_type: TaskType = TaskType.POSTCARD_GENERATION
@@ -22,6 +27,8 @@ class PostcardGenerationTask(BaseModel):
     created_at: str
     # 🆕 版本3.0新增：直接包含base64编码的情绪图片数据
     emotion_image_base64: Optional[str] = None
+    # 🆕 心象签新增：问答数据
+    quiz_answers: Optional[List[QuizAnswer]] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 class PostcardRequest(BaseModel):
@@ -31,6 +38,8 @@ class PostcardRequest(BaseModel):
     user_id: Optional[str] = None
     # 🆕 版本3.0新增：直接接收base64编码的情绪图片数据
     emotion_image_base64: Optional[str] = None
+    # 🆕 心象签新增：问答数据
+    quiz_answers: Optional[List[QuizAnswer]] = Field(default_factory=list)
 
 class PostcardResponse(BaseModel):
     task_id: str
@@ -103,6 +112,51 @@ class TaskStatusResponse(BaseModel):
     extras_creative_spark: Optional[Union[List[str], str]] = None
     extras_mindfulness: Optional[Union[List[str], str]] = None
     extras_future_vision: Optional[Union[List[str], str]] = None
+    
+    # 🔮 心象签扁平化字段 - 覆盖原有旧字段结构
+    oracle_title: Optional[str] = None
+    oracle_subtitle: Optional[str] = None
+    oracle_affirmation: Optional[str] = None
+    oracle_hexagram_name: Optional[str] = None
+    oracle_hexagram_symbol: Optional[str] = None
+    oracle_hexagram_insight: Optional[str] = None
+    oracle_daily_guides: Optional[List[str]] = None
+    oracle_daily_guide_1: Optional[str] = None
+    oracle_daily_guide_2: Optional[str] = None
+    oracle_daily_guide_3: Optional[str] = None
+    oracle_fengshui_focus: Optional[str] = None
+    oracle_ritual_hint: Optional[str] = None
+    oracle_element_wood: Optional[float] = None
+    oracle_element_fire: Optional[float] = None
+    oracle_element_earth: Optional[float] = None
+    oracle_element_metal: Optional[float] = None
+    oracle_element_water: Optional[float] = None
+    oracle_stroke_impression: Optional[str] = None
+    oracle_symbolic_keywords: Optional[List[str]] = None
+    oracle_symbolic_keyword_1: Optional[str] = None
+    oracle_symbolic_keyword_2: Optional[str] = None
+    oracle_symbolic_keyword_3: Optional[str] = None
+    oracle_stroke_count: Optional[int] = None
+    oracle_dominant_quadrant: Optional[str] = None
+    oracle_pressure_tendency: Optional[str] = None
+    oracle_session_time: Optional[str] = None
+    oracle_season_hint: Optional[str] = None
+    oracle_visit_pattern: Optional[str] = None
+    oracle_historical_keywords: Optional[List[str]] = None
+    oracle_blessing_stream: Optional[List[str]] = None
+    oracle_blessing_1: Optional[str] = None
+    oracle_blessing_2: Optional[str] = None
+    oracle_blessing_3: Optional[str] = None
+    oracle_blessing_4: Optional[str] = None
+    oracle_blessing_5: Optional[str] = None
+    oracle_blessing_6: Optional[str] = None
+    oracle_image_prompt: Optional[str] = None
+    oracle_palette: Optional[List[str]] = None
+    oracle_color_1: Optional[str] = None
+    oracle_color_2: Optional[str] = None
+    oracle_color_3: Optional[str] = None
+    oracle_animation_hint: Optional[str] = None
+    oracle_culture_note: Optional[str] = None
 
 class UpdateStatusRequest(BaseModel):
     status: TaskStatus

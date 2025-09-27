@@ -7,7 +7,7 @@ from ...providers.provider_factory import ProviderFactory
 logger = logging.getLogger(__name__)
 
 class StructuredContentGenerator:
-    """结构化内容生成器 - 替代Claude Code SDK，生成丰富的结构化数据"""
+    """结构化内容生成器 - 生成心象签完整数据结构，支持挂件体验"""
     
     def __init__(self):
         # 文本生成使用 Gemini
@@ -24,11 +24,13 @@ class StructuredContentGenerator:
             concept = results.get("concept", "")
             content = results.get("content", "")
             image_url = results.get("image_url", "")
+            selected_charm = results.get("selected_charm_style", {})
+            quiz_insights = results.get("quiz_insights", {})
             
             self.logger.info("🎨 开始生成结构化内容...")
             
             # 构建增强的Prompt
-            enhanced_prompt = self._build_structured_prompt(task, concept, content)
+            enhanced_prompt = self._build_structured_prompt(task, concept, content, selected_charm, quiz_insights)
             
             # 调用Gemini生成结构化数据
             structured_content = await self.provider.generate_text(enhanced_prompt)
@@ -45,6 +47,26 @@ class StructuredContentGenerator:
                     parsed_data["visual"] = {}
                 parsed_data["visual"]["background_image_url"] = image_url
             
+            # 🔮 添加AI选择的签体信息
+            if selected_charm and isinstance(selected_charm, dict):
+                if "ai_selected_charm" not in parsed_data:
+                    parsed_data["ai_selected_charm"] = {}
+                
+                # 从parsed_data中提取自然意象和情绪信息用于推理说明
+                natural_scene = "自然意象"
+                emotion_tone = "情绪基调"
+                if "oracle_theme" in parsed_data and isinstance(parsed_data["oracle_theme"], dict):
+                    natural_scene = parsed_data["oracle_theme"].get("title", "自然意象")
+                if "charm_identity" in parsed_data and isinstance(parsed_data["charm_identity"], dict):
+                    emotion_tone = parsed_data["charm_identity"].get("charm_description", "情绪基调")
+                
+                parsed_data["ai_selected_charm"] = {
+                    "charm_id": selected_charm.get("id", "lianhua-yuanpai"),
+                    "charm_name": selected_charm.get("name", "莲花圆牌 (平和雅致)"),
+                    "ai_reasoning": f"基于'{natural_scene}'的自然意象和'{emotion_tone}'选择的签体"
+                }
+                self.logger.info(f"✅ 添加AI选择签体信息: {parsed_data['ai_selected_charm']['charm_id']}")
+            
             # 保存结构化数据到结果中
             results["structured_data"] = parsed_data
             
@@ -56,144 +78,222 @@ class StructuredContentGenerator:
             
         except Exception as e:
             self.logger.error(f"❌ 结构化内容生成失败: {e}")
-            raise
+            # 🔧 使用fallback数据，但确保包含签体信息
+            fallback_data = self._get_fallback_structure()
+            
+            # 🔮 即使生成失败，也要添加AI选择的签体信息
+            if selected_charm and isinstance(selected_charm, dict):
+                if "ai_selected_charm" not in fallback_data:
+                    fallback_data["ai_selected_charm"] = {}
+                
+                natural_scene = "自然意象"
+                emotion_tone = "情绪基调"
+                if "oracle_theme" in fallback_data and isinstance(fallback_data["oracle_theme"], dict):
+                    natural_scene = fallback_data["oracle_theme"].get("title", "自然意象")
+                if "charm_identity" in fallback_data and isinstance(fallback_data["charm_identity"], dict):
+                    emotion_tone = fallback_data["charm_identity"].get("charm_description", "情绪基调")
+                
+                fallback_data["ai_selected_charm"] = {
+                    "charm_id": selected_charm.get("id", "lianhua-yuanpai"),
+                    "charm_name": selected_charm.get("name", "莲花圆牌 (平和雅致)"),
+                    "ai_reasoning": f"基于'{natural_scene}'的自然意象和'{emotion_tone}'选择的签体"
+                }
+                self.logger.info(f"✅ Fallback中添加AI选择签体信息: {fallback_data['ai_selected_charm']['charm_id']}")
+            
+            # 🔧 添加背景图片URL到fallback数据
+            if image_url:
+                if "visual" not in fallback_data:
+                    fallback_data["visual"] = {}
+                if not isinstance(fallback_data["visual"], dict):
+                    fallback_data["visual"] = {}
+                fallback_data["visual"]["background_image_url"] = image_url
+            
+            # 保存fallback结构化数据到结果中
+            results["structured_data"] = fallback_data
+            
+            self.logger.warning("⚠️ 使用fallback结构化数据")
+            self.logger.info(f"📊 Fallback内容包含：{list(fallback_data.keys())}")
+            
+            context["results"] = results
+            return context
     
-    def _build_structured_prompt(self, task: Dict[str, Any], concept: str, content: str) -> str:
-        """构建结构化内容生成的Prompt"""
+    def _build_structured_prompt(self, task: Dict[str, Any], concept: str, content: str, selected_charm: Dict[str, Any], quiz_insights: Dict[str, Any]) -> str:
+        """构建心象签结构化内容生成的Prompt，支持挂件体验"""
         user_input = task.get("user_input", "")
-        style = task.get("style", "")
-        theme = task.get("theme", "")
+        ink_metrics = task.get('drawing_data', {}).get('analysis', {})
         
-        # 解析用户输入中的地理位置信息
-        location_info = self._extract_location_info(user_input)
+        # 解析概念和文案数据
+        concept_data = {}
+        content_data = {}
+        try:
+            if isinstance(concept, str) and concept.strip().startswith('{'):
+                concept_data = json.loads(concept)
+            if isinstance(content, str) and content.strip().startswith('{'):
+                content_data = json.loads(content)
+        except json.JSONDecodeError:
+            pass
         
-        # 随机选择推荐类型（至少1项，通常2项，偶尔3项，提高丰富度）
-        recommendation_types = ["music", "book", "movie"]
-        selected_recommendations = random.sample(recommendation_types, k=random.choice([1, 2, 2, 3]))
+        # 提取关键信息
+        natural_scene = concept_data.get('natural_scene', '晨光照进窗')
+        emotion_tone = concept_data.get('emotion_tone', '平静')
+        affirmation = content_data.get('affirmation', '愿所盼皆有回应')
+        stroke_impression = content_data.get('stroke_impression', '笔触柔软，心境平和')
+        symbolic_keywords = content_data.get('symbolic_keywords', ['流动', '平和'])
+        daily_guide = content_data.get('daily_guide', ['宜静心思考', '宜关怀自己'])
         
-        recommendations_instruction = ""
-        if "music" in selected_recommendations:
-            recommendations_instruction += "- 推荐至少一首适合当前情绪的歌曲（包含歌手、推荐理由），可附带第2首作为备选\n"
-        if "book" in selected_recommendations:
-            recommendations_instruction += "- 推荐至少一本相关的书籍（包含作者、推荐理由），可附带第2本作为备选\n"
-        if "movie" in selected_recommendations:
-            recommendations_instruction += "- 推荐至少一部相关的电影（包含导演、推荐理由），可附带第2部作为备选\n"
+        # 获取当前时间信息 (使用中国时区)
+        import sys
+        import os
+        sys.path.append(os.path.join(os.path.dirname(__file__), '../../../..'))
+        try:
+            from common.timezone_utils import china_now
+            now = china_now()
+        except ImportError:
+            import datetime
+            from zoneinfo import ZoneInfo
+            now = datetime.datetime.now(ZoneInfo("Asia/Shanghai"))
+        
+        hour = now.hour
+        month = now.month
+        weekday = now.strftime('%A')
+        
+        # 确定时段和季节
+        if hour < 6:
+            session_time = "凌晨"
+        elif hour < 12:
+            session_time = "上午"
+        elif hour < 18:
+            session_time = "下午"
+        elif hour < 22:
+            session_time = "傍晚"
+        else:
+            session_time = "夜晚"
+            
+        if 3 <= month <= 5:
+            season_hint = "春"
+        elif 6 <= month <= 8:
+            season_hint = "夏"
+        elif 9 <= month <= 11:
+            season_hint = "秋"
+        else:
+            season_hint = "冬"
+        
+        # 提取挂件和问答洞察信息
+        charm_name = selected_charm.get('name', '莲花圆牌 (平和雅致)')
+        charm_note = selected_charm.get('note', '平和雅致的挂件风格')
+        quiz_summary = quiz_insights.get('summary', '心境平和，内心安宁')
+        emotion_vector = quiz_insights.get('emotion_vector', {})
+        action_focus = quiz_insights.get('action_focus', ['保持平静'])
         
         prompt = f"""
-请基于以下信息生成一张个性化明信片的结构化数据，以JSON格式返回：
+你是心象签系统的最终编撰师，负责整合所有信息生成完整的心象签体验。
 
-## 用户信息
+已生成信息：
+- 自然意象：{natural_scene}
+- 情绪基调：{emotion_tone} 
+- 祝福短句：{affirmation}
+- 笔触印象：{stroke_impression}
+- 象征关键词：{symbolic_keywords}
+- 生活指引：{daily_guide}
 - 用户输入：{user_input}
-- 风格：{style}
-- 主题：{theme}
-- 概念：{concept}
-- 基础内容：{content}
+- 绘画特征：{ink_metrics.get('drawing_description', '平和的笔触')}
 
-## 生成要求
-请生成包含以下结构的JSON数据：
+挂件信息：
+- 选择签体：{charm_name}
+- 签体特色：{charm_note}
+
+问答洞察：
+- 心境解读：{quiz_summary}
+- 情绪倾向：{emotion_vector}
+- 行动偏好：{action_focus}
+
+当前时空背景：
+- 时段：{session_time}
+- 季节：{season_hint}季时分
+
+请基于心象签理念，结合挂件风格和问答洞察，生成完整的JSON结构：
 
 ```json
 {{
-  "title": "精彩标题（8-15字）",
-  "mood": {{
-    "primary": "主要情绪（如：开心、思考、期待等）",
-    "secondary": "次要情绪（可选）",
-    "intensity": 情绪强度(1-10),
-    "color_theme": "主题色彩（十六进制）"
+  "oracle_theme": {{
+    "title": "{natural_scene}",
+    "subtitle": "今日心象签"
   }},
-  "content": {{
-    "main_text": "核心文案（25-40字，简练有力，一句话表达）",
-    "sub_text": "补充文案（可选，15-25字，用于翻转后的卡片背面）",
-    "hot_topics": {{
-      "xiaohongshu": "小红书话题形式内容（不要#号，15-25字描述体验感受）",
-      "douyin": "抖音热点形式内容（不要#号，15-25字生活化表达）"
+  "charm_identity": {{
+    "charm_name": "根据自然意象生成的2-4字签名，格式必须为'XX签'，与'{natural_scene}'高度呼应。如：晨光→晨露签，微风→清风签，花开→花语签，雨后→新生签，山水→静心签",
+    "charm_description": "描述这个签的特质和寓意，要与自然意象完美呼应，体现心境与自然的共鸣",
+    "charm_blessing": "与签名意境一致的8字内祝福，如：心如止水事事顺，或：愿你如花般绽放",
+    "main_color": "符合'{natural_scene}'主色调的hex值（晨光用#FFD700，微风用#87CEEB，花开用#FFB6C1）",
+    "accent_color": "与主色调和谐的辅助色hex值，形成完整配色方案"
+  }},
+  "affirmation": "{affirmation}",
+  "oracle_manifest": {{
+    "hexagram": {{
+      "name": "基于'{natural_scene}'的具体卦象名称，要与心境和自然意象高度相关（如晨光对应'晨曦初露'、微风对应'清风徐来'等）",
+      "symbol": "可为空或简短解释",
+      "insight": "针对用户当前心境的1-2句具体解读，要与'{natural_scene}'和用户输入'{user_input}'相关"
     }},
-    "quote": {{
-      "text": "优美英文格言（6-12个单词，意境深远）",
-      "author": "作者",
-      "translation": "中文翻译（8-15字，诗意表达）"
+    "daily_guide": {daily_guide},
+    "fengshui_focus": "一句方位或环境建议（如'面向南方时更易聚焦'）",
+    "ritual_hint": "一个简单的仪式建议（如'闭眼深呼吸三次'）",
+    "element_balance": {{
+      "wood": 0.6,
+      "fire": 0.7, 
+      "earth": 0.3,
+      "metal": 0.4,
+      "water": 0.5
     }}
   }},
-  "extras": {{
-    "reflections": ["深度反思内容（20-30字，有哲理性）", "第二条反思（18-25字，不同角度）", "深层思考（可选）"],
-    "gratitude": ["具体感谢事物（15-22字，细节丰富）", "第二条感谢（12-20字，不同层面）", "细节感恩（可选）"], 
-    "micro_actions": ["今日可实践的具体行动（18-25字）", "延伸行动建议（15-22字）", "进阶实践（可选）"],
-    "mood_tips": ["情绪调节具体方法（20-30字）", "深层心理建议（18-25字）", "进阶技巧（可选）"],
-    "life_insights": ["生活感悟（25-35字，有启发性）", "人生思考（20-30字，不同维度）", "智慧总结（可选）"],
-    "creative_spark": ["创意灵感或想法（18-28字）", "艺术表达建议（15-25字）", "创作启发（可选）"],
-    "mindfulness": ["当下觉察练习（20-30字）", "冥想或放松方法（18-28字）", "深度觉察（可选）"],
-    "future_vision": ["对未来的美好期待（25-35字）", "具体愿景（20-30字）", "长远规划（可选）"]
-  }},
-  "recommendations": {{
-    // 随机包含以下1-3种推荐（至少返回一种）。每种推荐可返回对象或数组；如返回多个请使用数组。
-{recommendations_instruction.rstrip()}
-    // 推荐格式参考（允许数组或对象）：
-    // "music": [{{"title": "歌曲名", "artist": "歌手", "reason": "推荐理由"}}]
-    // "book":  [{{"title": "书名", "author": "作者", "reason": "推荐理由"}}]
-    // "movie": [{{"title": "电影名", "director": "导演", "reason": "推荐理由"}}]
-  }},
-  "visual": {{
-    "style_hints": {{
-      "animation_type": "动效类型：float（浮动）/pulse（脉冲）/gradient（渐变）",
-      "color_scheme": ["#主色调", "#辅助色"],
-      "layout_style": "布局风格：minimal（简约）/rich（丰富）/artistic（艺术）"
+  "ink_reading": {{
+    "stroke_impression": "{stroke_impression}",
+    "symbolic_keywords": {symbolic_keywords},
+    "ink_metrics": {{
+      "stroke_count": {ink_metrics.get('stroke_count', 0)},
+      "dominant_quadrant": "{ink_metrics.get('dominant_quadrant', 'center')}",
+      "pressure_tendency": "{ink_metrics.get('pressure_tendency', 'steady')}"
     }}
   }},
-  "context": {{
-    "location": "地理位置信息（如有）",
-    "weather": "天气信息（如有）",
-    "time_context": "时间背景（如：morning/afternoon/evening）"
-  }}
+  "context_insights": {{
+    "session_time": "{session_time}",
+    "season_hint": "{season_hint}季时分",
+    "visit_pattern": "今日心象之旅",
+    "historical_keywords": []
+  }},
+  "blessing_stream": [
+    "与自然意象呼应的祝福短语1（4-6字）",
+    "与自然意象呼应的祝福短语2（4-6字）",  
+    "与自然意象呼应的祝福短语3（4-6字）",
+    "与自然意象呼应的祝福短语4（4-6字）"
+  ],
+  "art_direction": {{
+    "image_prompt": "基于'{natural_scene}'的自然现象抽象图，{concept_data.get('color_inspiration', '暖色调')}水彩风格",
+    "palette": ["{concept_data.get('color_inspiration', '#f5cba7')}", "#d4a3e3", "#4b3f72"],
+    "animation_hint": "从模糊到清晰的光晕扩散"
+  }},
+  "culture_note": "灵感源于易经与民俗智慧，不作吉凶断言，请以现代视角理解。"
 }}
 ```
 
-## 内容要求
-1. **简洁精炼优先**：内容务必简洁有力，适合移动端卡片显示
-   - 严格控制文字长度，避免冗长表述
-   - 一句话表达核心思想，删除多余修饰
-   - 推荐理由简明扼要，不超过15字
+关键要求：
+1. **🔥 签名格式严格要求**：charm_identity.charm_name必须是"XX签"格式，不能是其他形式！如：晨露签、清风签、花语签、静心签、新生签等
+2. **自然意象呼应**：签名与'{natural_scene}'意境完美匹配，体现人与自然的共鸣
+3. **色彩和谐设计**：main_color反映自然意象的主色调，accent_color形成和谐配色
+4. **卦象现代化表达**：基于自然意象的诗意卦象名，避免古老玄学术语
+5. **祝福情感共鸣**：blessing_stream与自然意象深度呼应，如彩虹→"雨过天晴心更明"
+6. **生活实用指引**：daily_guide要温和实用，oracle_manifest的insight要现代表达
+7. **挂件风格融合**：整体内容风格与选择的{charm_name}挂件特色一致
+8. **问答洞察融入**：daily_guide体现{action_focus}，hexagram的insight体现{quiz_summary}
+9. **笔触数据运用**：stroke_impression结合ink_metrics真实数据，增强可信度
+10. **色彩方案统一**：art_direction的palette与charm_identity的颜色形成统一视觉方案
 
-2. **个性化深度定制**：内容要有温度、有个性，能引起用户情感共鸣
-   - 避免千篇一律的通用内容
-   - 基于具体的地理位置、天气、时间等环境因素个性化生成
-   - 杭州不要总是西湖，北京不要总是故宫，要挖掘更多独特视角
+注意：
+- 所有字段都必须填写，不能为空
+- blessing_stream数组需要4-6个短语
+- daily_guide数组需要2-3条建议
+- 避免命令式/玄学口吻，保持温柔日常风格
+- 免责声明固定使用提供的文案
 
-3. **时尚感与真实性**：适当融入小红书/抖音等平台的热点话题和表达方式
-   - 使用年轻人喜欢的表达方式，但要自然不做作
-   - 结合当下的流行元素和网络热点
-
-4. **文化深度**：英文格言要与情绪和场景相关，翻译要优美
-   - 选择有深度、有意境的格言，避免过于常见的句子
-   - 中文翻译要优雅，体现文化内涵
-
-5. **推荐精准且多元**：音乐/书籍/电影推荐要与当前情绪和场景高度匹配
-   - 推荐内容要具体，包含详细理由
-   - 考虑不同年龄段、兴趣爱好的多元化需求
-   - 推荐理由要个人化且简洁，不超过15字
-
-6. **视觉协调**：色彩和动效要与情绪氛围一致
-   - 根据情绪强度选择合适的视觉表现形式
-
-7. **背面内容丰富化**（extras字段）：卡片背面应提供深层次、互补性内容
-   - **必须生成6-8个不同类型的extras内容**，每个类型提供2-3条内容，确保背面内容非常充实
-   - 背面内容要与正面形成深度互补，而不是简单重复
-   - 优先生成多条内容而非单条，让用户有更多选择和启发
-   - reflections: 基于当前情绪的深度哲学思考，有启发性
-   - gratitude: 具体而微的感谢对象，细节丰富有画面感
-   - micro_actions: 可立即执行的小行动，实用且有意义
-   - mood_tips: 实用的情绪管理技巧，不是空泛建议
-   - life_insights: 人生感悟，要有深度和普适性
-   - creative_spark: 创意想法或艺术表达建议
-   - mindfulness: 当下觉察或冥想方法，具体可操作
-   - future_vision: 对未来的美好憧憬，积极向上
-
-## 个性化约束
-- 地理位置相关内容要避免刻板印象，挖掘城市的独特魅力和隐藏故事
-- 天气描述要生动有趣，不要使用"阳光明媚"等常见词汇
-- 情绪表达要细腻真实，能够触动内心
-- 推荐内容要有惊喜感，让用户感到"这就是为我量身定制的"
-
-请直接返回JSON格式的结构化数据，不要添加其他文字说明。
+请直接返回JSON格式数据，不要添加其他文字说明。
 """
         
         return prompt
@@ -239,7 +339,7 @@ class StructuredContentGenerator:
         return location_info
     
     def _parse_and_validate(self, response: str) -> Dict[str, Any]:
-        """解析并验证Gemini返回的结构化数据"""
+        """解析并验证心象签结构化数据"""
         try:
             # 提取JSON部分
             json_start = response.find('{')
@@ -251,154 +351,219 @@ class StructuredContentGenerator:
             json_str = response[json_start:json_end]
             raw_parsed_data = json.loads(json_str)
             
-            # 🔧 修复：处理AI返回列表而非字典的情况
-            self.logger.debug(f"🐛 调试：AI返回数据类型: {type(raw_parsed_data)}")
+            # 处理AI返回列表而非字典的情况
             if isinstance(raw_parsed_data, list):
-                self.logger.debug(f"🐛 调试：数组长度: {len(raw_parsed_data)}")
                 if len(raw_parsed_data) > 0 and isinstance(raw_parsed_data[0], dict):
-                    parsed_data = raw_parsed_data[0]  # 取第一个字典元素
+                    parsed_data = raw_parsed_data[0]
                     self.logger.warning("⚠️ AI返回了数组格式，已自动提取第一个对象")
                 else:
                     raise ValueError("AI返回的数组中没有有效的字典对象")
             elif isinstance(raw_parsed_data, dict):
                 parsed_data = raw_parsed_data
-                self.logger.debug(f"🐛 调试：字典键列表: {list(raw_parsed_data.keys())}")
             else:
                 raise ValueError(f"AI返回了不支持的数据类型: {type(raw_parsed_data)}")
             
-            # 基本验证
-            required_fields = ["title", "mood", "content"]
+            # 验证心象签必需字段
+            required_fields = ["oracle_theme", "charm_identity", "affirmation", "oracle_manifest", "ink_reading", "blessing_stream"]
             for field in required_fields:
                 if field not in parsed_data:
-                    self.logger.warning(f"⚠️ 缺少必需字段：{field}")
+                    self.logger.warning(f"⚠️ 缺少心象签必需字段：{field}")
             
-            # 设置默认值
-            if "visual" not in parsed_data:
-                parsed_data["visual"] = {}
-            # 🔧 修复：确保visual字段是字典类型
-            if not isinstance(parsed_data["visual"], dict):
-                self.logger.warning(f"⚠️ AI返回了非字典类型的visual: {type(parsed_data['visual'])}")
-                parsed_data["visual"] = {}
-            if "style_hints" not in parsed_data["visual"]:
-                parsed_data["visual"]["style_hints"] = {
-                    "animation_type": "float",
-                    "color_scheme": ["#6366f1", "#8b5cf6"],
-                    "layout_style": "minimal"
+            # 确保oracle_theme结构完整
+            if "oracle_theme" not in parsed_data or not isinstance(parsed_data["oracle_theme"], dict):
+                parsed_data["oracle_theme"] = {
+                    "title": "晨光照进窗",
+                    "subtitle": "今日心象签"
                 }
             
-            # 规范化推荐字段：允许数组或对象；确保存在键时统一为列表；并尽量保证至少返回一项
-            rec_data = parsed_data.get("recommendations", {}) or {}
-            self.logger.debug(f"🐛 调试：recommendations数据类型: {type(rec_data)}")
-            # 🔧 修复：确保rec始终是字典类型
-            if isinstance(rec_data, dict):
-                rec = rec_data
-                self.logger.debug(f"🐛 调试：recommendations键列表: {list(rec_data.keys())}")
-            else:
-                # 如果AI返回的是列表或其他类型，转换为空字典
-                self.logger.warning(f"⚠️ AI返回了非字典类型的recommendations: {type(rec_data)}, 内容: {rec_data}")
-                rec = {}
+            # 确保charm_identity结构完整
+            if "charm_identity" not in parsed_data or not isinstance(parsed_data["charm_identity"], dict):
+                parsed_data["charm_identity"] = {
+                    "charm_name": "安心签",
+                    "charm_description": "内心平静，万事顺遂",
+                    "charm_blessing": "愿你心安，诸事顺遂",
+                    "main_color": "#8B7355",
+                    "accent_color": "#D4AF37"
+                }
             
-            def ensure_list(x):
-                if not x:
-                    return []
-                return x if isinstance(x, list) else [x]
-            for key in ["music", "book", "movie"]:
-                if key in rec:
-                    rec[key] = ensure_list(rec[key])
-            # 若三项都为空，尝试从 quote 或 mood 生成一条兜底音乐推荐
-            if not any(rec.get(k) for k in ["music", "book", "movie"]):
-                mood_data = parsed_data.get("mood")
-                self.logger.debug(f"🐛 调试：mood数据类型: {type(mood_data)}, 内容: {mood_data}")
-                if isinstance(mood_data, dict):
-                    mood = mood_data.get("primary", "calm")
-                elif isinstance(mood_data, str):
-                    mood = mood_data
-                else:
-                    mood = "calm"
-                rec["music"] = [{"title": "Lo-fi Beats", "artist": "Various", "reason": f"适合当前情绪: {mood}"}]
-            parsed_data["recommendations"] = rec
+            # 确保oracle_manifest结构完整
+            if "oracle_manifest" not in parsed_data or not isinstance(parsed_data["oracle_manifest"], dict):
+                parsed_data["oracle_manifest"] = {
+                    "hexagram": {
+                        "name": "和风细雨",
+                        "insight": "慢一点，你在好转的路上。"
+                    },
+                    "daily_guide": ["宜整理桌面，给心绪留白"],
+                    "fengshui_focus": "面向阳光的方向",
+                    "ritual_hint": "深呼吸三次",
+                    "element_balance": {
+                        "wood": 0.5, "fire": 0.5, "earth": 0.5, "metal": 0.5, "water": 0.5
+                    }
+                }
+            
+            # 确保ink_reading结构完整
+            if "ink_reading" not in parsed_data or not isinstance(parsed_data["ink_reading"], dict):
+                parsed_data["ink_reading"] = {
+                    "stroke_impression": "笔触柔软，心境平和",
+                    "symbolic_keywords": ["流动", "平和"],
+                    "ink_metrics": {
+                        "stroke_count": 0,
+                        "dominant_quadrant": "center",
+                        "pressure_tendency": "steady"
+                    }
+                }
+            
+            # 确保blessing_stream是数组
+            if "blessing_stream" not in parsed_data or not isinstance(parsed_data["blessing_stream"], list):
+                parsed_data["blessing_stream"] = ["心想事成", "平安喜乐", "一路顺风", "万事如意"]
+            
+            # 确保context_insights结构完整
+            if "context_insights" not in parsed_data or not isinstance(parsed_data["context_insights"], dict):
+                parsed_data["context_insights"] = {
+                    "session_time": "今日",
+                    "season_hint": "当下",
+                    "visit_pattern": "心象之旅",
+                    "historical_keywords": []
+                }
+            
+            # 确保art_direction结构完整
+            if "art_direction" not in parsed_data or not isinstance(parsed_data["art_direction"], dict):
+                parsed_data["art_direction"] = {
+                    "image_prompt": "晨曦与薄雾的抽象水彩",
+                    "palette": ["#f5e6cc", "#d9c4f2"],
+                    "animation_hint": "从模糊到清晰的光晕扩散"
+                }
+            
+            # 确保culture_note存在
+            if "culture_note" not in parsed_data:
+                parsed_data["culture_note"] = "灵感源于易经与民俗智慧，不作吉凶断言，请以现代视角理解。"
 
             return parsed_data
             
         except json.JSONDecodeError as e:
             self.logger.error(f"❌ JSON解析失败: {e}")
-            self.logger.error(f"🐛 AI原始响应内容: {response[:1000]}...") # 只记录前1000字符避免日志过长
-            if 'json_str' in locals():
-                self.logger.error(f"🐛 提取的JSON字符串: {json_str}")
-            # 返回基础结构
+            self.logger.error(f"🐛 AI原始响应内容: {response[:1000]}...")
             return self._get_fallback_structure()
         except Exception as e:
             import traceback
             self.logger.error(f"❌ 数据验证失败: {e}")
             self.logger.error(f"🐛 详细错误堆栈: {traceback.format_exc()}")
-            self.logger.error(f"🐛 当前parsed_data类型: {type(parsed_data) if 'parsed_data' in locals() else 'undefined'}")
-            if 'parsed_data' in locals():
-                self.logger.error(f"🐛 当前parsed_data内容: {parsed_data}")
             return self._get_fallback_structure()
     
     def _get_fallback_structure(self) -> Dict[str, Any]:
-        """获取降级的基础数据结构"""
+        """获取心象签降级数据结构"""
         # 随机选择降级内容，避免每次都一样
         fallback_options = [
             {
-                "title": "心境",
-                "mood": {
-                    "primary": "平静",
-                    "intensity": 6,
-                    "color_theme": "#6366f1"
+                "oracle_theme": {
+                    "title": "晨光照进窗",
+                    "subtitle": "今日心象签"
                 },
-                "content": {
-                    "main_text": "今天也要保持期待。",
-                    "quote": {
-                        "text": "Life happens while planning.",
-                        "author": "John Lennon",
-                        "translation": "生活就在计划中发生。"
+                "charm_identity": {
+                    "charm_name": "安心签",
+                    "charm_description": "内心平静，万事顺遂",
+                    "charm_blessing": "愿你心安，诸事顺遂",
+                    "main_color": "#8B7355",
+                    "accent_color": "#D4AF37"
+                },
+                "affirmation": "愿你的努力皆被温柔回应",
+                "oracle_manifest": {
+                    "hexagram": {
+                        "name": "和风细雨",
+                        "insight": "慢一点，你在好转的路上。"
+                    },
+                    "daily_guide": [
+                        "宜整理桌面，给心绪留白",
+                        "宜尝试5分钟冥想"
+                    ],
+                    "fengshui_focus": "面向阳光的方向",
+                    "ritual_hint": "深呼吸三次，感谢当下",
+                    "element_balance": {
+                        "wood": 0.7, "fire": 0.5, "earth": 0.6, "metal": 0.4, "water": 0.5
                     }
                 },
-                "recommendations": {
-                    "music": {
-                        "title": "晴天",
-                        "artist": "周杰伦",
-                        "reason": "适合当下心情"
+                "ink_reading": {
+                    "stroke_impression": "笔触柔软，说明心里有一块柔软区域被触碰",
+                    "symbolic_keywords": ["柔和", "回环"],
+                    "ink_metrics": {
+                        "stroke_count": 90,
+                        "dominant_quadrant": "upper_right",
+                        "pressure_tendency": "light"
                     }
                 },
-                "visual": {
-                    "style_hints": {
-                        "animation_type": "float",
-                        "color_scheme": ["#6366f1", "#8b5cf6"],
-                        "layout_style": "minimal"
-                    }
-                }
+                "context_insights": {
+                    "session_time": "清晨",
+                    "season_hint": "初春",
+                    "visit_pattern": "久别重逢",
+                    "historical_keywords": []
+                },
+                "blessing_stream": [
+                    "心想事成",
+                    "平安喜乐", 
+                    "一路顺风"
+                ],
+                "art_direction": {
+                    "image_prompt": "晨曦与薄雾的抽象水彩",
+                    "palette": ["#f5e6cc", "#d9c4f2"],
+                    "animation_hint": "从模糊到清晰的光晕扩散"
+                },
+                "culture_note": "灵感源自传统文化启迪，不作吉凶断言。"
             },
             {
-                "title": "感受",
-                "mood": {
-                    "primary": "思考",
-                    "intensity": 5,
-                    "color_theme": "#10b981"
+                "oracle_theme": {
+                    "title": "微风过竹林",
+                    "subtitle": "今日心象签"
                 },
-                "content": {
-                    "main_text": "慢下来，感受当下。",
-                    "quote": {
-                        "text": "Live in the moment.",
-                        "author": "Thích Nhất Hạnh",
-                        "translation": "活在当下。"
+                "charm_identity": {
+                    "charm_name": "清心签",
+                    "charm_description": "如竹般坚韧，如风般自由",
+                    "charm_blessing": "愿你心如清风，身如劲竹",
+                    "main_color": "#7C8471", 
+                    "accent_color": "#A8E6CF"
+                },
+                "affirmation": "愿内心的宁静伴你前行",
+                "oracle_manifest": {
+                    "hexagram": {
+                        "name": "风山渐",
+                        "insight": "如竹般坚韧，在风中保持内心的宁静。"
+                    },
+                    "daily_guide": [
+                        "宜到户外走走，感受自然的力量",
+                        "宜听听音乐，让心情放松"
+                    ],
+                    "fengshui_focus": "在绿植旁工作更有灵感",
+                    "ritual_hint": "摸摸植物的叶子，感受生命的力量",
+                    "element_balance": {
+                        "wood": 0.8, "fire": 0.3, "earth": 0.5, "metal": 0.6, "water": 0.4
                     }
                 },
-                "recommendations": {
-                    "book": {
-                        "title": "正念的奇迹",
-                        "author": "一行禅师",
-                        "reason": "与当前心境契合"
+                "ink_reading": {
+                    "stroke_impression": "线条流畅，内心有着清晰的方向感",
+                    "symbolic_keywords": ["坚韧", "流动", "清晰"],
+                    "ink_metrics": {
+                        "stroke_count": 120,
+                        "dominant_quadrant": "center",
+                        "pressure_tendency": "steady"
                     }
                 },
-                "visual": {
-                    "style_hints": {
-                        "animation_type": "pulse",
-                        "color_scheme": ["#10b981", "#06b6d4"],
-                        "layout_style": "artistic"
-                    }
-                }
+                "context_insights": {
+                    "session_time": "午后",
+                    "season_hint": "仲夏",
+                    "visit_pattern": "心象探索",
+                    "historical_keywords": []
+                },
+                "blessing_stream": [
+                    "清风徐来",
+                    "心如止水",
+                    "步步生花",
+                    "宁静致远"
+                ],
+                "art_direction": {
+                    "image_prompt": "竹林中的阳光斑点，绿色清新水彩",
+                    "palette": ["#9DE0AD", "#45B7D1", "#96CEB4"],
+                    "animation_hint": "光影摇曳的自然律动"
+                },
+                "culture_note": "灵感源自传统文化启迪，不作吉凶断言。"
             }
         ]
         

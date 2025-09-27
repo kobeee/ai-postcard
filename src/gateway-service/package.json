@@ -1,7 +1,7 @@
 {
   "name": "ai-postcard-gateway",
   "version": "1.0.0",
-  "description": "AI 明信片项目 - API 网关服务",
+  "description": "AI 心象签项目 - API 网关服务",
   "main": "index.js",
   "scripts": {
     "dev": "nodemon index.js",
@@ -23,7 +23,7 @@
     "express",
     "ai-postcard"
   ],
-  "author": "AI Postcard Team",
+  "author": "AI 心象签 Team",
   "license": "MIT",
   "dependencies": {
     "express": "^4.18.2",

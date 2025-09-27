@@ -1,298 +1,134 @@
-<!-- 结构化明信片组件模板 - 重构后的5层架构 -->
+<!-- structured-postcard.wxml - 🔮 心象签组件模板（拷贝自首页挂件） -->
 
 <!-- 第1层：透视容器 -->
-<view class="card-scene" style="{{containerStyle}}">
+<view class="charm-scene" style="{{containerStyle}}">
   
   <!-- 第2层：翻转控制器 -->
-  <view class="card-flipper {{isFlipped ? 'flipped' : ''}}" bindtap="onCardTap">
+  <view class="charm-flipper {{isFlipped ? 'flipped' : ''}}" animation="{{animationData}}" bindtap="onCharmTap" hover-class="none">
     
-    <!-- 第3层：正面容器 -->
-    <view class="card-face card-face-front">
-      <!-- 第4层：视觉外壳（处理动画、阴影、背景） -->
-      <view class="postcard-shell {{isAnimating ? 'animated' : ''}}" 
-            style="{{dynamicCardStyle}}" 
-            animation="{{animationData}}">
-        
-        <!-- 背景图片层 -->
+    <!-- 第3层：正面容器 - 挂件形式 -->
+    <view class="charm-face charm-face-front">
+      
+      
+      <!-- 挂件图片层 -->
+      <view class="charm-container">
         <image 
-          class="background-image" 
-          src="{{displayBackgroundImage || backgroundImage}}" 
-          mode="aspectFill"
-          lazy-load="true"
-          wx:if="{{backgroundImage}}"
+          class="charm-image" 
+          src="{{charmImagePath}}" 
+          mode="aspectFit"
+          wx:if="{{charmImagePath}}"
         ></image>
         
-        <!-- 第5层：内容层 -->
-        <view class="postcard-content" style="{{dynamicContentStyle}}">
+        <!-- 默认挂件形状（当没有图片时） -->
+        <view class="charm-default-shape" wx:else></view>
+        
+        <!-- 挂件内容覆盖层 -->
+        <view class="charm-content-overlay">
           
-          <!-- 标题区域 -->
-          <view class="header-section">
-            <text class="card-title">{{structuredData.title || '今日心情'}}</text>
+          <!-- 🔮 左上角竖排签名 -->
+          <view class="charm-name-vertical" wx:if="{{charmNameChars.length}}" 
+                style="color: {{structuredData.charm_main_color || charmMainColor || '#2D3748'}};">
+            <text 
+              class="name-char" 
+              wx:for="{{charmNameChars}}" 
+              wx:for-index="idx" 
+              wx:key="idx"
+            >{{item}}</text>
           </view>
           
-          <!-- 主要文案 -->
-          <view class="main-content-section">
-            <text class="main-text">{{structuredData.content.main_text}}</text>
-          </view>
+          <!-- 移除中间装饰区域，保持签体简洁 -->
           
-          <!-- 感受分享 -->
-          <view class="feelings-section" wx:if="{{structuredData.content.hot_topics}}">
-            <view class="feeling-item" wx:if="{{structuredData.content.hot_topics.xiaohongshu}}">
-              <text class="feeling-prefix">·</text>
-              <text class="feeling-text">{{structuredData.content.hot_topics.xiaohongshu}}</text>
-            </view>
-            <view class="feeling-item" wx:if="{{structuredData.content.hot_topics.douyin}}">
-              <text class="feeling-prefix">·</text>
-              <text class="feeling-text">{{structuredData.content.hot_topics.douyin}}</text>
-            </view>
-          </view>
+          <!-- 简化内容，只保留签名和简要祝福 -->
           
-          <!-- 英文浮条（多来源兜底） -->
-          <view class="quote-section" wx:if="{{hasQuote}}">
-            <text class="quote-text">{{quoteText}}</text>
-            <text class="quote-author" wx:if="{{quoteAuthor}}">— {{quoteAuthor}}</text>
-            <text class="quote-translation" wx:if="{{quoteTranslation}}">{{quoteTranslation}}</text>
-          </view>
-          
-          <!-- 推荐内容 -->
-          <view class="recommendations-section" wx:if="{{structuredData.recommendations}}">
-            <view class="recommendations-header" catchtap="toggleRecommendations">
-              <text class="recommendations-title">今日推荐</text>
-              <text class="expand-icon {{recommendationsExpanded ? 'expanded' : ''}}">▼</text>
-            </view>
-            
-            <view class="recommendations-content {{recommendationsExpanded ? 'expanded' : ''}}">
-              <!-- 音乐推荐 -->
-              <view 
-                class="recommendation-item music" 
-                wx:if="{{hasMusic}}"
-                data-type="music"
-                data-item="{{recMusic}}"
-                catchtap="onRecommendationTap"
-              >
-                <text class="rec-icon">🎵</text>
-                <view class="rec-content">
-                  <text class="rec-title">{{recMusic.title}}</text>
-                  <text class="rec-subtitle">{{recMusic.artist}}</text>
-                  <text class="rec-reason">{{recMusic.reason}}</text>
-                </view>
-              </view>
-              
-              <!-- 书籍推荐 -->
-              <view 
-                class="recommendation-item book" 
-                wx:if="{{hasBook}}"
-                data-type="book"
-                data-item="{{recBook}}"
-                catchtap="onRecommendationTap"
-              >
-                <text class="rec-icon">📚</text>
-                <view class="rec-content">
-                  <text class="rec-title">{{recBook.title}}</text>
-                  <text class="rec-subtitle">{{recBook.author}}</text>
-                  <text class="rec-reason">{{recBook.reason}}</text>
-                </view>
-              </view>
-              
-              <!-- 电影推荐 -->
-              <view 
-                class="recommendation-item movie" 
-                wx:if="{{hasMovie}}"
-                data-type="movie"
-                data-item="{{recMovie}}"
-                catchtap="onRecommendationTap"
-              >
-                <text class="rec-icon">🎬</text>
-                <view class="rec-content">
-                  <text class="rec-title">{{recMovie.title}}</text>
-                  <text class="rec-subtitle">{{recMovie.director}}</text>
-                  <text class="rec-reason">{{recMovie.reason}}</text>
-                </view>
-              </view>
-            </view>
-          </view>
-          
-          <!-- 底部信息：去掉地点/天气，仅保留翻转提示 -->
-          <view class="footer-section">
-            <view class="flip-hint">
-              <text class="flip-icon">↻</text>
-              <text class="flip-text">点击翻转查看详情</text>
-            </view>
+          <!-- 简要祝福 -->
+          <view class="charm-blessing" wx:if="{{structuredData.charm_blessing}}" style="color: {{structuredData.charm_main_color || '#8B7355'}};">
+            {{structuredData.charm_blessing}}
           </view>
           
         </view>
         
-        <!-- 装饰性动效层 -->
-        <view class="decoration-layer" wx:if="{{showGradientAnimation}}">
-          <view class="gradient-overlay"></view>
+        <!-- 挂件装饰效果 - 保留sparkle闪烁增加灵动感 -->
+        <view class="charm-decoration" wx:if="{{showAnimation}}">
+          <view class="charm-sparkle charm-sparkle-1"></view>
+          <view class="charm-sparkle charm-sparkle-2"></view>
+          <view class="charm-sparkle charm-sparkle-3"></view>
         </view>
         
       </view>
+      
+      <!-- 翻面提示 -->
+      <view class="flip-hint-charm">
+        <text class="flip-hint-icon">↻</text>
+        <text class="flip-hint-text">查看解签</text>
+      </view>
+      
     </view>
     
-    <!-- 第3层：背面容器 -->
-    <view class="card-face card-face-back">
-      <!-- 第4层：视觉外壳（背面无背景图，纯色背景） -->
-      <view class="postcard-shell postcard-shell-back">
+    <!-- 第3层：背面容器 - 解签笺形式 -->
+    <view class="charm-face charm-face-back">
+      
+      <!-- 解签笺容器 - 竖排布局 -->
+      <view class="interpretation-scroll-vertical {{showInterpretation ? 'visible' : ''}}">
         
-        <!-- 第5层：内容层 -->
-        <view class="postcard-content back-content" style="{{dynamicContentStyle}}">
+        <!-- 背景图片层 -->
+        <view 
+          class="scroll-background-image" 
+          wx:if="{{backgroundImage || structuredData.visual_background_image || structuredData.image_url}}"
+          style="background-image: url({{backgroundImage || structuredData.visual_background_image || structuredData.image_url}});"
+        ></view>
+        
+        <!-- 简化背面内容 - 只保留空白区域作为占位 -->
+        <view class="simplified-back-content">
           
-          <!-- 背面扩展内容（若存在则优先显示） -->
-          <view class="back-extras" wx:if="{{structuredData.extras}}">
-            
-            <!-- 今日反思 -->
-            <view class="back-block" wx:if="{{structuredData.extras.reflections && structuredData.extras.reflections.length}}">
-              <view class="back-item-header">
-                <text class="back-icon">📝</text>
-                <text class="back-label">今日反思</text>
-              </view>
-              <view class="extras-list">
-                <view class="extras-li" wx:for="{{structuredData.extras.reflections}}" wx:key="*this">· {{item}}</view>
-              </view>
-            </view>
-            
-            <!-- 感谢清单 -->
-            <view class="back-block" wx:if="{{structuredData.extras.gratitude && structuredData.extras.gratitude.length}}">
-              <view class="back-item-header">
-                <text class="back-icon">🙏</text>
-                <text class="back-label">感谢清单</text>
-              </view>
-              <view class="extras-list">
-                <view class="extras-li" wx:for="{{structuredData.extras.gratitude}}" wx:key="*this">· {{item}}</view>
-              </view>
-            </view>
-            
-            <!-- 微行动 -->
-            <view class="back-block" wx:if="{{structuredData.extras.micro_actions && structuredData.extras.micro_actions.length}}">
-              <view class="back-item-header">
-                <text class="back-icon">✅</text>
-                <text class="back-label">微行动</text>
-              </view>
-              <view class="extras-list">
-                <view class="extras-li" wx:for="{{structuredData.extras.micro_actions}}" wx:key="*this">· {{item}}</view>
-              </view>
-            </view>
-            
-            <!-- 情绪建议 -->
-            <view class="back-block" wx:if="{{structuredData.extras.mood_tips && structuredData.extras.mood_tips.length}}">
-              <view class="back-item-header">
-                <text class="back-icon">💡</text>
-                <text class="back-label">情绪建议</text>
-              </view>
-              <view class="extras-list">
-                <view class="extras-li" wx:for="{{structuredData.extras.mood_tips}}" wx:key="*this">· {{item}}</view>
-              </view>
-            </view>
-            
-            <!-- 生活感悟 -->
-            <view class="back-block" wx:if="{{structuredData.extras.life_insights && structuredData.extras.life_insights.length}}">
-              <view class="back-item-header">
-                <text class="back-icon">🌟</text>
-                <text class="back-label">生活感悟</text>
-              </view>
-              <view class="extras-list">
-                <view class="extras-li" wx:for="{{structuredData.extras.life_insights}}" wx:key="*this">· {{item}}</view>
-              </view>
-            </view>
-            
-            <!-- 创意灵感 -->
-            <view class="back-block" wx:if="{{structuredData.extras.creative_spark && structuredData.extras.creative_spark.length}}">
-              <view class="back-item-header">
-                <text class="back-icon">💫</text>
-                <text class="back-label">创意火花</text>
-              </view>
-              <view class="extras-list">
-                <view class="extras-li" wx:for="{{structuredData.extras.creative_spark}}" wx:key="*this">· {{item}}</view>
-              </view>
-            </view>
-            
-            <!-- 正念觉察 -->
-            <view class="back-block" wx:if="{{structuredData.extras.mindfulness && structuredData.extras.mindfulness.length}}">
-              <view class="back-item-header">
-                <text class="back-icon">🧘</text>
-                <text class="back-label">当下觉察</text>
-              </view>
-              <view class="extras-list">
-                <view class="extras-li" wx:for="{{structuredData.extras.mindfulness}}" wx:key="*this">· {{item}}</view>
-              </view>
-            </view>
-            
-            <!-- 未来愿景 -->
-            <view class="back-block" wx:if="{{structuredData.extras.future_vision && structuredData.extras.future_vision.length}}">
-              <view class="back-item-header">
-                <text class="back-icon">🌈</text>
-                <text class="back-label">未来期待</text>
-              </view>
-              <view class="extras-list">
-                <view class="extras-li" wx:for="{{structuredData.extras.future_vision}}" wx:key="*this">· {{item}}</view>
-              </view>
-            </view>
-          </view>
-
-          <!-- 详细推荐内容（如果没有extras则显示） -->
-          <view class="back-recommendations" wx:if="{{!structuredData.extras && structuredData.recommendations}}">
-            <view class="back-header">
-              <text class="back-title">今日推荐详情</text>
-            </view>
-            
-            <!-- 音乐推荐详情 -->
-            <view class="back-item music-detail" wx:if="{{hasMusic}}">
-              <view class="back-item-header">
-                <text class="back-icon">🎵</text>
-                <text class="back-label">音乐推荐</text>
-              </view>
-              <text class="back-item-title">{{recMusic.title}}</text>
-              <text class="back-item-subtitle">{{recMusic.artist}}</text>
-              <text class="back-item-reason">{{recMusic.reason}}</text>
-            </view>
-            
-            <!-- 书籍推荐详情 -->
-            <view class="back-item book-detail" wx:if="{{hasBook}}">
-              <view class="back-item-header">
-                <text class="back-icon">📚</text>
-                <text class="back-label">书籍推荐</text>
-              </view>
-              <text class="back-item-title">{{recBook.title}}</text>
-              <text class="back-item-subtitle">{{recBook.author}}</text>
-              <text class="back-item-reason">{{recBook.reason}}</text>
-            </view>
-            
-            <!-- 电影推荐详情 -->
-            <view class="back-item movie-detail" wx:if="{{hasMovie}}">
-              <view class="back-item-header">
-                <text class="back-icon">🎬</text>
-                <text class="back-label">电影推荐</text>
-              </view>
-              <text class="back-item-title">{{recMovie.title}}</text>
-              <text class="back-item-subtitle">{{recMovie.director}}</text>
-              <text class="back-item-reason">{{recMovie.reason}}</text>
-            </view>
+          <!-- 解签笺竖排文字 -->
+          <view class="oracle-label-back">
+            <text class="oracle-char-back">解</text>
+            <text class="oracle-char-back">签</text>
+            <text class="oracle-char-back">笺</text>
+            <view class="oracle-line-back"></view>
           </view>
           
-          <!-- 补充文案 -->
-          <view class="back-sub-text" wx:if="{{structuredData.content.sub_text}}">
-            <text class="sub-text-content">{{structuredData.content.sub_text}}</text>
-          </view>
-          
-          <!-- 背面底部：分享和返回 -->
-          <view class="back-footer">
-            <view class="share-button" catchtap="shareCard">
-              <text class="share-icon">✨</text>
-              <text class="share-text">分享心情</text>
+          <!-- 红色框区域：竖排文字内容 -->
+          <view class="oracle-content-vertical">
+            <!-- 卦象名称和洞察 -->
+            <view class="oracle-column" wx:if="{{extractedOracleData.oracle_hexagram_name || extractedOracleData.oracle_hexagram_insight}}">
+              <text class="oracle-text" wx:if="{{extractedOracleData.oracle_hexagram_insight}}">{{extractedOracleData.oracle_hexagram_insight}}</text>
             </view>
-            <view class="flip-back-hint">
-              <text class="flip-icon">↺</text>
-              <text class="flip-text">点击返回正面</text>
+            
+            <!-- 生活指引 -->
+            <view class="oracle-column" wx:if="{{extractedOracleData.oracle_daily_guides && extractedOracleData.oracle_daily_guides.length > 0}}">
+              <block wx:for="{{extractedOracleData.oracle_daily_guides}}" wx:key="index">
+                <text class="oracle-text">{{item}}</text>
+              </block>
+            </view>
+            
+            <!-- 风水和仪式建议 -->
+            <view class="oracle-column" wx:if="{{extractedOracleData.oracle_fengshui_focus || extractedOracleData.oracle_ritual_hint}}">
+              <text class="oracle-text" wx:if="{{extractedOracleData.oracle_fengshui_focus}}">{{extractedOracleData.oracle_fengshui_focus}}</text>
+              <text class="oracle-text" wx:if="{{extractedOracleData.oracle_ritual_hint}}">{{extractedOracleData.oracle_ritual_hint}}</text>
             </view>
           </view>
           
         </view>
+        
+        <!-- 底部区域 - 简化版 -->
+        <view class="scroll-footer-vertical">
+          
+          <!-- 分享按钮（保留） -->
+          <view class="share-button-vertical" catchtap="onShareCharm">
+            <text class="share-icon">🔮</text>
+            <text class="share-text">分享挂件</text>
+          </view>
+          
+          <!-- 责任说明（底部显示） -->
+          <view class="disclaimer-bottom">
+            <text class="disclaimer-text-small">{{structuredData.oracle_culture_note || '灵感源自传统文化启迪，不作吉凶断言。'}}</text>
+          </view>
+        </view>
+        
       </view>
+      
     </view>
     
   </view>
 </view>
-
-<!-- 隐藏的截图Canvas -->
-<canvas canvas-id="screenshot-canvas" class="hidden-canvas"></canvas>

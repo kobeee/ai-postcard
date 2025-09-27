@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =============================================================================
-# AI 明信片项目 - 统一部署脚本
+# AI 心象签项目 - 统一部署脚本
 # =============================================================================
 # 简单高效的容器化部署，一个镜像到处跑
 # =============================================================================
@@ -124,7 +124,8 @@ clean_user_data() {
 
     # 清理 PostgreSQL 用户数据
     log_info "清理 PostgreSQL 中的用户数据..."
-    $DOCKER_COMPOSE_CMD exec -T postgres psql -U postgres -d ai_postcard -v ON_ERROR_STOP=1 -c "DO $$
+    $DOCKER_COMPOSE_CMD exec -T postgres psql -U postgres -d ai_postcard -v ON_ERROR_STOP=1 << 'EOF'
+DO $$
 DECLARE
     sys_user_uuid UUID;
     sys_user_str TEXT;
@@ -205,7 +206,8 @@ EXCEPTION
     WHEN OTHERS THEN
         RAISE NOTICE '❌ 数据清理过程中发生错误: %', SQLERRM;
         RAISE;
-END$$;" 2>&1
+END$$;
+EOF
     log_success "PostgreSQL 用户数据清理完成"
 
     # 清理 Redis 用户数据（清理用户相关的缓存和会话）
@@ -371,14 +373,25 @@ init() {
     
     # 初始化数据库表结构
     log_info "初始化数据库表结构..."
-    if [ -f "scripts/init/database_schema.sql" ]; then
-        log_info "执行数据库初始化..."
-        if cat scripts/init/database_schema.sql | $DOCKER_COMPOSE_CMD exec -T postgres psql -U postgres -d ai_postcard; then
+    if [ -f "scripts/init-database.sql" ]; then
+        log_info "执行数据库初始化（包含安全功能）..."
+        if cat scripts/init-database.sql | $DOCKER_COMPOSE_CMD exec -T postgres psql -U postgres -d ai_postcard; then
             log_success "数据库初始化完成"
         else
             log_error "数据库初始化失败"
             exit 1
         fi
+    elif [ -f "scripts/init/database_schema.sql" ]; then
+        log_warning "使用旧版数据库初始化脚本..."
+        if cat scripts/init/database_schema.sql | $DOCKER_COMPOSE_CMD exec -T postgres psql -U postgres -d ai_postcard; then
+            log_success "数据库初始化完成（使用旧版脚本）"
+        else
+            log_error "数据库初始化失败"
+            exit 1
+        fi
+    else
+        log_error "未找到数据库初始化脚本"
+        exit 1
     fi
     
     # 验证数据库初始化

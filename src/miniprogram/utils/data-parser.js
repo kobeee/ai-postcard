@@ -332,6 +332,85 @@ function parseCardData(cardData) {
         structuredData.extras = extras;
       }
       
+      // 🔮 心象签字段处理（新增）
+      // 直接使用后端扁平化字段，不需要重组为嵌套结构
+      if (cardData.charm_name) {
+        structuredData.charm_name = cardData.charm_name;
+      }
+      if (cardData.charm_description) {
+        structuredData.charm_description = cardData.charm_description;
+      }
+      if (cardData.charm_blessing) {
+        structuredData.charm_blessing = cardData.charm_blessing;
+      }
+      if (cardData.charm_main_color) {
+        structuredData.charm_main_color = cardData.charm_main_color;
+      }
+      if (cardData.charm_accent_color) {
+        structuredData.charm_accent_color = cardData.charm_accent_color;
+      }
+      
+      // 心象签的其他核心字段（扁平化格式）
+      if (cardData.oracle_title) {
+        structuredData.oracle_title = cardData.oracle_title;
+      }
+      if (cardData.oracle_subtitle) {
+        structuredData.oracle_subtitle = cardData.oracle_subtitle;
+      }
+      if (cardData.oracle_affirmation) {
+        structuredData.oracle_affirmation = cardData.oracle_affirmation;
+      }
+      if (cardData.oracle_hexagram_name) {
+        structuredData.oracle_hexagram_name = cardData.oracle_hexagram_name;
+      }
+      if (cardData.oracle_hexagram_insight) {
+        structuredData.oracle_hexagram_insight = cardData.oracle_hexagram_insight;
+      }
+      if (cardData.oracle_stroke_impression) {
+        structuredData.oracle_stroke_impression = cardData.oracle_stroke_impression;
+      }
+      if (cardData.oracle_daily_guides) {
+        structuredData.oracle_daily_guides = Array.isArray(cardData.oracle_daily_guides) 
+          ? cardData.oracle_daily_guides 
+          : [];
+      }
+      if (cardData.oracle_blessing_stream) {
+        structuredData.oracle_blessing_stream = Array.isArray(cardData.oracle_blessing_stream) 
+          ? cardData.oracle_blessing_stream 
+          : [];
+      }
+      if (cardData.oracle_symbolic_keywords) {
+        structuredData.oracle_symbolic_keywords = Array.isArray(cardData.oracle_symbolic_keywords) 
+          ? cardData.oracle_symbolic_keywords 
+          : [];
+      }
+      if (cardData.oracle_session_time) {
+        structuredData.oracle_session_time = cardData.oracle_session_time;
+      }
+      if (cardData.oracle_season_hint) {
+        structuredData.oracle_season_hint = cardData.oracle_season_hint;
+      }
+      if (cardData.oracle_fengshui_focus) {
+        structuredData.oracle_fengshui_focus = cardData.oracle_fengshui_focus;
+      }
+      if (cardData.oracle_ritual_hint) {
+        structuredData.oracle_ritual_hint = cardData.oracle_ritual_hint;
+      }
+      if (cardData.oracle_culture_note) {
+        structuredData.oracle_culture_note = cardData.oracle_culture_note;
+      }
+      
+      // 🔮 AI选择的签体信息（新增）
+      if (cardData.ai_selected_charm_id) {
+        structuredData.ai_selected_charm_id = cardData.ai_selected_charm_id;
+      }
+      if (cardData.ai_selected_charm_name) {
+        structuredData.ai_selected_charm_name = cardData.ai_selected_charm_name;
+      }
+      if (cardData.ai_selected_charm_reasoning) {
+        structuredData.ai_selected_charm_reasoning = cardData.ai_selected_charm_reasoning;
+      }
+      
       hasStructuredData = true;
       debugInfo.parseSuccess = true;
       debugInfo.dataSource = 'backend_flattened';
@@ -365,6 +444,36 @@ function parseCardData(cardData) {
         if (!structuredData.visual) structuredData.visual = {};
         if (!structuredData.visual.background_image_url && cardData.image_url) {
           structuredData.visual.background_image_url = cardData.image_url;
+        }
+        
+        // 🔮 重要修复：从嵌套结构提取AI选择的签体信息到扁平化字段
+        if (structuredData.ai_selected_charm) {
+          structuredData.ai_selected_charm_id = structuredData.ai_selected_charm.charm_id;
+          structuredData.ai_selected_charm_name = structuredData.ai_selected_charm.charm_name;
+          structuredData.ai_selected_charm_reasoning = structuredData.ai_selected_charm.ai_reasoning;
+        }
+        
+        // 🔮 从其他嵌套结构提取扁平化字段
+        if (structuredData.oracle_theme) {
+          if (structuredData.oracle_theme.title) structuredData.oracle_title = structuredData.oracle_theme.title;
+          if (structuredData.oracle_theme.subtitle) structuredData.oracle_subtitle = structuredData.oracle_theme.subtitle;
+        }
+        
+        if (structuredData.oracle_manifest) {
+          if (structuredData.oracle_manifest.hexagram) {
+            if (structuredData.oracle_manifest.hexagram.name) structuredData.oracle_hexagram_name = structuredData.oracle_manifest.hexagram.name;
+            if (structuredData.oracle_manifest.hexagram.insight) structuredData.oracle_hexagram_insight = structuredData.oracle_manifest.hexagram.insight;
+          }
+          if (structuredData.oracle_manifest.daily_guide) structuredData.oracle_daily_guides = structuredData.oracle_manifest.daily_guide;
+          if (structuredData.oracle_manifest.fengshui_focus) structuredData.oracle_fengshui_focus = structuredData.oracle_manifest.fengshui_focus;
+          if (structuredData.oracle_manifest.ritual_hint) structuredData.oracle_ritual_hint = structuredData.oracle_manifest.ritual_hint;
+        }
+        
+        if (structuredData.charm_identity) {
+          if (structuredData.charm_identity.charm_name) structuredData.charm_name = structuredData.charm_identity.charm_name;
+          if (structuredData.charm_identity.charm_description) structuredData.charm_description = structuredData.charm_identity.charm_description;
+          if (structuredData.charm_identity.main_color) structuredData.charm_main_color = structuredData.charm_identity.main_color;
+          if (structuredData.charm_identity.accent_color) structuredData.charm_accent_color = structuredData.charm_identity.accent_color;
         }
         
         return { structuredData, hasStructuredData, debugInfo };

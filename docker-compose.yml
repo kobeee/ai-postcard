@@ -1,5 +1,5 @@
 # =============================================================================
-# AI 明信片项目 - Docker Compose 配置
+# AI 心象签项目 - Docker Compose 配置
 # =============================================================================
 # 统一的服务配置，简单高效，一套镜像到处跑
 # =============================================================================
@@ -19,6 +19,9 @@ x-common: &common
 x-app-service: &app-service
   <<: *common
   user: "0:0"
+  environment:
+    - TZ=Asia/Shanghai
+    - APP_TIMEZONE=Asia/Shanghai
   depends_on:
     postgres: { condition: service_healthy }
     redis: { condition: service_healthy }
@@ -107,6 +110,7 @@ services:
     volumes:
       - ./logs/ai-agent:/app/logs
       - ./data/ai-agent/static:/app/app/static
+      - ./resources:/app/resources  # 🔮 挂载心象签资源文件
     environment:
       AI_AGENT_PUBLIC_URL: ${AI_AGENT_PUBLIC_URL}
     profiles: [agent, all]
@@ -122,6 +126,7 @@ services:
     volumes:
       - ./logs/ai-agent:/app/logs
       - ./data/ai-agent/static:/app/app/static
+      - ./resources:/app/resources  # 🔮 挂载心象签资源文件
     profiles: [worker, all]
 
   # =============================================================================

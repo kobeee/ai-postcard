@@ -1,0 +1,498 @@
+[
+  {
+    "id": "bagua-jinnang",
+    "name": "八角锦囊 (神秘守护)",
+    "image": "八角锦囊 (神秘守护).png",
+    "title": {
+      "type": "vertical",
+      "position": { "x": 512, "y": 520 },
+      "maxChars": 4,
+      "lineHeight": 72,
+      "fontSize": 68,
+      "fontWeight": 600
+    },
+    "subtitle": {
+      "visible": true,
+      "position": { "x": 512, "y": 660 },
+      "maxChars": 10,
+      "fontSize": 30,
+      "color": "#2E3A4A"
+    },
+    "glow": {
+      "shape": "octagon",
+      "radius": [380, 380],
+      "opacity": 0.4,
+      "blendMode": "screen"
+    },
+    "suggestedPalette": ["#5DA9E9", "#F2D7EE"],
+    "note": "八角造型较稳重，竖排签名置中效果最佳，副标控制在一行。"
+  },
+  {
+    "id": "liujiao-denglong",
+    "name": "六角灯笼面 (光明指引)",
+    "image": "六角灯笼面 (光明指引).png",
+    "title": {
+      "type": "vertical",
+      "position": { "x": 512, "y": 530 },
+      "maxChars": 4,
+      "lineHeight": 68,
+      "fontSize": 64,
+      "fontWeight": 600
+    },
+    "subtitle": {
+      "visible": true,
+      "position": { "x": 512, "y": 660 },
+      "maxChars": 10,
+      "fontSize": 28,
+      "color": "#2C3E50"
+    },
+    "glow": {
+      "shape": "hexagon",
+      "radius": [360, 360],
+      "opacity": 0.35,
+      "blendMode": "screen"
+    },
+    "suggestedPalette": ["#FFD166", "#F6E7CD"],
+    "note": "灯笼顶部空间收紧，副标题向下偏移 40px，避免压到结饰。"
+  },
+  {
+    "id": "juanzhou-huakuang",
+    "name": "卷轴画框 (徐徐展开)",
+    "image": "卷轴画框 (徐徐展开).png",
+    "title": {
+      "type": "horizontal",
+      "position": { "x": 512, "y": 520 },
+      "maxChars": 6,
+      "lineHeight": 56,
+      "fontSize": 56,
+      "fontWeight": 600
+    },
+    "subtitle": {
+      "visible": true,
+      "position": { "x": 512, "y": 600 },
+      "maxChars": 16,
+      "fontSize": 30,
+      "color": "#4A3728"
+    },
+    "glow": {
+      "shape": "rectangle",
+      "radius": [420, 320],
+      "opacity": 0.35,
+      "blendMode": "screen"
+    },
+    "suggestedPalette": ["#E9C46A", "#F4A261"],
+    "note": "卷轴横向空间充足，支持 4~6 字标题并排显示。"
+  },
+  {
+    "id": "shuangyu-jinnang",
+    "name": "双鱼锦囊 (年年有余)",
+    "image": "双鱼锦囊 (年年有余).png",
+    "title": {
+      "type": "vertical",
+      "position": { "x": 512, "y": 525 },
+      "maxChars": 4,
+      "lineHeight": 70,
+      "fontSize": 66,
+      "fontWeight": 600
+    },
+    "subtitle": {
+      "visible": true,
+      "position": { "x": 512, "y": 655 },
+      "maxChars": 10,
+      "fontSize": 28,
+      "color": "#274060"
+    },
+    "glow": {
+      "shape": "ellipse",
+      "radius": [360, 420],
+      "opacity": 0.42,
+      "blendMode": "screen"
+    },
+    "suggestedPalette": ["#94D1BE", "#F9C74F"],
+    "note": "底部鱼尾较宽，副标题需略微上移，建议与鱼身留出 40px 间距。"
+  },
+  {
+    "id": "siyue-jinjie",
+    "name": "四叶锦结 (幸运相伴)",
+    "image": "四叶锦结 (幸运相伴).png",
+    "title": {
+      "type": "vertical",
+      "position": { "x": 512, "y": 500 },
+      "maxChars": 4,
+      "lineHeight": 72,
+      "fontSize": 68,
+      "fontWeight": 600
+    },
+    "subtitle": {
+      "visible": false
+    },
+    "glow": {
+      "shape": "clover",
+      "radius": [360, 360],
+      "opacity": 0.4,
+      "blendMode": "screen"
+    },
+    "suggestedPalette": ["#52B788", "#D8F3DC"],
+    "note": "四叶形中心较紧凑，建议只展示主标题，祝语放在背面。"
+  },
+  {
+    "id": "ruyi-jie",
+    "name": "如意结 (万事如意)",
+    "image": "如意结 (万事如意).png",
+    "title": {
+      "type": "vertical",
+      "position": { "x": 512, "y": 520 },
+      "maxChars": 4,
+      "lineHeight": 70,
+      "fontSize": 66,
+      "fontWeight": 600
+    },
+    "subtitle": {
+      "visible": true,
+      "position": { "x": 512, "y": 660 },
+      "maxChars": 10,
+      "fontSize": 28,
+      "color": "#432C7A"
+    },
+    "glow": {
+      "shape": "loop",
+      "radius": [360, 400],
+      "opacity": 0.4,
+      "blendMode": "screen"
+    },
+    "suggestedPalette": ["#7D5BA6", "#FFE5F1"],
+    "note": "绳扣已保留透明，顶部空间小，标题起始位置建议在 y=520。"
+  },
+  {
+    "id": "fangsheng-jie",
+    "name": "方胜结 (同心永结)",
+    "image": "方胜结 (同心永结).png",
+    "title": {
+      "type": "vertical",
+      "position": { "x": 512, "y": 520 },
+      "maxChars": 4,
+      "lineHeight": 68,
+      "fontSize": 64,
+      "fontWeight": 600
+    },
+    "subtitle": {
+      "visible": false
+    },
+    "glow": {
+      "shape": "diamond",
+      "radius": [360, 360],
+      "opacity": 0.38,
+      "blendMode": "screen"
+    },
+    "suggestedPalette": ["#48B8D0", "#E8F6FD"],
+    "note": "菱形内部空间较小，建议只放主标题，采用竖排。"
+  },
+  {
+    "id": "zhuchi-changpai",
+    "name": "朱漆长牌 (言简意赅)",
+    "image": "朱漆长牌 (言简意赅).png",
+    "title": {
+      "type": "vertical",
+      "position": { "x": 512, "y": 540 },
+      "maxChars": 3,
+      "lineHeight": 80,
+      "fontSize": 70,
+      "fontWeight": 600
+    },
+    "subtitle": {
+      "visible": true,
+      "position": { "x": 512, "y": 700 },
+      "maxChars": 8,
+      "fontSize": 28,
+      "color": "#4F1D1D"
+    },
+    "glow": {
+      "shape": "rectangle",
+      "radius": [320, 440],
+      "opacity": 0.32,
+      "blendMode": "screen"
+    },
+    "suggestedPalette": ["#D62828", "#F77F00"],
+    "note": "牌身狭长，标题字数控制在 3 个以内，副标题放牌身下缘。"
+  },
+  {
+    "id": "haitang-muchuang",
+    "name": "海棠木窗 (古典窗格)",
+    "image": "海棠木窗 (古典窗格).png",
+    "title": {
+      "type": "vertical",
+      "position": { "x": 512, "y": 530 },
+      "maxChars": 4,
+      "lineHeight": 70,
+      "fontSize": 64,
+      "fontWeight": 600
+    },
+    "subtitle": {
+      "visible": true,
+      "position": { "x": 512, "y": 660 },
+      "maxChars": 12,
+      "fontSize": 30,
+      "color": "#362C2A"
+    },
+    "glow": {
+      "shape": "rounded-square",
+      "radius": [380, 380],
+      "opacity": 0.38,
+      "blendMode": "screen"
+    },
+    "suggestedPalette": ["#A47148", "#F4E6D4"],
+    "note": "窗格花纹细密，标题竖排留白更优，副标题可沿窗框底部排布。"
+  },
+  {
+    "id": "xiangyun-liucai",
+    "name": "祥云流彩 (梦幻意境)",
+    "image": "祥云流彩 (梦幻意境).png",
+    "title": {
+      "type": "horizontal",
+      "position": { "x": 512, "y": 540 },
+      "maxChars": 6,
+      "lineHeight": 54,
+      "fontSize": 52,
+      "fontWeight": 600
+    },
+    "subtitle": {
+      "visible": true,
+      "position": { "x": 512, "y": 620 },
+      "maxChars": 12,
+      "fontSize": 28,
+      "color": "#2B3A55"
+    },
+    "glow": {
+      "shape": "ellipse",
+      "radius": [420, 320],
+      "opacity": 0.4,
+      "blendMode": "screen"
+    },
+    "suggestedPalette": ["#5F0A87", "#B5A0FF"],
+    "note": "左右云纹延展，标题横排更协调，可配合轻微 letter-spacing。"
+  },
+  {
+    "id": "xiangyun-hulu",
+    "name": "祥云葫芦 (福禄绵延)",
+    "image": "祥云葫芦 (福禄绵延).png",
+    "title": {
+      "type": "vertical",
+      "position": { "x": 512, "y": 560 },
+      "maxChars": 3,
+      "lineHeight": 78,
+      "fontSize": 70,
+      "fontWeight": 600
+    },
+    "subtitle": {
+      "visible": true,
+      "position": { "x": 512, "y": 700 },
+      "maxChars": 8,
+      "fontSize": 30,
+      "color": "#3E2723"
+    },
+    "glow": {
+      "shape": "gourd",
+      "radius": [320, 420],
+      "opacity": 0.36,
+      "blendMode": "screen"
+    },
+    "suggestedPalette": ["#FFB703", "#FB8500"],
+    "note": "葫芦下部空间有限，标题偏下放置，副标落在流苏上方。"
+  },
+  {
+    "id": "zhujie-changtiao",
+    "name": "竹节长条 (虚心有节)",
+    "image": "竹节长条 (虚心有节).png",
+    "title": {
+      "type": "vertical",
+      "position": { "x": 512, "y": 540 },
+      "maxChars": 3,
+      "lineHeight": 78,
+      "fontSize": 68,
+      "fontWeight": 600
+    },
+    "subtitle": {
+      "visible": true,
+      "position": { "x": 512, "y": 700 },
+      "maxChars": 8,
+      "fontSize": 28,
+      "color": "#1B4332"
+    },
+    "glow": {
+      "shape": "rectangle",
+      "radius": [300, 440],
+      "opacity": 0.3,
+      "blendMode": "screen"
+    },
+    "suggestedPalette": ["#40916C", "#95D5B2"],
+    "note": "竹节笔直，标题 3 字最佳，副标缩短至 8 字以内。"
+  },
+  {
+    "id": "lianhua-yuanpai",
+    "name": "莲花圆牌 (平和雅致)",
+    "image": "莲花圆牌 (平和雅致).png",
+    "title": {
+      "type": "vertical",
+      "position": { "x": 512, "y": 520 },
+      "maxChars": 4,
+      "lineHeight": 72,
+      "fontSize": 68,
+      "fontWeight": 600
+    },
+    "subtitle": {
+      "visible": true,
+      "position": { "x": 512, "y": 645 },
+      "maxChars": 10,
+      "fontSize": 30,
+      "color": "#2F3E46"
+    },
+    "glow": {
+      "shape": "circle",
+      "radius": [380, 380],
+      "opacity": 0.38,
+      "blendMode": "screen"
+    },
+    "suggestedPalette": ["#6BC9B0", "#FFE5D9"],
+    "note": "圆牌留白充足，可保留副标题。"
+  },
+  {
+    "id": "jinbian-moyu",
+    "name": "金边墨玉璧 (沉稳庄重)",
+    "image": "金边墨玉璧 (沉稳庄重).png",
+    "title": {
+      "type": "vertical",
+      "position": { "x": 512, "y": 520 },
+      "maxChars": 3,
+      "lineHeight": 74,
+      "fontSize": 66,
+      "fontWeight": 600
+    },
+    "subtitle": {
+      "visible": true,
+      "position": { "x": 512, "y": 650 },
+      "maxChars": 8,
+      "fontSize": 28,
+      "color": "#1D3557"
+    },
+    "glow": {
+      "shape": "circle",
+      "radius": [360, 360],
+      "opacity": 0.32,
+      "blendMode": "screen"
+    },
+    "suggestedPalette": ["#264653", "#E9C46A"],
+    "note": "内圈已填充白色，标题 3 字内最佳，色调沉稳。"
+  },
+  {
+    "id": "yinxing-ye",
+    "name": "银杏叶 (坚韧与永恒)",
+    "image": "银杏叶 (坚韧与永恒).png",
+    "title": {
+      "type": "horizontal",
+      "position": { "x": 512, "y": 520 },
+      "maxChars": 6,
+      "lineHeight": 52,
+      "fontSize": 52,
+      "fontWeight": 600
+    },
+    "subtitle": {
+      "visible": true,
+      "position": { "x": 512, "y": 600 },
+      "maxChars": 14,
+      "fontSize": 28,
+      "color": "#3F3B2C"
+    },
+    "glow": {
+      "shape": "leaf",
+      "radius": [460, 340],
+      "opacity": 0.36,
+      "blendMode": "screen"
+    },
+    "suggestedPalette": ["#E4CFA3", "#6D9773"],
+    "note": "银杏叶横幅较宽，标题可横排 4~6 字，副标题贴近叶柄。"
+  },
+  {
+    "id": "zhangming-suo",
+    "name": "长命锁 (富贵安康)",
+    "image": "长命锁 (富贵安康).png",
+    "title": {
+      "type": "vertical",
+      "position": { "x": 512, "y": 540 },
+      "maxChars": 3,
+      "lineHeight": 78,
+      "fontSize": 70,
+      "fontWeight": 600
+    },
+    "subtitle": {
+      "visible": true,
+      "position": { "x": 512, "y": 690 },
+      "maxChars": 10,
+      "fontSize": 28,
+      "color": "#623412"
+    },
+    "glow": {
+      "shape": "cloud",
+      "radius": [360, 360],
+      "opacity": 0.34,
+      "blendMode": "screen"
+    },
+    "suggestedPalette": ["#F4A261", "#FEF3C7"],
+    "note": "锁体呈祥云形，标题 3 字即可，副标题靠近锁底边。"
+  },
+  {
+    "id": "qingyu-tuanshan",
+    "name": "青玉团扇 (清风徐来)",
+    "image": "青玉团扇 (清风徐来).png",
+    "title": {
+      "type": "horizontal",
+      "position": { "x": 512, "y": 530 },
+      "maxChars": 6,
+      "lineHeight": 52,
+      "fontSize": 52,
+      "fontWeight": 600
+    },
+    "subtitle": {
+      "visible": true,
+      "position": { "x": 512, "y": 610 },
+      "maxChars": 14,
+      "fontSize": 28,
+      "color": "#1E3A34"
+    },
+    "glow": {
+      "shape": "fan",
+      "radius": [420, 340],
+      "opacity": 0.34,
+      "blendMode": "screen"
+    },
+    "suggestedPalette": ["#6ABEA7", "#B7E4C7"],
+    "note": "团扇上半部较宽，标题水平排布更贴合扇骨曲线。"
+  },
+  {
+    "id": "qinghua-cishan",
+    "name": "青花瓷扇 (文化底蕴)",
+    "image": "青花瓷扇 (文化底蕴).png",
+    "title": {
+      "type": "horizontal",
+      "position": { "x": 512, "y": 520 },
+      "maxChars": 6,
+      "lineHeight": 50,
+      "fontSize": 50,
+      "fontWeight": 600
+    },
+    "subtitle": {
+      "visible": true,
+      "position": { "x": 512, "y": 600 },
+      "maxChars": 14,
+      "fontSize": 28,
+      "color": "#1F3C88"
+    },
+    "glow": {
+      "shape": "fan",
+      "radius": [440, 340],
+      "opacity": 0.34,
+      "blendMode": "screen"
+    },
+    "suggestedPalette": ["#1F3C88", "#A8C5F0"],
+    "note": "青花纹路较多，标题与副标采用深蓝色，字距略增显雅致。"
+  }
+]

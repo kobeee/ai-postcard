@@ -498,9 +498,12 @@ App({
    * 保存应用状态
    */
   saveAppState() {
+    const pages = getCurrentPages();
+    const currentPage = pages.length > 0 ? pages[pages.length - 1] : null;
+    
     const appState = {
       lastActiveTime: Date.now(),
-      currentPage: getCurrentPages().pop()?.route || 'unknown',
+      currentPage: currentPage?.route || 'unknown',
       userLoggedIn: !!this.globalData.userInfo,
       networkStatus: this.globalData.networkStatus
     };

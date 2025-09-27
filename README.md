@@ -2,9 +2,9 @@
 
 这是一个完全由AI🤖编码的项目，我和cursor、claude code，还有codex也帮一点小忙，关于cursor的规则非常有参考价值，这是一个从0到1的完完全全由AI闭环完成的项目，从设计、开发、测试，AI几乎做了所有的事情，当然，没有我，它也不可能做到！其中有很多心得，欢迎交流🌻
 
-# 🎨 AI 明信片项目
+# 🔮 AI 心象签项目
 
-智能化明信片生成系统：AI 不只是写文案与图片，更充当“前端工程师”，自动生成可交互的 HTML/CSS/JS，在微信小程序 web-view 中动态呈现。
+智能化心象签生成系统：将心情映射为自然意象，AI 不只是生成内容与图片，更充当“前端工程师”，自动生成可交互的 HTML/CSS/JS，在微信小程序 web-view 中动态呈现神秘的心象签体验。
 
 [小程序截图](./1.jpg)
 
@@ -83,11 +83,11 @@ curl -s -X POST http://localhost:8083/api/v1/miniprogram/auth/login \
   -d '{"code":"test_cli","userInfo":{"nickName":"Dev","avatarUrl":"","gender":0}}'
 ```
 
-- 创建明信片（携带 Authorization）
+- 创建心象签（携带 Authorization）
 ```bash
 curl -s -X POST http://localhost:8083/api/v1/miniprogram/postcards/create \
   -H "Authorization: Bearer <token>" -H 'Content-Type: application/json' \
-  -d '{"mood":"开心","style":"梵高","theme":"庆祝","context":{"location":"上海","weather":"晴"}}'
+  -d '{"user_input":"今日心情很好","drawing_data":{"trajectory":[],"analysis":{}},"context":{"location":"上海","weather":"晴"}}'
 ```
 
 - 任务状态查询

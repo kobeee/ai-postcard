@@ -180,6 +180,113 @@ def flatten_structured_data(structured_data: dict) -> dict:
                 if field in extras:
                     flat_field_name = f'extras_{field}'
                     flattened_data[flat_field_name] = extras[field]
+        
+        # 🔮 AI选择的签体信息 - 关键修复
+        ai_selected_charm = structured_data.get('ai_selected_charm', {})
+        if isinstance(ai_selected_charm, dict):
+            if ai_selected_charm.get('charm_id'):
+                flattened_data['ai_selected_charm_id'] = ai_selected_charm['charm_id']
+            if ai_selected_charm.get('charm_name'):
+                flattened_data['ai_selected_charm_name'] = ai_selected_charm['charm_name']
+            if ai_selected_charm.get('ai_reasoning'):
+                flattened_data['ai_selected_charm_reasoning'] = ai_selected_charm['ai_reasoning']
+        
+        # 🔮 心象签核心数据扁平化（解签笺内容）
+        # oracle_theme - 签象主题
+        oracle_theme = structured_data.get('oracle_theme', {})
+        if isinstance(oracle_theme, dict):
+            if oracle_theme.get('title'):
+                flattened_data['oracle_title'] = oracle_theme['title']
+            if oracle_theme.get('subtitle'):
+                flattened_data['oracle_subtitle'] = oracle_theme['subtitle']
+        
+        # charm_identity - 签体身份
+        charm_identity = structured_data.get('charm_identity', {})
+        if isinstance(charm_identity, dict):
+            if charm_identity.get('charm_name'):
+                flattened_data['charm_name'] = charm_identity['charm_name']
+            if charm_identity.get('charm_description'):
+                flattened_data['charm_description'] = charm_identity['charm_description']
+        
+        # affirmation - 祝福语
+        if structured_data.get('affirmation'):
+            flattened_data['oracle_affirmation'] = structured_data['affirmation']
+        
+        # oracle_manifest - 解签内容
+        oracle_manifest = structured_data.get('oracle_manifest', {})
+        if isinstance(oracle_manifest, dict):
+            # 卦象信息
+            hexagram = oracle_manifest.get('hexagram', {})
+            if isinstance(hexagram, dict):
+                if hexagram.get('name'):
+                    flattened_data['oracle_hexagram_name'] = hexagram['name']
+                if hexagram.get('symbol'):
+                    flattened_data['oracle_hexagram_symbol'] = hexagram['symbol']
+                if hexagram.get('insight'):
+                    flattened_data['oracle_hexagram_insight'] = hexagram['insight']
+            
+            # 生活指引
+            if oracle_manifest.get('daily_guide') and isinstance(oracle_manifest['daily_guide'], list):
+                daily_guide = oracle_manifest['daily_guide']
+                flattened_data['oracle_daily_guides'] = daily_guide
+                # 分别提供单独的字段
+                if len(daily_guide) > 0:
+                    flattened_data['oracle_daily_guide_1'] = daily_guide[0]
+                if len(daily_guide) > 1:
+                    flattened_data['oracle_daily_guide_2'] = daily_guide[1]
+                if len(daily_guide) > 2:
+                    flattened_data['oracle_daily_guide_3'] = daily_guide[2]
+            
+            # 风水与仪式
+            if oracle_manifest.get('fengshui_focus'):
+                flattened_data['oracle_fengshui_focus'] = oracle_manifest['fengshui_focus']
+            if oracle_manifest.get('ritual_hint'):
+                flattened_data['oracle_ritual_hint'] = oracle_manifest['ritual_hint']
+            
+            # 五行平衡
+            element_balance = oracle_manifest.get('element_balance', {})
+            if isinstance(element_balance, dict):
+                for element in ['wood', 'fire', 'earth', 'metal', 'water']:
+                    if element_balance.get(element) is not None:
+                        flattened_data[f'oracle_element_{element}'] = element_balance[element]
+        
+        # ink_reading - 墨迹解读
+        ink_reading = structured_data.get('ink_reading', {})
+        if isinstance(ink_reading, dict):
+            if ink_reading.get('stroke_impression'):
+                flattened_data['oracle_stroke_impression'] = ink_reading['stroke_impression']
+            if ink_reading.get('symbolic_keywords') and isinstance(ink_reading['symbolic_keywords'], list):
+                flattened_data['oracle_symbolic_keywords'] = ink_reading['symbolic_keywords']
+        
+        # context_insights - 上下文洞察
+        context_insights = structured_data.get('context_insights', {})
+        if isinstance(context_insights, dict):
+            if context_insights.get('session_time'):
+                flattened_data['oracle_session_time'] = context_insights['session_time']
+            if context_insights.get('season_hint'):
+                flattened_data['oracle_season_hint'] = context_insights['season_hint']
+            if context_insights.get('visit_pattern'):
+                flattened_data['oracle_visit_pattern'] = context_insights['visit_pattern']
+            if context_insights.get('historical_keywords') and isinstance(context_insights['historical_keywords'], list):
+                flattened_data['oracle_historical_keywords'] = context_insights['historical_keywords']
+        
+        # blessing_stream - 祝福流
+        if structured_data.get('blessing_stream') and isinstance(structured_data['blessing_stream'], list):
+            flattened_data['oracle_blessing_stream'] = structured_data['blessing_stream']
+        
+        # art_direction - 艺术指导
+        art_direction = structured_data.get('art_direction', {})
+        if isinstance(art_direction, dict):
+            if art_direction.get('image_prompt'):
+                flattened_data['oracle_image_prompt'] = art_direction['image_prompt']
+            if art_direction.get('palette') and isinstance(art_direction['palette'], list):
+                flattened_data['oracle_palette'] = art_direction['palette']
+            if art_direction.get('animation_hint'):
+                flattened_data['oracle_animation_hint'] = art_direction['animation_hint']
+        
+        # culture_note - 文化注释
+        if structured_data.get('culture_note'):
+            flattened_data['oracle_culture_note'] = structured_data['culture_note']
     
     return flattened_data
 

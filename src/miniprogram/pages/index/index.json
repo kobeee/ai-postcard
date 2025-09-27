@@ -1,5 +1,6 @@
 {
   "usingComponents": {
-    "structured-postcard": "../../components/structured-postcard/structured-postcard"
+    "structured-postcard": "../../components/structured-postcard/structured-postcard",
+    "hanging-charm": "../../components/hanging-charm/hanging-charm"
   }
 }

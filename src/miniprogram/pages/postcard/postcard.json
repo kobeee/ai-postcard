@@ -1,6 +1,8 @@
 {
   "usingComponents": {
     "dynamic-postcard": "../../components/dynamic-postcard/dynamic-postcard",
-    "structured-postcard": "../../components/structured-postcard/structured-postcard"
+    "structured-postcard": "../../components/structured-postcard/structured-postcard",
+    "detail-oracle-card": "../../components/detail-oracle-card/detail-oracle-card",
+    "hanging-charm": "../../components/hanging-charm/hanging-charm"
   }
 }

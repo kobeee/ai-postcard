@@ -1,6 +1,7 @@
-// pages/postcard/postcard.js - 明信片详情页
+// pages/postcard/postcard.js - 心象签详情页
 const { postcardAPI } = require('../../utils/enhanced-request.js');
 const { parseCardData } = require('../../utils/data-parser.js');
+const { CardDataManager } = require('../../utils/card-data-manager.js');
 const envConfig = require('../../config/env.js');
 
 Page({
@@ -13,7 +14,24 @@ Page({
     // 是否有有效的结构化数据
     hasStructuredData: false,
     // 调试信息
-    debugInfo: null
+    debugInfo: null,
+    
+    // 🔮 挂件式心象签显示控制（从首页照搬）
+    selectedCharmType: 'lianhua-yuanpai', // 当前选择的挂件类型
+    availableCharmTypes: [ // 可选的挂件类型
+      'lianhua-yuanpai',
+      'bagua-jinnang', 
+      'qingyu-tuanshan'
+    ],
+    charmConfigs: [], // 🔮 从远程加载的挂件配置数据
+    
+    // 🔮 资源加载状态管理（从首页照搬）
+    resourcesLoading: {
+      charmConfigs: false
+    },
+    resourcesLoaded: {
+      charmConfigs: false
+    }
   },
 
   onLoad(options) {
@@ -22,7 +40,7 @@ Page({
     if (!id) {
       this.setData({ 
         loading: false, 
-        error: '明信片ID参数缺失' 
+        error: '心象签ID参数缺失' 
       });
       return;
     }
@@ -32,45 +50,52 @@ Page({
   },
 
   /**
-   * 加载明信片数据
+   * 加载心象签数据 - 优先使用缓存，完全复用首页逻辑
    */
   async loadPostcard() {
     try {
       this.setData({ loading: true, error: null });
       
-      envConfig.log('开始加载明信片, ID:', this.postcardId);
+      envConfig.log('开始加载心象签, ID:', this.postcardId);
       
-      const postcard = await postcardAPI.getResult(this.postcardId);
-      envConfig.log('API返回原始数据:', postcard);
+      // 🚀 步骤1：加载挂件配置（从首页照搬）
+      await this.loadCharmConfigs();
       
-      // ✅ 使用统一的数据解析逻辑
-      const parseResult = parseCardData(postcard);
+      // 🚀 步骤2：优先尝试从缓存获取
+      let processedData = CardDataManager.getCachedCard(this.postcardId);
       
-      this.setData({ 
-        postcard,
-        structuredData: parseResult.structuredData,
-        hasStructuredData: parseResult.hasStructuredData,
-        debugInfo: parseResult.debugInfo,
-        loading: false
-      });
+      if (processedData) {
+        envConfig.log('✅ 从缓存获取到卡片数据');
+        this.displayCardData(processedData);
+        return;
+      }
       
-      // 设置页面标题
-      const title = parseResult.structuredData?.title || '明信片详情';
-      wx.setNavigationBarTitle({
-        title: title
-      });
+      // 🚀 步骤3：缓存不存在，从API获取
+      envConfig.log('缓存不存在，从API获取数据');
+      const rawPostcard = await postcardAPI.getResult(this.postcardId);
+      envConfig.log('API返回原始数据:', rawPostcard);
+      
+      // 🚀 步骤4：使用与首页完全相同的处理逻辑
+      processedData = CardDataManager.processAndCacheCard(rawPostcard);
+      
+      if (!processedData) {
+        throw new Error('数据处理失败');
+      }
+      
+      // 🚀 步骤5：显示数据
+      this.displayCardData(processedData);
       
     } catch (error) {
-      envConfig.error('加载明信片失败:', error);
+      envConfig.error('加载心象签失败:', error);
       
       let errorMessage = '加载失败，请重试';
       
       // 根据错误类型提供更具体的提示
       if (error.message) {
         if (error.message.includes('404')) {
-          errorMessage = '明信片不存在或已被删除';
+          errorMessage = '心象签不存在或已被删除';
         } else if (error.message.includes('401') || error.message.includes('403')) {
-          errorMessage = '无权限访问此明信片';
+          errorMessage = '无权限访问此心象签';
         } else if (error.message.includes('Network')) {
           errorMessage = '网络连接失败，请检查网络';
         } else {
@@ -86,6 +111,189 @@ Page({
   },
 
   /**
+   * 显示卡片数据 - 统一显示逻辑
+   */
+  displayCardData(processedData) {
+    try {
+      this.setData({ 
+        postcard: processedData.originalCard,
+        structuredData: processedData.structuredData,
+        hasStructuredData: processedData.hasStructuredData,
+        debugInfo: processedData.debugInfo,
+        loading: false
+      });
+      
+      // 设置页面标题 - 使用工具类方法
+      CardDataManager.updatePageTitle(processedData);
+      
+      envConfig.log('✅ 详情页数据设置完成:', {
+        cardId: processedData.cardId,
+        hasStructuredData: processedData.hasStructuredData,
+        structuredKeys: processedData.structuredData ? Object.keys(processedData.structuredData).slice(0, 10) : []
+      });
+      
+    } catch (error) {
+      envConfig.error('显示卡片数据失败:', error);
+      this.setData({ 
+        loading: false,
+        error: '数据显示失败，请重试'
+      });
+    }
+  },
+
+  /**
+   * 🔮 从AI Agent服务动态加载挂件配置（从首页完全照搬）
+   */
+  async loadCharmConfigs() {
+    // 避免重复加载
+    if (this.data.resourcesLoading.charmConfigs || this.data.resourcesLoaded.charmConfigs) {
+      return this.data.charmConfigs;
+    }
+    
+    try {
+      // 设置加载状态
+      this.setData({
+        'resourcesLoading.charmConfigs': true
+      });
+      
+      const AI_AGENT_PUBLIC_URL = envConfig.AI_AGENT_PUBLIC_URL || 'http://localhost:8080';
+      const configUrl = `${AI_AGENT_PUBLIC_URL}/resources/签体/charm-config.json`;
+      
+      envConfig.log('加载挂件配置:', configUrl);
+      
+      const response = await new Promise((resolve, reject) => {
+        wx.request({
+          url: configUrl,
+          method: 'GET',
+          success: resolve,
+          fail: reject
+        });
+      });
+      
+      if (response.statusCode === 200 && response.data) {
+        // 缓存挂件配置到本地
+        wx.setStorageSync('charmConfigs', {
+          data: response.data,
+          timestamp: Date.now()
+        });
+        
+        // 为每个挂件配置添加完整的图片URL（URL编码处理）
+        const charmsWithImageUrls = response.data.map(charm => ({
+          ...charm,
+          imageUrl: `${AI_AGENT_PUBLIC_URL}/resources/签体/${encodeURIComponent(charm.image)}`
+        }));
+        
+        // 更新页面数据中的可用挂件类型
+        this.setData({
+          availableCharmTypes: charmsWithImageUrls.map(c => c.id),
+          charmConfigs: charmsWithImageUrls,
+          'resourcesLoading.charmConfigs': false,
+          'resourcesLoaded.charmConfigs': true
+        });
+        
+        envConfig.log('✅ 挂件配置加载成功，共', response.data.length, '种挂件');
+        
+        // 🔄 异步预下载挂件资源（不阻塞UI）
+        this.preloadCharmImages(charmsWithImageUrls);
+        
+        return charmsWithImageUrls;
+        
+      } else {
+        throw new Error(`HTTP ${response.statusCode}`);
+      }
+      
+    } catch (error) {
+      envConfig.error('加载挂件配置失败:', error);
+      
+      // 重置加载状态
+      this.setData({
+        'resourcesLoading.charmConfigs': false
+      });
+      
+      // 使用缓存的配置
+      try {
+        const cached = wx.getStorageSync('charmConfigs');
+        if (cached && cached.data && (Date.now() - cached.timestamp) < 24 * 60 * 60 * 1000) {
+          envConfig.log('使用缓存的挂件配置');
+          const charmsWithImageUrls = cached.data.map(charm => ({
+            ...charm,
+            imageUrl: `${envConfig.AI_AGENT_PUBLIC_URL || 'http://localhost:8080'}/resources/签体/${encodeURIComponent(charm.image)}`
+          }));
+          
+          this.setData({
+            availableCharmTypes: charmsWithImageUrls.map(c => c.id),
+            charmConfigs: charmsWithImageUrls,
+            'resourcesLoaded.charmConfigs': true
+          });
+          
+          // 🔄 异步预下载缓存的挂件资源
+          this.preloadCharmImages(charmsWithImageUrls);
+          
+          return charmsWithImageUrls;
+        }
+      } catch (e) {
+        envConfig.error('读取缓存配置失败:', e);
+      }
+      
+      // 最后使用默认配置
+      envConfig.warn('使用默认挂件配置');
+      this.setData({
+        availableCharmTypes: ['lianhua-yuanpai', 'bagua-jinnang', 'qingyu-tuanshan']
+      });
+      return [];
+    }
+  },
+
+  /**
+   * 🔄 预下载挂件资源（异步后台执行）（从首页完全照搬）
+   */
+  async preloadCharmImages(charmConfigs) {
+    if (!Array.isArray(charmConfigs) || charmConfigs.length === 0) {
+      return;
+    }
+
+    try {
+      // 提取所有图片URL
+      const imageUrls = charmConfigs
+        .filter(charm => charm.imageUrl)
+        .map(charm => charm.imageUrl);
+
+      if (imageUrls.length === 0) {
+        envConfig.log('没有需要预下载的挂件资源');
+        return;
+      }
+
+      envConfig.log('🚀 开始预下载挂件资源:', imageUrls.length, '个');
+
+      // 使用资源缓存管理器批量预下载
+      const { resourceCache } = require('../../utils/resource-cache.js');
+      const results = await resourceCache.preloadResources(imageUrls);
+      
+      // 统计下载结果
+      const successCount = Object.values(results).filter(r => r.success).length;
+      const failCount = imageUrls.length - successCount;
+      
+      envConfig.log('✅ 挂件资源预下载完成:', {
+        total: imageUrls.length,
+        success: successCount,
+        failed: failCount
+      });
+
+      // 如果有失败的资源，记录详细信息
+      if (failCount > 0) {
+        const failedResources = Object.entries(results)
+          .filter(([url, result]) => !result.success)
+          .map(([url, result]) => ({ url, error: result.error }));
+        
+        envConfig.warn('预下载失败的资源:', failedResources);
+      }
+
+    } catch (error) {
+      envConfig.error('挂件资源预下载失败:', error);
+    }
+  },
+
+  /**
    * 重新加载
    */
   handleRetry() {
@@ -94,13 +302,13 @@ Page({
 
 
   /**
-   * 删除明信片
+   * 删除心象签
    */
   async handleDelete() {
     const app = getApp();
     
     const confirmed = await app.utils.showConfirm(
-      '确定要删除这张明信片吗？删除后无法恢复。',
+      '确定要删除这张心象签吗？删除后无法恢复。',
       '删除确认'
     );
     
@@ -111,11 +319,23 @@ Page({
       
       await postcardAPI.delete(this.postcardId);
       
+      // 🚀 删除成功后立即清理缓存
+      try {
+        CardDataManager.clearCard(this.postcardId);
+        envConfig.log('✅ 删除卡片后已清理缓存:', this.postcardId);
+      } catch (cacheError) {
+        envConfig.error('清理缓存失败:', cacheError);
+        // 缓存清理失败不影响删除流程
+      }
+      
       app.utils.hideLoading();
       app.utils.showSuccess('删除成功');
       
-      // 若删除的是今日生成的卡片，首页需重置到画布初始状态
+      // 🚀 设置首页刷新标记：无论删除今日还是历史卡片，都需要刷新回廊
       try {
+        app.globalData = app.globalData || {};
+        
+        // 检查是否为今日卡片
         const pc = this.data.postcard;
         let isToday = true;
         if (pc && pc.created_at) {
@@ -123,10 +343,20 @@ Page({
           const cardDayStr = new Date(pc.created_at).toDateString();
           isToday = (todayStr === cardDayStr);
         }
+        
+        // 若删除的是今日生成的卡片，首页需重置到画布初始状态
         if (isToday) {
-          app.globalData = app.globalData || {};
           app.globalData.resetToCanvas = true;
         }
+        
+        // 🆕 无论删除今日还是历史卡片，都需要刷新回廊数据
+        app.globalData.refreshUserCards = true;
+        
+        envConfig.log('✅ 删除卡片后设置刷新标记:', { 
+          isToday, 
+          resetToCanvas: app.globalData.resetToCanvas, 
+          refreshUserCards: app.globalData.refreshUserCards 
+        });
       } catch (_) {}
       
       // 返回首页：优先返回上一页，失败则重启到首页
@@ -144,7 +374,7 @@ Page({
       }, 800);
       
     } catch (error) {
-      envConfig.error('删除明信片失败:', error);
+      envConfig.error('删除心象签失败:', error);
       
       app.utils.hideLoading();
       app.utils.showError('删除失败，请重试');
@@ -152,27 +382,27 @@ Page({
   },
 
   /**
-   * 分享明信片
+   * 分享心象签
    */
   onShareAppMessage() {
     const { postcard, structuredData, hasStructuredData } = this.data;
     
     if (!postcard) {
       return {
-        title: 'AI明信片 - 每一天，都值得被温柔记录',
+        title: 'AI心象签 - 每一天，都值得被温柔记录',
         path: '/pages/index/index'
       };
     }
     
     // 构建个性化分享标题
-    let shareTitle = '我用AI制作了一张明信片，快来看看！';
+    let shareTitle = '我用AI制作了一张心象签，快来看看！';
     if (hasStructuredData && structuredData) {
       const cardTitle = structuredData.title || structuredData.card_title;
       const mood = structuredData.mood?.primary;
       if (cardTitle) {
-        shareTitle = `${cardTitle} | 我的AI明信片`;
+        shareTitle = `${cardTitle} | 我的AI心象签`;
       } else if (mood) {
-        shareTitle = `今天的心情是${mood} | 我的AI明信片`;
+        shareTitle = `今天的心情是${mood} | 我的AI心象签`;
       }
     }
     
@@ -191,23 +421,23 @@ Page({
     
     if (!postcard) {
       return {
-        title: 'AI明信片 - 每一天，都值得被温柔记录'
+        title: 'AI心象签 - 每一天，都值得被温柔记录'
       };
     }
     
     // 构建朋友圈分享标题 
-    let timelineTitle = 'AI明信片 - 每一天，都值得被温柔记录';
+    let timelineTitle = 'AI心象签 - 每一天，都值得被温柔记录';
     if (hasStructuredData && structuredData) {
       const cardTitle = structuredData.title || structuredData.card_title;
       const location = structuredData.context?.location;
       const weather = structuredData.context?.weather;
       
       if (cardTitle && location) {
-        timelineTitle = `${cardTitle} | ${location}的AI明信片`;
+        timelineTitle = `${cardTitle} | ${location}的AI心象签`;
       } else if (cardTitle) {
-        timelineTitle = `${cardTitle} | AI明信片`;
+        timelineTitle = `${cardTitle} | AI心象签`;
       } else if (location && weather) {
-        timelineTitle = `${location}，${weather} | AI明信片记录`;
+        timelineTitle = `${location}，${weather} | AI心象签记录`;
       }
     }
     
@@ -402,13 +632,13 @@ Page({
       
       // 如果没有结构化数据，直接失败
       if (!hasStructuredData) {
-        throw new Error('当前明信片没有结构化数据，无法生成Canvas截图');
+        throw new Error('当前心象签没有结构化数据，无法生成Canvas截图');
       }
       
       // 等待一下确保组件已经渲染
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      // 获取结构化明信片组件的引用 - 使用ID选择器
+      // 获取结构化心象签组件的引用 - 使用ID选择器
       const structuredCard = this.selectComponent('#main-structured-postcard');
       envConfig.log('通过ID获取组件结果:', !!structuredCard);
       
@@ -427,7 +657,7 @@ Page({
             return await this.callComponentScreenshot(allComponents[0]);
           }
           
-          throw new Error('无法获取结构化明信片组件，请检查组件是否渲染。可能原因：1) hasStructuredData为false 2) 组件渲染条件不满足');
+          throw new Error('无法获取结构化心象签组件，请检查组件是否渲染。可能原因：1) hasStructuredData为false 2) 组件渲染条件不满足');
         }
         return await this.callComponentScreenshot(structuredCardByClass);
       }
@@ -476,7 +706,7 @@ Page({
   },
 
   /**
-   * 复制明信片内容
+   * 复制心象签内容
    */
   copyContent() {
     const { postcard } = this.data;
@@ -501,11 +731,11 @@ Page({
   },
 
   /**
-   * 动态明信片点击事件
+   * 动态心象签点击事件
    */
   onDynamicPostcardTap(e) {
     const { postcardData } = e.detail;
-    envConfig.log('动态明信片被点击:', postcardData);
+    envConfig.log('动态心象签被点击:', postcardData);
     
     // 可以在这里添加额外的交互逻辑
     wx.showToast({
@@ -572,6 +802,159 @@ Page({
     });
   },
 
+  // ==================== 🔮 挂件组件事件处理（从首页完全照搬） ====================
+
+  /**
+   * 挂件翻面事件处理（从首页完全照搬）
+   */
+  onCharmFlip(e) {
+    const { isFlipped } = e.detail;
+    envConfig.log('🔮 挂件翻面状态:', isFlipped ? '背面（解签笺）' : '正面（挂件）');
+    
+    // 可以在这里添加翻面时的额外逻辑，比如统计、音效等
+    if (isFlipped) {
+      // 翻到解签笺背面
+      console.log('🔮 用户查看解签笺');
+    } else {
+      // 翻回挂件正面  
+      console.log('🔮 用户返回挂件正面');
+    }
+  },
+
+  /**
+   * 挂件分享事件处理（从首页完全照搬）
+   */
+  onCharmShare(e) {
+    const { oracleData, charmType } = e.detail;
+    envConfig.log('🔮 分享挂件:', { charmType, hasData: !!oracleData });
+    
+    // 触发小程序分享功能
+    wx.showShareMenu({
+      withShareTicket: true,
+      success: () => {
+        wx.showToast({
+          title: '分享成功',
+          icon: 'success'
+        });
+      }
+    });
+  },
+
+  /**
+   * 详情页卡片翻转事件（旧版兼容）
+   */
+  onDetailCardFlip(e) {
+    const { isFlipped, hasBackContent } = e.detail;
+    envConfig.log('详情卡片翻转:', { isFlipped, hasBackContent });
+    
+    if (isFlipped) {
+      wx.showToast({
+        title: '✨ 查看解签详解',
+        icon: 'none',
+        duration: 1500
+      });
+    } else {
+      wx.showToast({
+        title: '🎨 返回心象签正面',
+        icon: 'none',
+        duration: 1500
+      });
+    }
+  },
+
+  /**
+   * 详情卡片切换事件
+   */
+  onDetailCardToggle(e) {
+    const { card, expanded } = e.detail;
+    envConfig.log('详情卡片切换:', { card, expanded });
+    
+    if (expanded) {
+      wx.showToast({
+        title: `📖 展开${this.getCardTitle(card)}`,
+        icon: 'none',
+        duration: 1000
+      });
+    }
+  },
+
+  /**
+   * 洞察标签切换事件
+   */
+  onInsightTabSwitch(e) {
+    const { activeTab, previousTab } = e.detail;
+    envConfig.log('洞察标签切换:', { activeTab, previousTab });
+    
+    const tabTitles = {
+      reflections: '深度思考',
+      gratitude: '感恩记录', 
+      actions: '微行动'
+    };
+    
+    wx.showToast({
+      title: `💫 切换到${tabTitles[activeTab] || activeTab}`,
+      icon: 'none',
+      duration: 1000
+    });
+  },
+
+  /**
+   * 显示扩展内容事件
+   */
+  onShowExtended(e) {
+    const { content } = e.detail;
+    envConfig.log('显示扩展内容:', content);
+    
+    if (content && content.length > 0) {
+      // 构建扩展内容文本
+      const extendedText = content.map(item => 
+        `${item.title}:\n${Array.isArray(item.content) ? item.content.join('\n') : item.content}`
+      ).join('\n\n');
+      
+      wx.showModal({
+        title: '📈 深度解析',
+        content: extendedText,
+        showCancel: false,
+        confirmText: '了解'
+      });
+    }
+  },
+
+  /**
+   * 显示推荐内容事件
+   */
+  onShowRecommendations(e) {
+    const { recommendations } = e.detail;
+    envConfig.log('显示推荐内容:', recommendations);
+    
+    if (recommendations && recommendations.length > 0) {
+      // 构建推荐内容文本
+      const recommendText = recommendations.map(item => 
+        `${item.title}:\n${item.content}`
+      ).join('\n\n');
+      
+      wx.showModal({
+        title: '💡 智能推荐',
+        content: recommendText,
+        showCancel: false,
+        confirmText: '好的'
+      });
+    }
+  },
+
+  /**
+   * 获取卡片标题
+   */
+  getCardTitle(cardType) {
+    const titles = {
+      ink: '笔触解析',
+      guide: '生活指引',
+      insights: '心境洞察',
+      meta: '解签信息'
+    };
+    return titles[cardType] || cardType;
+  },
+
 
   /**
    * 预览小程序组件代码
@@ -588,7 +971,7 @@ Page({
     }
     
     // 显示组件信息
-    let content = '这张明信片包含动态小程序组件';
+    let content = '这张心象签包含动态小程序组件';
     if (postcard.has_animation) {
       content += '，具有精美的动画效果';
     }

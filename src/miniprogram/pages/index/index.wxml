@@ -1,6 +1,6 @@
-<!-- index.wxml - 情绪罗盘首页 -->
+<!-- index.wxml - 心象签首页 -->
 <view class="page">
-<view class="compass-container">
+<view class="compass-container {{todayCard && todayCard.structured_data ? 'charm-mode' : ''}}">
   <!-- 背景装饰 -->
   <view class="bg-decoration">
     <view class="floating-particle" wx:for="{{particles}}" wx:key="id" style="--delay: {{item.delay}}s; --x: {{item.x}}%; --y: {{item.y}};"></view>
@@ -15,15 +15,7 @@
     </view>
     <text class="greeting-text">{{greetingText}}</text>
     <view class="date-info-container">
-      <text class="date-info">{{currentDate}} · {{weatherInfo}}</text>
-      <view class="env-status" wx:if="{{!environmentReady}}">
-        <text class="status-dot loading"></text>
-        <text class="status-text">环境信息获取中</text>
-      </view>
-      <view class="env-status" wx:elif="{{environmentReady}}">
-        <text class="status-dot"></text>
-        <text class="status-text">环境信息已获取</text>
-      </view>
+      <text class="date-info">{{currentDate}}</text>
     </view>
   </view>
 
@@ -36,8 +28,8 @@
       </view>
     </view>
     <view class="brand-text">
-      <text class="brand-title">情绪罗盘</text>
-      <text class="brand-subtitle">每一天，都值得被温柔记录</text>
+      <text class="brand-title">心象签</text>
+      <text class="brand-subtitle">将心情映射为自然意象，\n感受生活的诗意</text>
     </view>
     
     <!-- 简化登录按钮 -->
@@ -46,152 +38,66 @@
     </button>
   </view>
 
-  <!-- 核心卡片区域 -->
-  <view class="card-container" wx:if="{{hasUserInfo}}">
-    <!-- 今日卡片 -->
-    <view class="daily-card" wx:if="{{todayCard}}">
-      <!-- 结构化卡片展示 -->
-      <view class="card-display-area" wx:if="{{todayCard}}">
-        <!-- 使用结构化卡片组件（如果有结构化数据） -->
-        <structured-postcard 
-          wx:if="{{todayCard.structured_data}}"
-          structured-data="{{todayCard.structured_data}}"
-          background-image="{{todayCard.structured_data && todayCard.structured_data.visual && todayCard.structured_data.visual.background_image_url || todayCard.image || todayCard.card_image}}"
-          fallback-english="{{todayCard.english}}"
-          show-animation="{{false}}"
-          size-mode="standard"
-          bind:recommendationtap="onRecommendationTap"
-          bind:share="onStructuredCardShare"
-        ></structured-postcard>
+  <!-- 🔮 心象签主显示区域 - 简化结构 -->
+  <view class="charm-main-area" wx:if="{{hasUserInfo && todayCard && todayCard.structured_data}}">
+    <hanging-charm 
+      oracle-data="{{todayCard}}"
+      charm-type="{{selectedCharmType || 'lianhua-yuanpai'}}"
+      background-image="{{todayCard.visual_background_image || todayCard.image_url || todayCard.image}}"
+      show-animation="{{true}}"
+      size-mode="large"
+      bind:flip="onCharmFlip"
+      bind:share="onCharmShare"
+    ></hanging-charm>
+  </view>
 
-        <!-- 降级显示：美化的卡片布局（结合背景图和文案） -->
-        <view class="beautiful-postcard {{todayCard.layout_mode}}" wx:elif="{{!todayCard.structured_data}}">
-          <!-- 背景图层 -->
-          <view class="postcard-background">
-            <image 
-              class="background-image" 
-              src="{{todayCard.image || todayCard.card_image}}" 
-              mode="aspectFill"
-              lazy-load="true"
-            ></image>
-            <view class="background-overlay"></view>
-          </view>
-          
-          <!-- 内容层 -->
-          <view class="postcard-content">
-            <!-- 顶部标题区 -->
-            <view class="postcard-header">
-              <text class="postcard-title">{{todayCard.keyword}}</text>
-            </view>
-            
-            <!-- 主文案区 -->
-            <view class="postcard-body">
-              <view class="main-quote">
-                <text class="quote-text">{{todayCard.quote}}</text>
-              </view>
-              <view class="english-ribbon" wx:if="{{todayCard.english}}">
-                <text class="english-text">{{todayCard.english}}</text>
-              </view>
-            </view>
-            
-            <!-- 推荐内容区 -->
-            <view class="postcard-recommendations" wx:if="{{todayCard.hasRecommendations}}">
-              <view class="recommendations-title">
-                <text class="rec-title-text">✨ 今日推荐</text>
-              </view>
-              
-              <!-- 音乐推荐 -->
-              <view class="recommendation-item" wx:if="{{todayCard.music}}">
-                <text class="rec-icon">🎵</text>
-                <view class="rec-content">
-                  <text class="rec-name">{{todayCard.music.title}}</text>
-                  <text class="rec-author" wx:if="{{todayCard.music.artist}}">{{todayCard.music.artist}}</text>
-                </view>
-              </view>
-              
-              <!-- 书籍推荐 -->
-              <view class="recommendation-item" wx:if="{{todayCard.book}}">
-                <text class="rec-icon">📚</text>
-                <view class="rec-content">
-                  <text class="rec-name">{{todayCard.book.title}}</text>
-                  <text class="rec-author" wx:if="{{todayCard.book.author}}">{{todayCard.book.author}}</text>
-                </view>
-              </view>
-              
-              <!-- 电影推荐 -->
-              <view class="recommendation-item" wx:if="{{todayCard.movie}}">
-                <text class="rec-icon">🎬</text>
-                <view class="rec-content">
-                  <text class="rec-name">{{todayCard.movie.title}}</text>
-                  <text class="rec-author" wx:if="{{todayCard.movie.director}}">{{todayCard.movie.director}}</text>
-                </view>
-              </view>
-            </view>
-            
-            <!-- 底部装饰区 -->
-            <view class="postcard-footer">
-              <view class="signature">
-                <text class="signature-text">— 情绪罗盘</text>
-              </view>
-            </view>
-          </view>
-
-        </view>
+  <!-- 降级显示区域：传统卡片 -->
+  <view class="fallback-card-area" wx:elif="{{hasUserInfo && todayCard && !todayCard.structured_data}}">
+    <view class="beautiful-postcard {{todayCard.layout_mode}}">
+      <!-- 背景图层 -->
+      <view class="postcard-background">
+        <image 
+          class="background-image" 
+          src="{{todayCard.image || todayCard.card_image}}" 
+          mode="aspectFill"
+          lazy-load="true"
+        ></image>
+        <view class="background-overlay"></view>
       </view>
       
-      <!-- 传统卡片布局（降级方案） -->
-      <view class="traditional-card" wx:else>
-        <!-- 正面 -->
-        <view class="card-front">
-          <view class="card-date">{{todayCard.date}}</view>
-          <view class="card-keyword">{{todayCard.keyword}}</view>
-          <view class="card-quote">{{todayCard.quote}}</view>
-          <view class="card-english">{{todayCard.english}}</view>
+      <!-- 内容层 -->
+      <view class="postcard-content">
+        <!-- 顶部标题区 -->
+        <view class="postcard-header">
+          <text class="postcard-title">{{todayCard.keyword}}</text>
+        </view>
         
-        <view class="card-recommendations">
-          <view class="rec-item" wx:if="{{todayCard.music}}" bindtap="playMusic" data-url="{{todayCard.music.url}}">
-            <text class="rec-icon">🎵</text>
-            <text class="rec-text">{{todayCard.music.title}}</text>
+        <!-- 主文案区 -->
+        <view class="postcard-body">
+          <view class="main-quote">
+            <text class="quote-text">{{todayCard.quote}}</text>
           </view>
-          
-          <view class="rec-item" wx:if="{{todayCard.movie}}">
-            <text class="rec-icon">🎬</text>
-            <text class="rec-text">{{todayCard.movie}}</text>
-          </view>
-          
-          <view class="rec-item" wx:if="{{todayCard.book}}">
-            <text class="rec-icon">📚</text>
-            <text class="rec-text">{{todayCard.book}}</text>
+          <view class="english-ribbon" wx:if="{{todayCard.english}}">
+            <text class="english-text">{{todayCard.english}}</text>
           </view>
         </view>
         
-        <view class="flip-hint">
-          <text class="hint-icon">🔍</text>
-          <text class="hint-text">轻触揭秘</text>
-        </view>
-      </view>
-      
-      <!-- 背面 -->
-      <view class="card-back">
-        <view class="back-title">创作灵感</view>
-        <view class="inspiration-list">
-          <view class="inspiration-item" wx:for="{{todayCard.inspirations}}" wx:key="*this">
-            <text class="ins-icon">{{item.icon}}</text>
-            <text class="ins-text">{{item.text}}</text>
+        <!-- 底部装饰区 -->
+        <view class="postcard-footer">
+          <view class="signature">
+            <text class="signature-text">— 心象签</text>
           </view>
         </view>
-        <view class="back-footer">
-          <text class="compass-signature">—— 情绪罗盘</text>
-        </view>
-      </view>
       </view>
     </view>
+  </view>
     
-    <!-- 情绪墨迹区域 -->
-    <view class="emotion-ink" wx:if="{{!todayCard || needEmotionInput}}">
+
+    <!-- 心象画笔区域 -->
+    <view class="emotion-ink" wx:if="{{hasUserInfo && (!todayCard || needEmotionInput)}}">
       <view class="ink-title">
-        <text class="title-main">今日情绪墨迹</text>
-        <text class="title-sub">用你的直觉，在屏幕上画下此刻的感受</text>
+        <text class="title-main">心象画笔</text>
+        <text class="title-sub">用直觉绘出内心的自然意象，让AI感知你的心境</text>
       </view>
       
       <canvas 
@@ -206,20 +112,23 @@
       
       <view class="ink-actions">
         <button class="ink-btn clear" bindtap="clearInk">清空</button>
+        <!-- 🔮 心境速测触发按钮 -->
+        <button class="ink-btn quiz" bindtap="startQuiz" wx:if="{{!quizCompleted && quizAnswers.length === 0}}">
+          🔮 心境速测
+        </button>
         <button class="ink-btn generate {{isGenerating ? 'loading' : ''}} {{!environmentReady ? 'waiting' : ''}}" bindtap="generateDailyCard" disabled="{{isGenerating || !environmentReady}}">
-          <text wx:if="{{!environmentReady && !isGenerating}}">🌍 获取环境信息中...</text>
-          <text wx:elif="{{!isGenerating}}">✨ 生成卡片</text>
-          <text wx:else>🌟 AI感知中</text>
+          <text wx:if="{{!environmentReady && !isGenerating}}">🌍 感知时空背景中...</text>
+          <text wx:elif="{{!isGenerating}}">✨ 生成心象签</text>
+          <text wx:else>🔮 AI感知自然意象中</text>
         </button>
       </view>
     </view>
-  </view>
   
-  <!-- 记忆回廊 -->
+  <!-- 心象回廊 -->
   <view class="memory-gallery" wx:if="{{hasUserInfo && userCards.length > 0}}">
     <view class="gallery-header">
-      <text class="gallery-title">记忆回廊</text>
-      <text class="gallery-count">{{userCards.length}} 张回忆</text>
+      <text class="gallery-title">心象回廊</text>
+      <text class="gallery-count">{{userCards.length}} 张心象签</text>
     </view>
     
     <scroll-view class="gallery-scroll" scroll-x>
@@ -259,8 +168,8 @@
         <view class="compass-needle inactive"></view>
       </view>
     </view>
-    <text class="empty-title">今天还没有创建卡片</text>
-    <text class="empty-subtitle">通过情绪墨迹，让我感知你的今天</text>
+    <text class="empty-title">今天还没有创建心象签</text>
+    <text class="empty-subtitle">通过心象画笔，让AI感知你内心的自然意象</text>
   </view>
 
   <!-- 加载状态 -->
@@ -274,15 +183,67 @@
     <view class="loading-steps">
       <view class="step {{currentStep >= 1 ? 'active' : ''}}">
         <text class="step-icon">🌍</text>
-        <text class="step-text">感知环境</text>
+        <text class="step-text">感知时空</text>
       </view>
       <view class="step {{currentStep >= 2 ? 'active' : ''}}">
         <text class="step-icon">🎨</text>
-        <text class="step-text">创意构思</text>
+        <text class="step-text">映射意象</text>
       </view>
       <view class="step {{currentStep >= 3 ? 'active' : ''}}">
         <text class="step-icon">✨</text>
-        <text class="step-text">魔法生成</text>
+        <text class="step-text">生成心象签</text>
+      </view>
+    </view>
+  </view>
+  
+  <!-- 🔮 心境速测弹窗 -->
+  <view class="quiz-modal-overlay" wx:if="{{showQuizModal}}" catchtap="closeQuizModal">
+    <view class="quiz-modal" catchtap="stopPropagation">
+      <!-- 弹窗头部 -->
+      <view class="quiz-header">
+        <view class="quiz-title">🔮 心境速测</view>
+        <view class="quiz-progress">
+          <text class="progress-text">{{currentQuestionIndex + 1}} / {{quizQuestions.length}}</text>
+          <view class="progress-bar">
+            <view class="progress-fill" style="width: {{(currentQuestionIndex + 1) / quizQuestions.length * 100}}%"></view>
+          </view>
+        </view>
+        <button class="quiz-close" bindtap="closeQuizModal">×</button>
+      </view>
+      
+      <!-- 问题内容 -->
+      <view class="quiz-content" wx:if="{{quizQuestions.length > 0 && currentQuestionIndex < quizQuestions.length}}">
+        <view class="question-container">
+          <view class="question-text">{{quizQuestions[currentQuestionIndex].question}}</view>
+          
+          <!-- 选项列表 -->
+          <view class="options-container">
+            <view 
+              class="option-item" 
+              wx:for="{{quizQuestions[currentQuestionIndex].options}}" 
+              wx:key="id"
+              bindtap="selectQuizAnswer"
+              data-question-id="{{quizQuestions[currentQuestionIndex].id}}"
+              data-option-id="{{item.id}}"
+              data-option-label="{{item.label}}"
+            >
+              <view class="option-label">{{item.label}}</view>
+              <view class="option-icon">→</view>
+            </view>
+          </view>
+        </view>
+      </view>
+      
+      <!-- 完成状态 -->
+      <view class="quiz-complete" wx:if="{{quizCompleted}}">
+        <view class="complete-icon">✨</view>
+        <view class="complete-text">心境速测完成</view>
+        <view class="complete-subtitle">AI将更好地理解你的当下状态</view>
+      </view>
+      
+      <!-- 底部操作 -->
+      <view class="quiz-footer">
+        <button class="quiz-skip-btn" bindtap="skipQuiz" wx:if="{{!quizCompleted}}">跳过测试</button>
       </view>
     </view>
   </view>

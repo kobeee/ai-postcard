@@ -1,845 +1,1326 @@
+// structured-postcard.js - 🔮 心象签组件（拷贝自首页挂件）
+const { resourceCache } = require('../../utils/resource-cache.js');
+
 Component({
   /**
-   * 结构化明信片组件 - 基于结构化数据的固定模板
+   * 组件配置选项 - 避免样式冲突
+   */
+  options: {
+    addGlobalClass: false,  // 禁用全局样式类，避免页面样式冲突
+    styleIsolation: 'isolated'  // 完全隔离样式，避免外部样式侵入
+  },
+
+  /**
+   * 组件的属性列表
    */
   properties: {
-    // 结构化数据
+    // 心象签数据（支持新的扁平化结构）
     structuredData: {
       type: Object,
       value: {},
+      observer: 'onStructuredDataChange'
     },
-
-    // 🔧 分别传递的字段，作为备用数据源
-    cardMood: {
-      type: Object,
-      value: null,
-    },
-    cardTitle: {
+    // 挂件类型ID (如 'bagua-jinnang', 'lianhua-yuanpai' 等)
+    charmType: {
       type: String,
-      value: "",
+      value: 'lianhua-yuanpai',
+      observer: 'onCharmTypeChange'
     },
-    cardVisual: {
-      type: Object,
-      value: null,
-    },
-    cardContent: {
-      type: Object,
-      value: null,
-    },
-    cardContext: {
-      type: Object,
-      value: null,
-    },
-    cardRecommendations: {
-      type: Object,
-      value: null,
-    },
-    // 背景图片URL（Gemini生成）
+    // 背景图片URL
     backgroundImage: {
       type: String,
-      value: "",
-    },
-    // 兜底英文（当 structuredData 未提供 quote/english 时由父组件传入）
-    fallbackEnglish: {
-      type: String,
-      value: "",
+      value: ''
     },
     // 是否显示动画
     showAnimation: {
       type: Boolean,
-      value: true,
+      value: true
     },
-    // 卡片尺寸模式
+    // 尺寸模式 (small, standard, large)
     sizeMode: {
       type: String,
-      value: "standard", // standard, compact, large
+      value: 'standard'
+    }
+  },
+
+  /**
+   * 组件的初始数据
+   */
+  data: {
+    // 翻面状态
+    isFlipped: false,
+    // 当前charm配置
+    charmConfig: null,
+    // 动画数据
+    animationData: {},
+    // 是否正在动画中
+    isAnimating: false,
+    // 挂件图片路径
+    charmImagePath: '',
+    // 背景光圈样式
+    glowStyle: '',
+    // 标题样式
+    titleStyle: '',
+    // 副标题样式
+    subtitleStyle: '',
+    // 解签笺动画状态
+    showInterpretation: false,
+    // 动态颜色
+    charmMainColor: '#8B7355',
+    charmAccentColor: '#D4AF37',
+    // 正面签名拆分字符，避免依赖writing-mode
+    charmNameChars: [],
+    // 解签内容拆分字符，确保竖排显示
+    insightChars: [],
+    impressionChars: [],
+    // 统一竖排数据预处理结果
+    verticalData: {
+      hexagramNameChars: [],
+      strokeImpressionChars: [],
+      dailyGuidesColumns: [],
+      blessingStreamChars: [],
+      extrasReflectionsChars: [],
+      extrasMicroActionsChars: [],
+      extrasGratitudeChars: [],
+      extrasMoodTipsChars: [],
+      extrasLifeInsightsChars: [],
+      extrasCreativeSparkChars: [],
+      extrasMindfulnessChars: [],
+      extrasFutureVisionChars: [],
+      oracleAffirmationChars: [],
+      culturalNoteChars: [],
+      fengShuiFocusChars: [],
+      ritualHintChars: [],
+      seasonTimeChars: [],
+      elementBalanceData: [],
+      symbolicKeywordsChars: []
     },
   },
 
-  data: {
-    // 动态样式
-    dynamicCardStyle: "",
-    dynamicContentStyle: "",
-    containerStyle: "",
-
-    // 动画状态
-    animationData: {},
-    isAnimating: false,
-
-    // 翻转状态
-    isFlipped: false,
-    isFlipping: false,
-
-    // 推荐内容展开状态
-    recommendationsExpanded: false,
-    // 预处理动画显示状态
-    showGradientAnimation: false,
-    // 规范化后的推荐首项
-    recMusic: null,
-    recBook: null,
-    recMovie: null,
-    hasMusic: false,
-    hasBook: false,
-    hasMovie: false,
-    // 引用/英文规范化
-    hasQuote: false,
-    quoteText: "",
-    quoteAuthor: "",
-    quoteTranslation: "",
-    // 背面扩展内容（当后端未返回 extras 时，本地兜底）
-    extras: null,
-    // 真机可展示的背景本地路径
-    displayBackgroundImage: '',
-  },
-
+  /**
+   * 组件生命周期
+   */
   lifetimes: {
     attached() {
-      this.initCard()
-      this.prepareBackgroundImage()
+      this.loadCharmConfig();
+      this.setupStyles();
     },
-
+    
     ready() {
-      this.setupAnimations()
-      this.normalizeExtras()
-    },
-  },
-
-  observers: {
-    structuredData: function (newData) {
-      if (newData && Object.keys(newData).length > 0) {
-        this.updateDynamicStyles(newData)
-        this.normalizeRecommendations(newData)
-        this.normalizeQuote(newData)
-        this.updateAnimationStates(newData)
-        this.normalizeExtras(newData)
+      // 初始化动态样式和数据预处理
+      if (this.data.structuredData && Object.keys(this.data.structuredData).length > 0) {
+        // 🔧 只调用 updateDynamicStyles，它会内部处理 charm_name
+        this.updateDynamicStyles(this.data.structuredData);
+        this.updateInterpretationChars(this.data.structuredData);
+        // 统一竖排数据预处理
+        this._preprocessVerticalData(this.data.structuredData);
       }
-    },
+      this.triggerEntryAnimation();
+    }
   },
 
+  /**
+   * 组件方法
+   */
   methods: {
     /**
-     * 预处理背景图：
-     * - http/https：直接使用；
-     * - 其他协议（data/base64 或不支持）/或强制本地化：downloadFile 到本地 temp，再赋给 displayBackgroundImage
+     * 🔮 加载挂件配置（支持缓存的远程资源）
      */
-    async prepareBackgroundImage() {
+    async loadCharmConfig() {
       try {
-        const { backgroundImage } = this.data
-        if (!backgroundImage) return
-        // 如果是真机不显示，多半是 http 非 https 或域名未在白名单。
-        const isHttp = /^https?:\/\//i.test(backgroundImage)
-        if (isHttp) {
-          // 直接显示远程图（需确保域名在downloadFile和image安全域名）
-          this.setData({ displayBackgroundImage: backgroundImage })
-          return
-        }
-        // 其他情况尝试下载到本地（若为 wxfile 已本地则直接用）
-        if (/^wxfile:\/\//i.test(backgroundImage)) {
-          this.setData({ displayBackgroundImage: backgroundImage })
-          return
-        }
-        const dl = await new Promise((resolve, reject) => {
-          wx.downloadFile({ url: backgroundImage, success: resolve, fail: reject })
-        })
-        if (dl && dl.tempFilePath) {
-          this.setData({ displayBackgroundImage: dl.tempFilePath })
-        }
-      } catch (e) {
-        console.warn('背景图预处理失败，继续使用原链接:', e)
-        // 兜底：继续使用原链接，可能仍能在开发者工具显示
-        this.setData({ displayBackgroundImage: this.data.backgroundImage })
-      }
-    },
-    /**
-     * 初始化卡片
-     */
-    initCard() {
-      const { structuredData } = this.data
-      if (structuredData && Object.keys(structuredData).length > 0) {
-        this.updateDynamicStyles()
-        this.setupAnimations()
-        this.normalizeExtras()
-      }
-    },
-
-    /**
-     * 更新动态样式 - 适配新的5层架构
-     */
-    updateDynamicStyles(data) {
-      // 使用传入的数据或组件的数据
-      const structuredData = data || this.data.structuredData
-      const { sizeMode } = this.data
-
-      if (!structuredData || !structuredData.visual) {
-        return
-      }
-
-      const styleHints = structuredData.visual.style_hints || {}
-      const mood = structuredData.mood || {}
-
-      // 基础尺寸
-      const sizeConfig = {
-        standard: { width: "690rpx", height: "1100rpx" },
-        compact: { width: "690rpx", height: "960rpx" },
-        large: { width: "750rpx", height: "1200rpx" },
-      }
-
-      const size = sizeConfig[sizeMode] || sizeConfig.standard
-
-      // 容器样式（第1层：card-scene）
-      const containerStyle = `width: ${size.width}; height: ${size.height};`
-
-      // 视觉外壳样式（第4层：postcard-shell）- 只负责视觉效果
-      let shellStyle = ""
-      
-      // 主题色彩边框
-      if (mood.color_theme) {
-        shellStyle += `border: 3rpx solid ${mood.color_theme};`
-      }
-
-      // 渐变背景叠加
-      if (styleHints.color_scheme && Array.isArray(styleHints.color_scheme)) {
-        const [color1, color2] = styleHints.color_scheme
-        shellStyle += `background: linear-gradient(135deg, ${color1}20, ${color2}20);`
-      }
-
-      // 内容层样式（第5层：postcard-content）- 负责内容布局
-      let contentStyle = ""
-      if (styleHints.layout_style === "minimal") {
-        contentStyle = "padding: 35rpx 25rpx;"
-      } else if (styleHints.layout_style === "rich") {
-        contentStyle = "padding: 40rpx 30rpx;"
-      } else if (styleHints.layout_style === "artistic") {
-        contentStyle = "padding: 45rpx 35rpx; text-align: center;"
-      } else {
-        // 默认紧凑布局
-        contentStyle = "padding: 30rpx 25rpx;"
-      }
-
-      this.setData({
-        containerStyle,           // 用于 card-scene
-        dynamicCardStyle: shellStyle,  // 用于 postcard-shell
-        dynamicContentStyle: contentStyle, // 用于 postcard-content
-      })
-    },
-
-    /**
-     * 规范化推荐数据，兼容对象/数组
-     */
-    normalizeRecommendations(data) {
-      try {
-        const rec = (data && data.recommendations) || {}
-        const pickFirst = (value) => {
-          if (!value) return null
-          return Array.isArray(value) ? value[0] || null : value
-        }
-        const recMusic = pickFirst(rec.music)
-        const recBook = pickFirst(rec.book)
-        const recMovie = pickFirst(rec.movie)
-        this.setData({
-          recMusic,
-          recBook,
-          recMovie,
-          hasMusic: !!(recMusic && recMusic.title),
-          hasBook: !!(recBook && recBook.title),
-          hasMovie: !!(recMovie && recMovie.title),
-        })
-      } catch (e) {
-        // ignore
-      }
-    },
-
-    /**
-     * 规范化引用/英文字段
-     */
-    normalizeQuote(data) {
-      try {
-        const content = (data && data.content) || {}
-        let text = ""
-        let author = ""
-        let translation = ""
-        // 1) 标准结构
-        if (content.quote) {
-          if (typeof content.quote === "string") {
-            text = content.quote
+        // 获取当前挂件类型对应的配置
+        const charmConfig = await this.getCharmConfigById(this.data.charmType);
+        
+        if (charmConfig) {
+          
+          // 🔮 构建资源URL并获取缓存路径
+          let originalUrl = '';
+          if (charmConfig.imageUrl) {
+            // 已有完整URL，直接使用
+            originalUrl = charmConfig.imageUrl;
+          } else if (charmConfig.image && this.isBuiltinConfig(charmConfig)) {
+            // 内置配置需要构建完整URL
+            originalUrl = this.buildImageUrl(charmConfig.image);
+          } else if (charmConfig.image) {
+            // 其他情况直接使用image字段
+            originalUrl = charmConfig.image;
+          }
+          
+          // 通过缓存管理器获取资源（自动下载并缓存）
+          if (originalUrl) {
+            try {
+              const cachedImagePath = await resourceCache.getCachedResourceUrl(originalUrl);
+              
+              this.setData({
+                charmConfig: charmConfig,
+                charmImagePath: cachedImagePath
+              });
+              this.setupDynamicStyles();
+              
+            } catch (error) {
+              console.warn('资源缓存获取失败，使用默认形状:', error);
+              this.setData({
+                charmConfig: charmConfig,
+                charmImagePath: '' // 清空路径，使用默认形状
+              });
+              this.setupDynamicStyles();
+            }
           } else {
-            text = content.quote.text || ""
-            author = content.quote.author || ""
-            translation = content.quote.translation || ""
-          }
-        }
-        // 2) 兼容 content.english 为字符串
-        if (!text && typeof content.english === "string") {
-          text = content.english
-        }
-        // 3) 兼容根级 english
-        if (!text && data.english) {
-          if (typeof data.english === "string") text = data.english
-          else text = data.english.text || ""
-        }
-        // 4) 父组件传入的兜底英文
-        if (!text && this.data.fallbackEnglish) {
-          text = this.data.fallbackEnglish
-        }
-        this.setData({
-          hasQuote: !!text,
-          quoteText: text,
-          quoteAuthor: author,
-          quoteTranslation: translation,
-        })
-      } catch (e) {
-        // ignore
-      }
-    },
-
-    /**
-     * 兜底生成背面扩展内容（extras），避免背面与推荐内容重复且过于单调
-     */
-    normalizeExtras(raw) {
-      try {
-        const data = raw || this.data.structuredData || {}
-        if (data.extras && Object.keys(data.extras).length > 0) {
-          this.setData({ extras: data.extras })
-          return
-        }
-
-        const content = data.content || {}
-        const mood = data.mood || {}
-
-        const reflections = []
-        if (content.sub_text && typeof content.sub_text === "string") {
-          reflections.push(content.sub_text.slice(0, 14))
-        } else if (content.main_text) {
-          reflections.push(String(content.main_text).slice(0, 14))
-        }
-
-        const gratitude = []
-        if (content.hot_topics) {
-          const ht = content.hot_topics
-          const pick = [ht.xiaohongshu, ht.douyin].filter(Boolean)[0]
-          if (pick) gratitude.push(String(pick).slice(0, 12))
-        }
-        if (gratitude.length === 0 && mood.primary) {
-          gratitude.push(`感谢当下的${mood.primary}`.slice(0, 12))
-        }
-
-        const microActions = []
-        microActions.push("深呼吸3次")
-        microActions.push("步行10分钟")
-
-        const moodTips = []
-        if (this.data.quoteTranslation) {
-          moodTips.push(String(this.data.quoteTranslation).slice(0, 14))
-        } else if (this.data.quoteText) {
-          moodTips.push(String(this.data.quoteText).slice(0, 16))
-        } else if (mood.primary) {
-          moodTips.push(`${mood.primary}的好方式：写下一句`.slice(0, 16))
-        }
-
-        const extras = {
-          reflections,
-          gratitude,
-          micro_actions: microActions,
-          mood_tips: moodTips,
-        }
-        this.setData({ extras })
-      } catch (e) {
-        // ignore
-      }
-    },
-
-    /**
-     * 设置动画效果
-     */
-    setupAnimations() {
-      const { structuredData, showAnimation } = this.data
-
-      if (!showAnimation || !structuredData || !structuredData.visual) {
-        return
-      }
-
-      const animationType = structuredData.visual.style_hints?.animation_type || "float"
-
-      const animation = wx.createAnimation({
-        duration: 3000,
-        timingFunction: "cubic-bezier(0.25, 0.46, 0.45, 0.94)",
-        delay: 0,
-      })
-
-      switch (animationType) {
-        case "float":
-          this.startFloatAnimation(animation)
-          break
-        case "pulse":
-          this.startPulseAnimation(animation)
-          break
-        case "gradient":
-          this.startGradientAnimation()
-          break
-        default:
-          this.startFloatAnimation(animation)
-      }
-    },
-
-    /**
-     * 浮动动画
-     */
-    startFloatAnimation(animation) {
-      const animate = () => {
-        animation.translateY(-6).step({ duration: 2500 })
-        animation.translateY(0).step({ duration: 2500 })
-
-        this.setData({
-          animationData: animation.export(),
-          isAnimating: true,
-        })
-
-        setTimeout(() => {
-          if (this.data.showAnimation) {
-            animate()
-          }
-        }, 5000)
-      }
-
-      animate()
-    },
-
-    /**
-     * 脉冲动画
-     */
-    startPulseAnimation(animation) {
-      const animate = () => {
-        animation.scale(1.02).step({ duration: 1500 })
-        animation.scale(1).step({ duration: 1500 })
-
-        this.setData({
-          animationData: animation.export(),
-          isAnimating: true,
-        })
-
-        setTimeout(() => {
-          if (this.data.showAnimation) {
-            animate()
-          }
-        }, 3000)
-      }
-
-      animate()
-    },
-
-    /**
-     * 渐变动画（通过样式变化实现）
-     */
-    startGradientAnimation() {
-      // 渐变动画通过CSS实现，这里只是触发状态
-      this.setData({
-        isAnimating: true,
-      })
-    },
-
-    /**
-     * 切换推荐内容展开状态
-     */
-    toggleRecommendations(e) {
-      e && e.stopPropagation && e.stopPropagation()
-
-      // 添加触觉反馈
-      wx.vibrateShort &&
-        wx.vibrateShort({
-          type: "light",
-        })
-
-      const newState = !this.data.recommendationsExpanded
-      this.setData({
-        recommendationsExpanded: newState,
-      })
-
-      // 显示状态提示
-      wx.showToast({
-        title: newState ? "展开推荐" : "收起推荐",
-        icon: "none",
-        duration: 800,
-      })
-    },
-
-    /**
-     * 处理卡片点击
-     */
-    onCardTap() {
-      if (this.data.isFlipping) {
-        return
-      }
-
-      this.setData({ isFlipping: true })
-
-      // 添加触觉反馈
-      wx.vibrateShort &&
-        wx.vibrateShort({
-          type: "light",
-        })
-
-      // 翻转卡片
-      this.setData({
-        isFlipped: !this.data.isFlipped,
-      })
-
-      setTimeout(() => {
-        this.setData({ isFlipping: false })
-      }, 800) // 对应CSS动画0.8s
-
-      // 触发父组件事件
-      this.triggerEvent("cardtap", {
-        structuredData: this.data.structuredData,
-        isFlipped: this.data.isFlipped,
-      })
-
-      wx.showToast({
-        title: this.data.isFlipped ? "查看详情" : "返回正面",
-        icon: "none",
-        duration: 1000,
-      })
-    },
-
-    /**
-     * 处理推荐项点击
-     */
-    onRecommendationTap(e) {
-      e.stopPropagation()
-
-      // 添加触觉反馈
-      wx.vibrateShort &&
-        wx.vibrateShort({
-          type: "light",
-        })
-
-      const { type, item } = e.currentTarget.dataset
-
-      // 触发推荐点击事件
-      this.triggerEvent("recommendationtap", {
-        type,
-        item,
-        structuredData: this.data.structuredData,
-      })
-    },
-
-    /**
-     * 分享卡片
-     */
-    shareCard(e) {
-      e && e.stopPropagation && e.stopPropagation()
-
-      // 添加触觉反馈
-      wx.vibrateShort &&
-        wx.vibrateShort({
-          type: "medium",
-        })
-
-      this.triggerEvent("share", {
-        structuredData: this.data.structuredData,
-      })
-    },
-
-    /**
-     * 更新动画状态（预处理复杂表达式）
-     */
-    updateAnimationStates(data) {
-      const showGradientAnimation = !!(
-        this.data.isAnimating &&
-        data.visual &&
-        data.visual.style_hints &&
-        data.visual.style_hints.animation_type === "gradient"
-      )
-
-      this.setData({ showGradientAnimation })
-    },
-
-    /**
-     * 获取格式化的情绪强度
-     */
-    getMoodIntensityStars(intensity) {
-      const stars = Math.min(Math.max(Math.floor(intensity / 2), 1), 5)
-      return "★".repeat(stars) + "☆".repeat(5 - stars)
-    },
-
-    /**
-     * 生成卡片截图 - 当前正面展开推荐状态
-     */
-    async generateScreenshot() {
-      try {
-        // 确保推荐内容展开以捕获完整卡片
-        const originalExpanded = this.data.recommendationsExpanded
-        if (!originalExpanded) {
-          this.setData({ recommendationsExpanded: true })
-          // 等待界面更新完成
-          await new Promise(resolve => setTimeout(resolve, 300))
-        }
-
-        // 使用微信小程序的 canvasToTempFilePath API 生成截图
-        const result = await new Promise((resolve, reject) => {
-          const query = wx.createSelectorQuery().in(this)
-          query.select('.card-scene').boundingClientRect()
-          query.exec((res) => {
-            if (!res[0]) {
-              reject(new Error('无法获取卡片元素'))
-              return
-            }
-
-            const rect = res[0]
-            
-            // 创建临时 canvas
-            const ctx = wx.createCanvasContext('screenshot-canvas', this)
-            
-            // 设置canvas尺寸
-            const pixelRatio = wx.getSystemInfoSync().pixelRatio || 2
-            const canvasWidth = rect.width * pixelRatio
-            const canvasHeight = rect.height * pixelRatio
-
-            // 由于小程序限制，我们无法直接截图DOM
-            // 使用 canvasToTempFilePath 需要先在 canvas 上绘制内容
-            // 这里使用替代方案：返回当前卡片的背景图片
-            
-            const { backgroundImage } = this.data
-            const { structuredData } = this.data
-            
-            if (backgroundImage) {
-              resolve(backgroundImage)
-            } else if (structuredData && structuredData.visual && structuredData.visual.background_image_url) {
-              resolve(structuredData.visual.background_image_url)
-            } else {
-              reject(new Error('无可用的卡片图片'))
-            }
-          })
-        })
-
-        // 恢复原始展开状态
-        if (!originalExpanded) {
-          this.setData({ recommendationsExpanded: originalExpanded })
-        }
-
-        return result
-      } catch (error) {
-        console.error('生成卡片截图失败:', error)
-        throw error
-      }
-    },
-
-    /**
-     * 高级DOM截图方案 - 使用Canvas绘制
-     */
-    async generateCanvasScreenshot() {
-      try {
-        const { structuredData, backgroundImage, isFlipped } = this.data
-        
-        if (!structuredData) {
-          throw new Error('缺少卡片数据')
-        }
-
-        // 确保显示正面且推荐展开
-        const originalFlipped = isFlipped
-        const originalExpanded = this.data.recommendationsExpanded
-        
-        if (originalFlipped) {
-          this.setData({ isFlipped: false })
-        }
-        if (!originalExpanded) {
-          this.setData({ recommendationsExpanded: true })
-        }
-        
-        // 等待界面更新
-        await new Promise(resolve => setTimeout(resolve, 500))
-
-        // 先处理异步的背景图片下载
-        let backgroundImagePath = null
-        if (backgroundImage) {
-          try {
-            console.log('开始下载Gemini背景图片:', backgroundImage)
-            const res = await new Promise((resolve, reject) => {
-              wx.downloadFile({
-                url: backgroundImage,
-                success: resolve,
-                fail: reject
-              })
-            })
-            backgroundImagePath = res.tempFilePath
-            console.log('Gemini背景图片下载成功:', backgroundImagePath)
-          } catch (error) {
-            console.warn('背景图片下载失败，跳过:', error)
+            this.setData({
+              charmConfig: charmConfig,
+              charmImagePath: ''
+            });
+            this.setupDynamicStyles();
           }
         } else {
-          console.log('没有backgroundImage，使用渐变背景')
+          console.warn('未找到挂件配置，使用默认配置');
+          this.useDefaultCharmConfig();
         }
-
-        return new Promise((resolve, reject) => {
-          const canvasId = 'screenshot-canvas'
-          const ctx = wx.createCanvasContext(canvasId, this)
-          
-          // Canvas尺寸 - 使用与卡片相同的比例，避免白边
-          // 参照 .card-scene 的尺寸：690rpx × 1100rpx
-          const canvasWidth = 345 // 690rpx / 2 (转换为逻辑像素)
-          const canvasHeight = 550 // 1100rpx / 2
-          
-          // 1. 首先绘制Gemini背景图片（如果有的话）
-          if (backgroundImagePath) {
-            console.log('在Canvas中绘制Gemini背景图片:', backgroundImagePath)
-            // 绘制Gemini生成的背景图片，填满整个Canvas
-            ctx.drawImage(backgroundImagePath, 0, 0, canvasWidth, canvasHeight)
-            
-            // 在背景图片上添加轻微的渐变遮罩以确保文字可读
-            const overlayGradient = ctx.createLinearGradient(0, 0, 0, canvasHeight)
-            overlayGradient.addColorStop(0, 'rgba(103, 126, 234, 0.2)')
-            overlayGradient.addColorStop(1, 'rgba(118, 75, 162, 0.3)')
-            ctx.fillStyle = overlayGradient
-            ctx.fillRect(0, 0, canvasWidth, canvasHeight)
-            console.log('Gemini背景图片和遮罩绘制完成')
-          } else {
-            console.log('使用渐变背景作为降级方案')
-            // 如果没有背景图片，使用渐变背景作为降级方案
-            const gradient = ctx.createLinearGradient(0, 0, 0, canvasHeight)
-            gradient.addColorStop(0, '#667eea')
-            gradient.addColorStop(1, '#764ba2')
-            ctx.fillStyle = gradient
-            ctx.fillRect(0, 0, canvasWidth, canvasHeight)
-          }
-          
-          // 2. 添加内容区域的半透明背景（提升文字可读性）
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.15)'
-          ctx.fillRect(20, 20, canvasWidth - 40, canvasHeight - 40)
-          
-          // 添加文字阴影效果以提升可读性
-          ctx.shadowColor = 'rgba(0, 0, 0, 0.8)'
-          ctx.shadowBlur = 4
-          ctx.shadowOffsetX = 1
-          ctx.shadowOffsetY = 1
-          
-          // 绘制卡片标题
-          const title = structuredData.title || structuredData.content?.main_text || '今日心情'
-          ctx.fillStyle = '#ffffff'
-          ctx.font = 'bold 24px sans-serif'
-          ctx.textAlign = 'center'
-          ctx.fillText(title, canvasWidth / 2, 80)
-          
-          // 绘制心情
-          const mood = structuredData.mood?.primary || 'calm'
-          ctx.font = '18px sans-serif'
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
-          ctx.fillText(`心情：${mood}`, canvasWidth / 2, 120)
-          
-          // 绘制位置信息
-          const location = structuredData.context?.location || '未知位置'
-          ctx.fillText(`位置：${location}`, canvasWidth / 2, 150)
-          
-          // 绘制推荐内容标题
-          ctx.font = 'bold 20px sans-serif'
-          ctx.fillStyle = '#ffffff'
-          ctx.textAlign = 'center'
-          ctx.fillText('今日推荐', canvasWidth / 2, 200)
-          
-          // 为推荐内容创建半透明背景区域
-          ctx.shadowColor = 'transparent' // 暂时关闭阴影
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.1)'
-          ctx.fillRect(30, 220, canvasWidth - 60, 120)
-          
-          // 恢复阴影设置
-          ctx.shadowColor = 'rgba(0, 0, 0, 0.8)'
-          ctx.shadowBlur = 3
-          ctx.shadowOffsetX = 1
-          ctx.shadowOffsetY = 1
-          
-          // 绘制音乐推荐
-          const music = this.data.recMusic
-          if (music && music.title) {
-            ctx.font = '16px sans-serif'
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
-            ctx.textAlign = 'left'
-            ctx.fillText(`🎵 ${music.title}`, 40, 240)
-            if (music.artist) {
-              ctx.font = '14px sans-serif'
-              ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'
-              ctx.fillText(`   by ${music.artist}`, 40, 260)
-            }
-          }
-          
-          // 绘制书籍推荐
-          const book = this.data.recBook
-          if (book && book.title) {
-            ctx.font = '16px sans-serif'
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
-            ctx.fillText(`📚 ${book.title}`, 40, 290)
-            if (book.author) {
-              ctx.font = '14px sans-serif'
-              ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'
-              ctx.fillText(`   by ${book.author}`, 40, 310)
-            }
-          }
-          
-          // 绘制电影推荐
-          const movie = this.data.recMovie
-          if (movie && movie.title) {
-            ctx.font = '16px sans-serif'
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
-            ctx.fillText(`🎬 ${movie.title}`, 40, 330)
-          }
-          
-          // 绘制英文引用（底部区域）
-          if (this.data.hasQuote && this.data.quoteText) {
-            // 为引用创建单独的背景区域
-            ctx.shadowColor = 'transparent'
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)'
-            ctx.fillRect(20, 380, canvasWidth - 40, 80)
-            
-            // 恢复阴影
-            ctx.shadowColor = 'rgba(0, 0, 0, 0.8)'
-            ctx.shadowBlur = 2
-            
-            ctx.font = 'italic 14px serif'
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
-            ctx.textAlign = 'center'
-            
-            // 处理长文本换行
-            const quoteText = this.data.quoteText
-            if (quoteText.length > 40) {
-              const firstLine = quoteText.substring(0, 40)
-              const secondLine = quoteText.substring(40)
-              ctx.fillText(`"${firstLine}"`, canvasWidth / 2, 410)
-              ctx.fillText(`"${secondLine}"`, canvasWidth / 2, 430)
-            } else {
-              ctx.fillText(`"${quoteText}"`, canvasWidth / 2, 420)
-            }
-            
-            if (this.data.quoteTranslation) {
-              ctx.font = '12px sans-serif'
-              ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'
-              ctx.fillText(`"${this.data.quoteTranslation}"`, canvasWidth / 2, 450)
-            }
-          }
-          
-          // 绘制完成，导出图片
-          ctx.draw(false, () => {
-            wx.canvasToTempFilePath({
-              canvasId,
-              success: (res) => {
-                // 恢复原始状态
-                this.setData({ 
-                  isFlipped: originalFlipped,
-                  recommendationsExpanded: originalExpanded 
-                })
-                resolve(res.tempFilePath)
-              },
-              fail: (err) => {
-                // 恢复原始状态
-                this.setData({ 
-                  isFlipped: originalFlipped,
-                  recommendationsExpanded: originalExpanded 
-                })
-                reject(err)
-              }
-            }, this)
-          })
-        })
+        
       } catch (error) {
-        console.error('Canvas截图失败:', error)
-        throw error
+        console.error('加载挂件配置失败:', error);
+        this.useDefaultCharmConfig();
       }
     },
-  },
-})
+
+    /**
+     * 根据ID获取挂件配置
+     */
+    async getCharmConfigById(charmId) {
+      try {
+        // 🔮 优先从父组件的全局挂件配置中查找
+        const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : [];
+        const currentPage = pages.length > 0 ? pages[pages.length - 1] : null;
+        
+        if (currentPage && currentPage.data && currentPage.data.charmConfigs && currentPage.data.charmConfigs.length > 0) {
+          const config = currentPage.data.charmConfigs.find(config => config.id === charmId);
+          if (config) {
+            return config;
+          }
+        }
+        
+        // 回退到内置配置
+        const charmConfigs = this.getBuiltinCharmConfigs();
+        return charmConfigs.find(config => config.id === charmId);
+        
+      } catch (error) {
+        console.error('获取挂件配置失败:', error);
+        const charmConfigs = this.getBuiltinCharmConfigs();
+        return charmConfigs.find(config => config.id === charmId);
+      }
+    },
+
+    /**
+     * 获取内置挂件配置 - 完整的18种签体配置作为降级方案
+     */
+    getBuiltinCharmConfigs() {
+      return [
+        {
+          "id": "bagua-jinnang",
+          "name": "八角锦囊 (神秘守护)",
+          "image": "八角锦囊 (神秘守护).png",
+          "title": {
+            "type": "vertical",
+            "position": { "x": 512, "y": 520 },
+            "maxChars": 4,
+            "lineHeight": 72,
+            "fontSize": 68,
+            "fontWeight": 600
+          },
+          "subtitle": {
+            "visible": true,
+            "position": { "x": 512, "y": 660 },
+            "maxChars": 10,
+            "fontSize": 30,
+            "color": "#2E3A4A"
+          },
+          "glow": {
+            "shape": "octagon",
+            "radius": [380, 380],
+            "opacity": 0.4,
+            "blendMode": "screen"
+          },
+          "suggestedPalette": ["#5DA9E9", "#F2D7EE"],
+          "note": "八角造型较稳重，竖排签名置中效果最佳。"
+        },
+        {
+          "id": "liujiao-denglong",
+          "name": "六角灯笼面 (光明指引)",
+          "image": "六角灯笼面 (光明指引).png",
+          "title": {
+            "type": "vertical",
+            "position": { "x": 512, "y": 530 },
+            "maxChars": 4,
+            "lineHeight": 68,
+            "fontSize": 64,
+            "fontWeight": 600
+          },
+          "subtitle": {
+            "visible": true,
+            "position": { "x": 512, "y": 660 },
+            "maxChars": 10,
+            "fontSize": 28,
+            "color": "#2C3E50"
+          },
+          "glow": {
+            "shape": "hexagon",
+            "radius": [360, 360],
+            "opacity": 0.35,
+            "blendMode": "screen"
+          },
+          "suggestedPalette": ["#FFD166", "#F6E7CD"],
+          "note": "灯笼顶部空间收紧，适合竖排签名。"
+        },
+        {
+          "id": "juanzhou-huakuang",
+          "name": "卷轴画框 (徐徐展开)",
+          "image": "卷轴画框 (徐徐展开).png",
+          "title": {
+            "type": "horizontal",
+            "position": { "x": 512, "y": 520 },
+            "maxChars": 6,
+            "lineHeight": 56,
+            "fontSize": 56,
+            "fontWeight": 600
+          },
+          "subtitle": {
+            "visible": true,
+            "position": { "x": 512, "y": 600 },
+            "maxChars": 16,
+            "fontSize": 30,
+            "color": "#4A3728"
+          },
+          "glow": {
+            "shape": "rectangle",
+            "radius": [420, 320],
+            "opacity": 0.35,
+            "blendMode": "screen"
+          },
+          "suggestedPalette": ["#E9C46A", "#F4A261"],
+          "note": "卷轴横向空间充足，支持横排签名。"
+        },
+        {
+          "id": "shuangyu-jinnang",
+          "name": "双鱼锦囊 (年年有余)",
+          "image": "双鱼锦囊 (年年有余).png",
+          "title": {
+            "type": "vertical",
+            "position": { "x": 512, "y": 525 },
+            "maxChars": 4,
+            "lineHeight": 70,
+            "fontSize": 66,
+            "fontWeight": 600
+          },
+          "subtitle": {
+            "visible": true,
+            "position": { "x": 512, "y": 655 },
+            "maxChars": 10,
+            "fontSize": 28,
+            "color": "#274060"
+          },
+          "glow": {
+            "shape": "ellipse",
+            "radius": [360, 420],
+            "opacity": 0.42,
+            "blendMode": "screen"
+          },
+          "suggestedPalette": ["#94D1BE", "#F9C74F"],
+          "note": "双鱼造型优雅，适合竖排签名。"
+        },
+        {
+          "id": "siyue-jinjie",
+          "name": "四叶锦结 (幸运相伴)",
+          "image": "四叶锦结 (幸运相伴).png",
+          "title": {
+            "type": "vertical",
+            "position": { "x": 512, "y": 500 },
+            "maxChars": 4,
+            "lineHeight": 72,
+            "fontSize": 68,
+            "fontWeight": 600
+          },
+          "subtitle": {
+            "visible": false
+          },
+          "glow": {
+            "shape": "clover",
+            "radius": [360, 360],
+            "opacity": 0.4,
+            "blendMode": "screen"
+          },
+          "suggestedPalette": ["#52B788", "#D8F3DC"],
+          "note": "四叶形中心紧凑，建议只显示主签名。"
+        },
+        {
+          "id": "ruyi-jie",
+          "name": "如意结 (万事如意)",
+          "image": "如意结 (万事如意).png",
+          "title": {
+            "type": "vertical",
+            "position": { "x": 512, "y": 520 },
+            "maxChars": 4,
+            "lineHeight": 70,
+            "fontSize": 66,
+            "fontWeight": 600
+          },
+          "subtitle": {
+            "visible": true,
+            "position": { "x": 512, "y": 660 },
+            "maxChars": 10,
+            "fontSize": 28,
+            "color": "#432C7A"
+          },
+          "glow": {
+            "shape": "loop",
+            "radius": [360, 400],
+            "opacity": 0.4,
+            "blendMode": "screen"
+          },
+          "suggestedPalette": ["#7D5BA6", "#FFE5F1"],
+          "note": "如意结造型经典，适合竖排签名。"
+        },
+        {
+          "id": "fangsheng-jie",
+          "name": "方胜结 (同心永结)",
+          "image": "方胜结 (同心永结).png",
+          "title": {
+            "type": "vertical",
+            "position": { "x": 512, "y": 520 },
+            "maxChars": 4,
+            "lineHeight": 68,
+            "fontSize": 64,
+            "fontWeight": 600
+          },
+          "subtitle": {
+            "visible": false
+          },
+          "glow": {
+            "shape": "diamond",
+            "radius": [360, 360],
+            "opacity": 0.38,
+            "blendMode": "screen"
+          },
+          "suggestedPalette": ["#48B8D0", "#E8F6FD"],
+          "note": "菱形内部空间较小，适合竖排签名。"
+        },
+        {
+          "id": "zhuchi-changpai",
+          "name": "朱漆长牌 (言简意赅)",
+          "image": "朱漆长牌 (言简意赅).png",
+          "title": {
+            "type": "vertical",
+            "position": { "x": 512, "y": 540 },
+            "maxChars": 3,
+            "lineHeight": 80,
+            "fontSize": 70,
+            "fontWeight": 600
+          },
+          "subtitle": {
+            "visible": true,
+            "position": { "x": 512, "y": 700 },
+            "maxChars": 8,
+            "fontSize": 28,
+            "color": "#4F1D1D"
+          },
+          "glow": {
+            "shape": "rectangle",
+            "radius": [320, 440],
+            "opacity": 0.32,
+            "blendMode": "screen"
+          },
+          "suggestedPalette": ["#D62828", "#F77F00"],
+          "note": "牌身狭长，签名控制在3个字以内。"
+        },
+        {
+          "id": "haitang-muchuang",
+          "name": "海棠木窗 (古典窗格)",
+          "image": "海棠木窗 (古典窗格).png",
+          "title": {
+            "type": "vertical",
+            "position": { "x": 512, "y": 530 },
+            "maxChars": 4,
+            "lineHeight": 70,
+            "fontSize": 64,
+            "fontWeight": 600
+          },
+          "subtitle": {
+            "visible": true,
+            "position": { "x": 512, "y": 660 },
+            "maxChars": 12,
+            "fontSize": 30,
+            "color": "#362C2A"
+          },
+          "glow": {
+            "shape": "rounded-square",
+            "radius": [380, 380],
+            "opacity": 0.38,
+            "blendMode": "screen"
+          },
+          "suggestedPalette": ["#A47148", "#F4E6D4"],
+          "note": "窗格花纹细密，适合竖排签名。"
+        },
+        {
+          "id": "xiangyun-liucai",
+          "name": "祥云流彩 (梦幻意境)",
+          "image": "祥云流彩 (梦幻意境).png",
+          "title": {
+            "type": "horizontal",
+            "position": { "x": 512, "y": 540 },
+            "maxChars": 6,
+            "lineHeight": 54,
+            "fontSize": 52,
+            "fontWeight": 600
+          },
+          "subtitle": {
+            "visible": true,
+            "position": { "x": 512, "y": 620 },
+            "maxChars": 12,
+            "fontSize": 28,
+            "color": "#2B3A55"
+          },
+          "glow": {
+            "shape": "ellipse",
+            "radius": [420, 320],
+            "opacity": 0.4,
+            "blendMode": "screen"
+          },
+          "suggestedPalette": ["#5F0A87", "#B5A0FF"],
+          "note": "云纹延展，适合横排签名。"
+        },
+        {
+          "id": "xiangyun-hulu",
+          "name": "祥云葫芦 (福禄绵延)",
+          "image": "祥云葫芦 (福禄绵延).png",
+          "title": {
+            "type": "vertical",
+            "position": { "x": 512, "y": 560 },
+            "maxChars": 3,
+            "lineHeight": 78,
+            "fontSize": 70,
+            "fontWeight": 600
+          },
+          "subtitle": {
+            "visible": true,
+            "position": { "x": 512, "y": 700 },
+            "maxChars": 8,
+            "fontSize": 30,
+            "color": "#3E2723"
+          },
+          "glow": {
+            "shape": "gourd",
+            "radius": [320, 420],
+            "opacity": 0.36,
+            "blendMode": "screen"
+          },
+          "suggestedPalette": ["#FFB703", "#FB8500"],
+          "note": "葫芦造型独特，适合3字签名。"
+        },
+        {
+          "id": "zhujie-changtiao",
+          "name": "竹节长条 (虚心有节)",
+          "image": "竹节长条 (虚心有节).png",
+          "title": {
+            "type": "vertical",
+            "position": { "x": 512, "y": 540 },
+            "maxChars": 3,
+            "lineHeight": 78,
+            "fontSize": 68,
+            "fontWeight": 600
+          },
+          "subtitle": {
+            "visible": true,
+            "position": { "x": 512, "y": 700 },
+            "maxChars": 8,
+            "fontSize": 28,
+            "color": "#1B4332"
+          },
+          "glow": {
+            "shape": "rectangle",
+            "radius": [300, 440],
+            "opacity": 0.3,
+            "blendMode": "screen"
+          },
+          "suggestedPalette": ["#40916C", "#95D5B2"],
+          "note": "竹节笔直，适合3字签名。"
+        },
+        {
+          "id": "lianhua-yuanpai",
+          "name": "莲花圆牌 (平和雅致)",
+          "image": "莲花圆牌 (平和雅致).png",
+          "title": {
+            "type": "vertical",
+            "position": { "x": 512, "y": 520 },
+            "maxChars": 4,
+            "lineHeight": 72,
+            "fontSize": 68,
+            "fontWeight": 600
+          },
+          "subtitle": {
+            "visible": true,
+            "position": { "x": 512, "y": 645 },
+            "maxChars": 10,
+            "fontSize": 30,
+            "color": "#2F3E46"
+          },
+          "glow": {
+            "shape": "circle",
+            "radius": [380, 380],
+            "opacity": 0.38,
+            "blendMode": "screen"
+          },
+          "suggestedPalette": ["#6BC9B0", "#FFE5D9"],
+          "note": "圆牌留白充足，可保留副标题。"
+        },
+        {
+          "id": "jinbian-moyu",
+          "name": "金边墨玉璧 (沉稳庄重)",
+          "image": "金边墨玉璧 (沉稳庄重).png",
+          "title": {
+            "type": "vertical",
+            "position": { "x": 512, "y": 520 },
+            "maxChars": 3,
+            "lineHeight": 74,
+            "fontSize": 66,
+            "fontWeight": 600
+          },
+          "subtitle": {
+            "visible": true,
+            "position": { "x": 512, "y": 650 },
+            "maxChars": 8,
+            "fontSize": 28,
+            "color": "#1D3557"
+          },
+          "glow": {
+            "shape": "circle",
+            "radius": [360, 360],
+            "opacity": 0.32,
+            "blendMode": "screen"
+          },
+          "suggestedPalette": ["#264653", "#E9C46A"],
+          "note": "墨玉色调沉稳，适合3字签名。"
+        },
+        {
+          "id": "yinxing-ye",
+          "name": "银杏叶 (坚韧与永恒)",
+          "image": "银杏叶 (坚韧与永恒).png",
+          "title": {
+            "type": "horizontal",
+            "position": { "x": 512, "y": 520 },
+            "maxChars": 6,
+            "lineHeight": 52,
+            "fontSize": 52,
+            "fontWeight": 600
+          },
+          "subtitle": {
+            "visible": true,
+            "position": { "x": 512, "y": 600 },
+            "maxChars": 14,
+            "fontSize": 28,
+            "color": "#3F3B2C"
+          },
+          "glow": {
+            "shape": "leaf",
+            "radius": [460, 340],
+            "opacity": 0.36,
+            "blendMode": "screen"
+          },
+          "suggestedPalette": ["#E4CFA3", "#6D9773"],
+          "note": "银杏叶横幅较宽，适合横排签名。"
+        },
+        {
+          "id": "zhangming-suo",
+          "name": "长命锁 (富贵安康)",
+          "image": "长命锁 (富贵安康).png",
+          "title": {
+            "type": "vertical",
+            "position": { "x": 512, "y": 540 },
+            "maxChars": 3,
+            "lineHeight": 78,
+            "fontSize": 70,
+            "fontWeight": 600
+          },
+          "subtitle": {
+            "visible": true,
+            "position": { "x": 512, "y": 690 },
+            "maxChars": 10,
+            "fontSize": 28,
+            "color": "#623412"
+          },
+          "glow": {
+            "shape": "cloud",
+            "radius": [360, 360],
+            "opacity": 0.34,
+            "blendMode": "screen"
+          },
+          "suggestedPalette": ["#F4A261", "#FEF3C7"],
+          "note": "锁体呈祥云形，适合3字签名。"
+        },
+        {
+          "id": "qingyu-tuanshan",
+          "name": "青玉团扇 (清风徐来)",
+          "image": "青玉团扇 (清风徐来).png",
+          "title": {
+            "type": "horizontal",
+            "position": { "x": 512, "y": 530 },
+            "maxChars": 6,
+            "lineHeight": 52,
+            "fontSize": 52,
+            "fontWeight": 600
+          },
+          "subtitle": {
+            "visible": true,
+            "position": { "x": 512, "y": 610 },
+            "maxChars": 14,
+            "fontSize": 28,
+            "color": "#1E3A34"
+          },
+          "glow": {
+            "shape": "fan",
+            "radius": [420, 340],
+            "opacity": 0.34,
+            "blendMode": "screen"
+          },
+          "suggestedPalette": ["#6ABEA7", "#B7E4C7"],
+          "note": "团扇上半部较宽，适合横排签名。"
+        },
+        {
+          "id": "qinghua-cishan",
+          "name": "青花瓷扇 (文化底蕴)",
+          "image": "青花瓷扇 (文化底蕴).png",
+          "title": {
+            "type": "horizontal",
+            "position": { "x": 512, "y": 520 },
+            "maxChars": 6,
+            "lineHeight": 50,
+            "fontSize": 50,
+            "fontWeight": 600
+          },
+          "subtitle": {
+            "visible": true,
+            "position": { "x": 512, "y": 600 },
+            "maxChars": 14,
+            "fontSize": 28,
+            "color": "#1F3C88"
+          },
+          "glow": {
+            "shape": "fan",
+            "radius": [440, 340],
+            "opacity": 0.34,
+            "blendMode": "screen"
+          },
+          "suggestedPalette": ["#1F3C88", "#A8C5F0"],
+          "note": "青花纹路典雅，适合横排签名。"
+        }
+      ];
+    },
+
+    /**
+     * 判断是否为内置配置
+     */
+    isBuiltinConfig(config) {
+      const builtinIds = [
+        'bagua-jinnang', 'liujiao-denglong', 'juanzhou-huakuang', 'shuangyu-jinnang',
+        'siyue-jinjie', 'ruyi-jie', 'fangsheng-jie', 'zhuchi-changpai',
+        'haitang-muchuang', 'xiangyun-liucai', 'xiangyun-hulu', 'zhujie-changtiao',
+        'lianhua-yuanpai', 'jinbian-moyu', 'yinxing-ye', 'zhangming-suo',
+        'qingyu-tuanshan', 'qinghua-cishan'
+      ];
+      return builtinIds.includes(config.id);
+    },
+
+    /**
+     * 构建图片完整URL
+     */
+    buildImageUrl(imageName) {
+      // 尝试获取环境配置
+      try {
+        const envConfig = require('../../config/env.js');
+        const baseUrl = envConfig.AI_AGENT_PUBLIC_URL || 'http://localhost:8080';
+        return `${baseUrl}/resources/签体/${encodeURIComponent(imageName)}`;
+      } catch (error) {
+        console.warn('无法获取环境配置，使用默认URL构建:', error);
+        return `http://localhost:8080/resources/签体/${encodeURIComponent(imageName)}`;
+      }
+    },
+
+
+    /**
+     * 使用默认挂件配置
+     */
+    useDefaultCharmConfig() {
+      const defaultConfig = {
+        "id": "default",
+        "name": "默认圆形",
+        "image": "",
+        "title": {
+          "type": "horizontal",
+          "position": { "x": 512, "y": 420 },
+          "maxChars": 6,
+          "fontSize": 56,
+          "fontWeight": 500
+        },
+        "subtitle": {
+          "visible": true,
+          "position": { "x": 512, "y": 520 },
+          "maxChars": 10,
+          "fontSize": 28,
+          "color": "#2E3A4A"
+        },
+        "glow": {
+          "shape": "circle",
+          "radius": [350, 350],
+          "opacity": 0.35,
+          "blendMode": "multiply"
+        },
+        "suggestedPalette": ["#E8F4FD", "#B2BEC3"]
+      };
+      
+      this.setData({
+        charmConfig: defaultConfig,
+        charmImagePath: '' // 默认配置不使用图片
+      });
+      
+      this.setupDynamicStyles();
+    },
+
+    /**
+     * 设置基础样式
+     */
+    setupStyles() {
+      const sizeMap = {
+        small: { width: '200rpx', height: '200rpx' },
+        standard: { width: '350rpx', height: '350rpx' },
+        large: { width: '950rpx', height: '950rpx' }
+      };
+      
+      const size = sizeMap[this.data.sizeMode] || sizeMap.standard;
+      
+      // 基础容器样式 - 使用视窗单位
+      const containerStyle = `
+        width: ${size.width};
+        height: ${size.height};
+        ${size.maxWidth ? `max-width: ${size.maxWidth};` : ''}
+        ${size.maxHeight ? `max-height: ${size.maxHeight};` : ''}
+        ${size.minWidth ? `min-width: ${size.minWidth};` : ''}
+        ${size.minHeight ? `min-height: ${size.minHeight};` : ''}
+        perspective: 1000rpx;
+      `;
+      
+      this.setData({
+        containerStyle: containerStyle
+      });
+    },
+
+    /**
+     * 设置动态样式
+     */
+    setupDynamicStyles() {
+      const config = this.data.charmConfig;
+      if (!config) return;
+      
+      // 设置背景光圈样式
+      this.setupGlowStyle();
+      
+      // 设置标题样式
+      this.setupTitleStyle();
+      
+      // 设置副标题样式
+      this.setupSubtitleStyle();
+    },
+
+    /**
+     * 设置背景光圈样式
+     */
+    setupGlowStyle() {
+      const { charmConfig, backgroundImage } = this.data;
+      if (!charmConfig || !backgroundImage) return;
+      
+      const glow = charmConfig.glow;
+      const [radiusX, radiusY] = glow.radius;
+      
+      let clipPath = '';
+      switch (glow.shape) {
+        case 'circle':
+          clipPath = `circle(${radiusX / 2}rpx at center)`;
+          break;
+        case 'ellipse':
+          clipPath = `ellipse(${radiusX / 2}rpx ${radiusY / 2}rpx at center)`;
+          break;
+        case 'octagon':
+          clipPath = `polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%)`;
+          break;
+        default:
+          clipPath = `circle(${radiusX / 2}rpx at center)`;
+      }
+      
+      const glowStyle = `
+        background-image: url('${backgroundImage}');
+        background-size: cover;
+        background-position: center;
+        filter: blur(40rpx);
+        opacity: ${glow.opacity};
+        clip-path: ${clipPath};
+        mix-blend-mode: ${glow.blendMode};
+        width: ${radiusX * 1.2}rpx;
+        height: ${radiusY * 1.2}rpx;
+      `;
+      
+      this.setData({
+        glowStyle: glowStyle
+      });
+    },
+
+    /**
+     * 设置标题样式
+     */
+    setupTitleStyle() {
+      const { charmConfig } = this.data;
+      if (!charmConfig) return;
+      
+      const title = charmConfig.title;
+      
+      let titleStyle = `
+        font-size: ${title.fontSize}rpx;
+        font-weight: ${title.fontWeight};
+        color: ${title.color || '#1F2937'};
+      `;
+      
+      // 根据类型设置不同的排列方式
+      if (title.type === 'vertical') {
+        titleStyle += `
+          writing-mode: vertical-rl;
+          line-height: ${title.lineHeight || title.fontSize}rpx;
+        `;
+      } else if (title.type === 'arc') {
+        // 弧形文字需要特殊处理，这里先用普通水平排列
+        titleStyle += `
+          text-align: center;
+        `;
+      } else {
+        titleStyle += `
+          text-align: center;
+        `;
+      }
+      
+      this.setData({
+        titleStyle: titleStyle
+      });
+    },
+
+    /**
+     * 设置副标题样式
+     */
+    setupSubtitleStyle() {
+      const { charmConfig } = this.data;
+      if (!charmConfig || !charmConfig.subtitle.visible) return;
+      
+      const subtitle = charmConfig.subtitle;
+      
+      const subtitleStyle = `
+        font-size: ${subtitle.fontSize}rpx;
+        color: ${subtitle.color};
+        text-align: center;
+        opacity: 0.8;
+      `;
+      
+      this.setData({
+        subtitleStyle: subtitleStyle
+      });
+    },
+
+    /**
+     * 触发入场动画
+     */
+    triggerEntryAnimation() {
+      if (!this.data.showAnimation) return;
+      
+      const animation = wx.createAnimation({
+        duration: 600,
+        timingFunction: 'cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+      });
+      
+      // 从上方飘入的效果
+      animation.translateY(0).opacity(1).scale(1).step();
+      
+      this.setData({
+        animationData: animation.export(),
+        isAnimating: true
+      });
+      
+      // 动画结束后重置状态
+      setTimeout(() => {
+        this.setData({
+          isAnimating: false
+        });
+      }, 600);
+    },
+
+    /**
+     * 点击挂件触发翻面
+     */
+    onCharmTap() {
+      this.flipCharm();
+    },
+
+    /**
+     * 翻面动画
+     */
+    flipCharm() {
+      if (this.data.isAnimating) return;
+      
+      this.setData({
+        isAnimating: true
+      });
+      
+      const animation = wx.createAnimation({
+        duration: 500,
+        timingFunction: 'ease-in-out'
+      });
+      
+      // 翻转180度
+      const newFlipped = !this.data.isFlipped;
+      animation.rotateY(newFlipped ? 180 : 0).step();
+      
+      this.setData({
+        isFlipped: newFlipped,
+        animationData: animation.export()
+      });
+      
+      // 如果翻到背面，延迟显示解签笺
+      if (newFlipped) {
+        setTimeout(() => {
+          this.setData({
+            showInterpretation: true
+          });
+        }, 250); // 翻面动画的一半时间
+      } else {
+        this.setData({
+          showInterpretation: false
+        });
+      }
+      
+      // 动画结束
+      setTimeout(() => {
+        this.setData({
+          isAnimating: false
+        });
+      }, 500);
+      
+      // 触发事件
+      this.triggerEvent('flip', { 
+        isFlipped: newFlipped 
+      });
+    },
+
+    /**
+     * 分享挂件
+     */
+    onShareCharm() {
+      this.triggerEvent('share', {
+        structuredData: this.data.structuredData,
+        charmType: this.data.charmType
+      });
+    },
+
+    /**
+     * 监听structured data数据变化
+     */
+    onStructuredDataChange(newData) {
+      if (newData && Object.keys(newData).length > 0) {
+        this.updateDynamicStyles(newData);
+        this.updateInterpretationChars(newData);
+        this._preprocessVerticalData(newData);
+      }
+    },
+
+    /**
+     * 监听挂件类型变化
+     */
+    onCharmTypeChange(newType, oldType) {
+      if (newType && newType !== oldType) {
+        // 重新加载挂件配置
+        this.loadCharmConfig();
+      }
+    },
+
+    /**
+     * 🔮 根据心象签数据更新动态样式
+     */
+    updateDynamicStyles(structuredData) {
+      
+      // 🔧 修复颜色提取 - 支持多级fallback
+      const mainColor = structuredData.charm_main_color || 
+                       (structuredData.structured_data && structuredData.structured_data.charm_main_color) ||
+                       structuredData.oracle_color_1 || 
+                       this.data.charmConfig?.suggestedPalette?.[0] || 
+                       '#2D3748';
+      
+      const accentColor = structuredData.charm_accent_color || 
+                         (structuredData.structured_data && structuredData.structured_data.charm_accent_color) ||
+                         structuredData.oracle_color_2 || 
+                         this.data.charmConfig?.suggestedPalette?.[1] || 
+                         '#D4AF37';
+
+      this.setData({
+        charmMainColor: mainColor,
+        charmAccentColor: accentColor
+      });
+
+      // 🔮 更新签名文字 - 修复多层级数据提取
+      const charmName = structuredData.charm_name || 
+                       structuredData.oracle_title || 
+                       structuredData.title ||
+                       structuredData.ai_selected_charm_name ||
+                       structuredData.oracle_hexagram_name ||
+                       // 🔧 修复：charm_name 在 structured_data 顶层
+                       (structuredData.structured_data && structuredData.structured_data.charm_name) ||
+                       (structuredData.structured_data && structuredData.structured_data.charm_identity && structuredData.structured_data.charm_identity.charm_name) ||
+                       (structuredData.structured_data && structuredData.structured_data.oracle_theme && structuredData.structured_data.oracle_theme.title) ||
+                       '心象签';
+      
+      
+      this.updateCharmNameChars(charmName);
+
+      // 更新背景图片
+      const backgroundImg = structuredData.visual_background_image || 
+                           structuredData.background_image_url ||
+                           structuredData.image_url ||
+                           this.data.backgroundImage;
+      
+      if (backgroundImg && backgroundImg !== this.data.backgroundImage) {
+        this.setData({
+          backgroundImage: backgroundImg
+        });
+        this.setupGlowStyle();
+      }
+    },
+
+    /**
+     * 🔮 将签名拆解为字符数组，兼容小程序竖排限制
+     */
+    updateCharmNameChars(charmName = '') {
+      if (typeof charmName !== 'string' || !charmName || charmName.trim() === '') {
+        this.setData({ charmNameChars: ['心', '象', '签'] });
+        return;
+      }
+
+      // 清理文字：移除空格、标点符号、"签"字后缀
+      let cleaned = charmName.replace(/[\s\.\,\!\?\;\:\"\'，。！？；：""'']/g, '').trim();
+      
+      // 如果以"签"结尾，移除它（因为我们会自动添加）
+      if (cleaned.endsWith('签')) {
+        cleaned = cleaned.slice(0, -1);
+      }
+      
+      // 限制长度为3个字符（加上"签"字就是4个）
+      const maxLength = 3;
+      const truncated = cleaned.length > maxLength ? cleaned.substring(0, maxLength) : cleaned;
+      
+      // 如果有内容，添加"签"字
+      const finalChars = truncated ? Array.from(truncated + '签') : ['心', '象', '签'];
+      
+      this.setData({ 
+        charmNameChars: finalChars
+      });
+    },
+
+    /**
+     * 将解签内容拆解为字符数组，确保竖排显示
+     */
+    updateInterpretationChars(structuredData) {
+      // 简化版 - 不处理背面内容
+      this.setData({
+        insightChars: [],
+        impressionChars: []
+      });
+    },
+
+    /**
+     * 🎯 统一竖排数据预处理核心方法 - 增强版
+     * 将所有需要竖排显示的字段进行统一处理，支持自动换列和密度控制
+     */
+    _preprocessVerticalData(structuredData) {
+      // 智能提取数据 - 支持多层级fallback
+      const getFieldValue = (field) => {
+        // 优先从顶层获取
+        if (structuredData[field]) return structuredData[field];
+        
+        // 从structured_data获取
+        if (structuredData.structured_data && structuredData.structured_data[field]) {
+          return structuredData.structured_data[field];
+        }
+        
+        // 从嵌套结构获取
+        if (structuredData.structured_data) {
+          const sd = structuredData.structured_data;
+          
+          // oracle_manifest相关字段
+          if (field.startsWith('oracle_hexagram_') && sd.oracle_manifest && sd.oracle_manifest.hexagram) {
+            if (field === 'oracle_hexagram_name') return sd.oracle_manifest.hexagram.name;
+            if (field === 'oracle_hexagram_insight') return sd.oracle_manifest.hexagram.insight;
+          }
+          
+          // daily_guide字段
+          if (field === 'oracle_daily_guides' && sd.oracle_manifest && sd.oracle_manifest.daily_guide) {
+            return sd.oracle_manifest.daily_guide;
+          }
+          
+          // fengshui和ritual字段
+          if (field === 'oracle_fengshui_focus' && sd.oracle_manifest && sd.oracle_manifest.fengshui_focus) {
+            return sd.oracle_manifest.fengshui_focus;
+          }
+          if (field === 'oracle_ritual_hint' && sd.oracle_manifest && sd.oracle_manifest.ritual_hint) {
+            return sd.oracle_manifest.ritual_hint;
+          }
+          
+          // ink_reading相关字段
+          if (field === 'oracle_stroke_impression' && sd.ink_reading && sd.ink_reading.stroke_impression) {
+            return sd.ink_reading.stroke_impression;
+          }
+          if (field === 'oracle_symbolic_keywords' && sd.ink_reading && sd.ink_reading.symbolic_keywords) {
+            return sd.ink_reading.symbolic_keywords;
+          }
+          
+          // blessing_stream
+          if (field === 'oracle_blessing_stream' && sd.blessing_stream) {
+            return sd.blessing_stream;
+          }
+          
+          // affirmation
+          if (field === 'oracle_affirmation' && sd.affirmation) {
+            return sd.affirmation;
+          }
+          
+          // culture_note
+          if (field === 'oracle_culture_note' && sd.culture_note) {
+            return sd.culture_note;
+          }
+        }
+        
+        return undefined;
+      };
+
+      // 准备WXML可直接使用的数据
+      const extractedOracleData = {
+        oracle_hexagram_name: getFieldValue('oracle_hexagram_name'),
+        oracle_hexagram_insight: getFieldValue('oracle_hexagram_insight'),
+        oracle_daily_guides: getFieldValue('oracle_daily_guides'),
+        oracle_fengshui_focus: getFieldValue('oracle_fengshui_focus'),
+        oracle_ritual_hint: getFieldValue('oracle_ritual_hint'),
+        oracle_blessing_stream: getFieldValue('oracle_blessing_stream'),
+        oracle_stroke_impression: getFieldValue('oracle_stroke_impression'),
+        oracle_affirmation: getFieldValue('oracle_affirmation'),
+        oracle_culture_note: getFieldValue('oracle_culture_note')
+      };
+      
+      this.setData({ 
+        extractedOracleData
+      });
+    },
+
+
+    /**
+     * 🎯 将文本拆分为字符数组 - 增强版
+     * @param {string} text - 输入文本
+     * @param {number} maxLength - 最大长度限制
+     */
+    _splitTextToChars(text, maxLength = 100) {
+      if (!text || typeof text !== 'string') {
+        return [];
+      }
+      
+      // 清理文本：移除多余空格和换行
+      const cleaned = text.replace(/\s+/g, '').trim();
+      
+      if (cleaned.length === 0) {
+        return [];
+      }
+      
+      // 按最大长度截断
+      const truncated = cleaned.length > maxLength ? cleaned.substring(0, maxLength) + '…' : cleaned;
+      const chars = Array.from(truncated);
+      
+      return chars;
+    },
+    
+    /**
+     * 🆕 组合季节和时段信息
+     */
+    _combineSeasonTimeInfo(structuredData) {
+      const season = structuredData.oracle_season_hint || '';
+      const sessionTime = structuredData.oracle_session_time || '';
+      
+      if (season && sessionTime) {
+        return season + sessionTime + '时光';
+      } else if (season) {
+        return season + '时节';
+      } else if (sessionTime) {
+        return sessionTime + '时分';
+      }
+      return '';
+    },
+    
+    /**
+     * 🆕 处理五行元素平衡数据
+     */
+    _processElementBalance(wood, fire, earth, metal, water) {
+      const elements = [
+        { name: '木', value: wood, symbol: '🌳' },
+        { name: '火', value: fire, symbol: '🔥' },
+        { name: '土', value: earth, symbol: '🌍' },
+        { name: '金', value: metal, symbol: '⚱️' },
+        { name: '水', value: water, symbol: '💧' }
+      ];
+      
+      return elements.filter(el => typeof el.value === 'number' && el.value > 0)
+                    .sort((a, b) => b.value - a.value) // 按强度排序
+                    .slice(0, 3); // 只显示前3个
+    },
+
+    /**
+     * 🎯 将数组内容按换行拆分，保持原始结构
+     */
+    _splitWithLineBreaks(arrayData) {
+      if (!Array.isArray(arrayData)) return [];
+      return arrayData.filter(item => item && typeof item === 'string');
+    },
+
+    /**
+     * 🎯 将列表数据分配到指定列数的分栏中 - 增强版
+     * @param {Array} listData - 输入数组
+     * @param {number} columnCount - 列数
+     * @param {number} maxItemsPerColumn - 每列最大项目数
+     */
+    _splitListToColumns(listData, columnCount = 2, maxItemsPerColumn = 8) {
+      if (!Array.isArray(listData) || listData.length === 0) {
+        return Array(columnCount).fill().map(() => []);
+      }
+      
+      // 过滤有效数据
+      const validItems = listData.filter(item => item && typeof item === 'string' && item.trim().length > 0);
+      
+      if (validItems.length === 0) {
+        return Array(columnCount).fill().map(() => []);
+      }
+      
+      const columns = Array(columnCount).fill().map(() => []);
+      
+      // 智能分配：优先填满第一列，再填第二列，依此类推
+      validItems.forEach((item, index) => {
+        const columnIndex = Math.floor(index / maxItemsPerColumn) % columnCount;
+        if (columns[columnIndex].length < maxItemsPerColumn) {
+          columns[columnIndex].push(item);
+        }
+      });
+      
+      return columns;
+    },
+
+    /**
+     * 阻止事件冒泡
+     */
+    stopPropagation() {
+      // 阻止事件向上传播
+    }
+  }
+});

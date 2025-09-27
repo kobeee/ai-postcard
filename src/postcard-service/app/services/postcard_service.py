@@ -1,8 +1,19 @@
 import uuid
 import json
 import logging
+import sys
+import os
 from datetime import datetime
 from typing import Optional, Dict, Any
+from zoneinfo import ZoneInfo
+
+# 添加common模块路径并导入时区工具
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../../..'))
+try:
+    from common.timezone_utils import china_now
+except ImportError:
+    def china_now():
+        return datetime.now(ZoneInfo("Asia/Shanghai"))
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -58,7 +69,9 @@ class PostcardService:
                     "user_input": request.user_input,
                     "style": request.style,
                     "theme": request.theme,
-                    "created_at": datetime.now().isoformat()
+                    "quiz_answers": [answer.dict() for answer in (request.quiz_answers or [])],
+                    "has_quiz_data": len(request.quiz_answers or []) > 0,
+                    "created_at": china_now().isoformat()
                 }
             )
             
@@ -82,9 +95,11 @@ class PostcardService:
                 style=request.style,
                 theme=request.theme,
                 user_id=request.user_id,
-                created_at=datetime.now().isoformat(),
+                created_at=china_now().isoformat(),
                 # 🆕 传递base64编码的情绪图片数据
-                emotion_image_base64=request.emotion_image_base64
+                emotion_image_base64=request.emotion_image_base64,
+                # 🔮 传递心象签问答数据
+                quiz_answers=request.quiz_answers or []
             )
             
             # 发布到消息队列
@@ -181,7 +196,7 @@ class PostcardService:
                     postcard.structured_data = extra['structured_data']
             
             if status == TaskStatus.COMPLETED:
-                postcard.completed_at = datetime.now()
+                postcard.completed_at = china_now()
             elif status == TaskStatus.FAILED:
                 postcard.retry_count += 1
                 # 🔥 任务失败时恢复配额，允许用户重新生成（自动选择服务）
@@ -348,127 +363,148 @@ class PostcardService:
             raise
     
     def _flatten_structured_data(self, structured_data: Dict[str, Any]) -> Dict[str, Any]:
-        """将structured_data扁平化为协议约定的字段格式"""
+        """将structured_data扁平化为协议约定的字段格式 - 心象签版本"""
         flattened = {}
         
         try:
-            # 基础标题
-            if 'title' in structured_data:
-                flattened['card_title'] = structured_data['title']
+            # 🔮 心象签核心数据扁平化
             
-            # 情绪字段
+            # oracle_theme - 签象主题
+            oracle_theme = structured_data.get('oracle_theme', {})
+            if isinstance(oracle_theme, dict):
+                flattened['oracle_title'] = oracle_theme.get('title', '')
+                flattened['oracle_subtitle'] = oracle_theme.get('subtitle', '')
+            
+            # charm_identity - 签体身份（新增）
+            charm_identity = structured_data.get('charm_identity', {})
+            if isinstance(charm_identity, dict):
+                flattened['charm_name'] = charm_identity.get('charm_name', '')
+                flattened['charm_description'] = charm_identity.get('charm_description', '')
+                flattened['charm_blessing'] = charm_identity.get('charm_blessing', '')
+                flattened['charm_main_color'] = charm_identity.get('main_color', '#8B7355')
+                flattened['charm_accent_color'] = charm_identity.get('accent_color', '#D4AF37')
+            
+            # affirmation - 祝福短句
+            if 'affirmation' in structured_data:
+                flattened['oracle_affirmation'] = structured_data['affirmation']
+            
+            # oracle_manifest - 卦象显化
+            oracle_manifest = structured_data.get('oracle_manifest', {})
+            if isinstance(oracle_manifest, dict):
+                # 卦象信息
+                hexagram = oracle_manifest.get('hexagram', {})
+                if isinstance(hexagram, dict):
+                    flattened['oracle_hexagram_name'] = hexagram.get('name', '')
+                    flattened['oracle_hexagram_symbol'] = hexagram.get('symbol', '')
+                    flattened['oracle_hexagram_insight'] = hexagram.get('insight', '')
+                
+                # 生活指引
+                daily_guide = oracle_manifest.get('daily_guide', [])
+                if isinstance(daily_guide, list):
+                    flattened['oracle_daily_guides'] = daily_guide
+                    # 同时提供单独的字段便于前端使用
+                    for i, guide in enumerate(daily_guide[:3]):  # 最多3条
+                        flattened[f'oracle_daily_guide_{i+1}'] = guide
+                
+                # 风水关注点
+                flattened['oracle_fengshui_focus'] = oracle_manifest.get('fengshui_focus', '')
+                
+                # 仪式提示
+                flattened['oracle_ritual_hint'] = oracle_manifest.get('ritual_hint', '')
+                
+                # 五行平衡
+                element_balance = oracle_manifest.get('element_balance', {})
+                if isinstance(element_balance, dict):
+                    for element in ['wood', 'fire', 'earth', 'metal', 'water']:
+                        flattened[f'oracle_element_{element}'] = element_balance.get(element, 0.5)
+            
+            # ink_reading - 墨迹解读
+            ink_reading = structured_data.get('ink_reading', {})
+            if isinstance(ink_reading, dict):
+                flattened['oracle_stroke_impression'] = ink_reading.get('stroke_impression', '')
+                
+                # 象征关键词
+                symbolic_keywords = ink_reading.get('symbolic_keywords', [])
+                if isinstance(symbolic_keywords, list):
+                    flattened['oracle_symbolic_keywords'] = symbolic_keywords
+                    # 提供单独字段
+                    for i, keyword in enumerate(symbolic_keywords[:3]):  # 最多3个
+                        flattened[f'oracle_symbolic_keyword_{i+1}'] = keyword
+                
+                # 墨迹指标
+                ink_metrics = ink_reading.get('ink_metrics', {})
+                if isinstance(ink_metrics, dict):
+                    flattened['oracle_stroke_count'] = ink_metrics.get('stroke_count', 0)
+                    flattened['oracle_dominant_quadrant'] = ink_metrics.get('dominant_quadrant', 'center')
+                    flattened['oracle_pressure_tendency'] = ink_metrics.get('pressure_tendency', 'steady')
+            
+            # context_insights - 上下文洞察
+            context_insights = structured_data.get('context_insights', {})
+            if isinstance(context_insights, dict):
+                flattened['oracle_session_time'] = context_insights.get('session_time', '')
+                flattened['oracle_season_hint'] = context_insights.get('season_hint', '')
+                flattened['oracle_visit_pattern'] = context_insights.get('visit_pattern', '')
+                
+                # 历史关键词
+                historical_keywords = context_insights.get('historical_keywords', [])
+                if isinstance(historical_keywords, list):
+                    flattened['oracle_historical_keywords'] = historical_keywords
+            
+            # blessing_stream - 祝福流
+            blessing_stream = structured_data.get('blessing_stream', [])
+            if isinstance(blessing_stream, list):
+                flattened['oracle_blessing_stream'] = blessing_stream
+                # 提供单独字段便于前端使用
+                for i, blessing in enumerate(blessing_stream[:6]):  # 最多6个
+                    flattened[f'oracle_blessing_{i+1}'] = blessing
+            
+            # art_direction - 艺术指导
+            art_direction = structured_data.get('art_direction', {})
+            if isinstance(art_direction, dict):
+                flattened['oracle_image_prompt'] = art_direction.get('image_prompt', '')
+                
+                # 调色板
+                palette = art_direction.get('palette', [])
+                if isinstance(palette, list):
+                    flattened['oracle_palette'] = palette
+                    # 提供单独颜色字段
+                    for i, color in enumerate(palette[:3]):  # 最多3个主色
+                        flattened[f'oracle_color_{i+1}'] = color
+                
+                flattened['oracle_animation_hint'] = art_direction.get('animation_hint', '')
+            
+            # culture_note - 文化说明
+            if 'culture_note' in structured_data:
+                flattened['oracle_culture_note'] = structured_data['culture_note']
+            
+            # 🔮 ai_selected_charm - AI选择的签体信息
+            ai_selected_charm = structured_data.get('ai_selected_charm', {})
+            if isinstance(ai_selected_charm, dict):
+                flattened['ai_selected_charm_id'] = ai_selected_charm.get('charm_id', '')
+                flattened['ai_selected_charm_name'] = ai_selected_charm.get('charm_name', '')
+                flattened['ai_selected_charm_reasoning'] = ai_selected_charm.get('ai_reasoning', '')
+            
+            # 🔄 兼容性处理：保留旧数据结构的部分字段以便渐进式迁移
+            # 如果同时存在旧结构，优先使用新结构但保留旧字段便于过渡
+            
+            # 旧结构 - 情绪字段（兼容）
             mood = structured_data.get('mood', {})
-            if isinstance(mood, dict):
+            if isinstance(mood, dict) and mood:
                 if 'primary' in mood:
                     flattened['mood_primary'] = mood['primary']
                 if 'intensity' in mood:
                     flattened['mood_intensity'] = mood['intensity']
-                if 'secondary' in mood:
-                    flattened['mood_secondary'] = mood['secondary']
-                if 'color_theme' in mood:
-                    flattened['mood_color_theme'] = mood['color_theme']
             
-            # 视觉样式字段
+            # 旧结构 - 视觉字段（兼容）
             visual = structured_data.get('visual', {})
-            if isinstance(visual, dict):
-                style_hints = visual.get('style_hints', {})
-                if isinstance(style_hints, dict):
-                    if 'color_scheme' in style_hints:
-                        flattened['visual_color_scheme'] = style_hints['color_scheme']
-                    if 'layout_style' in style_hints:
-                        flattened['visual_layout_style'] = style_hints['layout_style']
-                    if 'animation_type' in style_hints:
-                        flattened['visual_animation_type'] = style_hints['animation_type']
-                
+            if isinstance(visual, dict) and visual:
                 if 'background_image_url' in visual:
                     flattened['visual_background_image'] = visual['background_image_url']
             
-            # 内容字段
-            content = structured_data.get('content', {})
-            if isinstance(content, dict):
-                if 'main_text' in content:
-                    flattened['content_main_text'] = content['main_text']
-                
-                quote = content.get('quote', {})
-                if isinstance(quote, dict):
-                    if 'text' in quote:
-                        flattened['content_quote_text'] = quote['text']
-                    if 'author' in quote:
-                        flattened['content_quote_author'] = quote['author']
-                    if 'translation' in quote:
-                        flattened['content_quote_translation'] = quote['translation']
-                
-                hot_topics = content.get('hot_topics', {})
-                if isinstance(hot_topics, dict):
-                    if 'douyin' in hot_topics:
-                        flattened['content_hot_topics_douyin'] = hot_topics['douyin']
-                    if 'xiaohongshu' in hot_topics:
-                        flattened['content_hot_topics_xiaohongshu'] = hot_topics['xiaohongshu']
-            
-            # 上下文字段
-            context = structured_data.get('context', {})
-            if isinstance(context, dict):
-                if 'weather' in context:
-                    flattened['context_weather'] = context['weather']
-                if 'location' in context:
-                    flattened['context_location'] = context['location']
-                if 'time_context' in context:
-                    flattened['context_time'] = context['time_context']
-            
-            # 推荐内容字段
-            recommendations = structured_data.get('recommendations', {})
-            if isinstance(recommendations, dict):
-                # 音乐推荐
-                music = recommendations.get('music', [])
-                if music and len(music) > 0:
-                    music_item = music[0] if isinstance(music, list) else music
-                    if isinstance(music_item, dict):
-                        if 'title' in music_item:
-                            flattened['recommendations_music_title'] = music_item['title']
-                        if 'artist' in music_item:
-                            flattened['recommendations_music_artist'] = music_item['artist']
-                        if 'reason' in music_item:
-                            flattened['recommendations_music_reason'] = music_item['reason']
-                
-                # 书籍推荐
-                book = recommendations.get('book', [])
-                if book and len(book) > 0:
-                    book_item = book[0] if isinstance(book, list) else book
-                    if isinstance(book_item, dict):
-                        if 'title' in book_item:
-                            flattened['recommendations_book_title'] = book_item['title']
-                        if 'author' in book_item:
-                            flattened['recommendations_book_author'] = book_item['author']
-                        if 'reason' in book_item:
-                            flattened['recommendations_book_reason'] = book_item['reason']
-                
-                # 电影推荐
-                movie = recommendations.get('movie', [])
-                if movie and len(movie) > 0:
-                    movie_item = movie[0] if isinstance(movie, list) else movie
-                    if isinstance(movie_item, dict):
-                        if 'title' in movie_item:
-                            flattened['recommendations_movie_title'] = movie_item['title']
-                        if 'director' in movie_item:
-                            flattened['recommendations_movie_director'] = movie_item['director']
-                        if 'reason' in movie_item:
-                            flattened['recommendations_movie_reason'] = movie_item['reason']
-            
-            # 🆕 扩展字段处理 - 8个extras字段（卡片背面内容的核心）
-            extras = structured_data.get('extras', {})
-            if isinstance(extras, dict):
-                extras_fields = ['reflections', 'gratitude', 'micro_actions', 'mood_tips', 
-                               'life_insights', 'creative_spark', 'mindfulness', 'future_vision']
-                
-                for field in extras_fields:
-                    if field in extras:
-                        flat_field_name = f'extras_{field}'
-                        flattened[flat_field_name] = extras[field]
-            
-            logger.info(f"📊 扁平化数据完成，生成字段: {list(flattened.keys())}")
+            logger.info(f"📊 心象签数据扁平化完成，生成字段: {list(flattened.keys())}")
             
         except Exception as e:
-            logger.error(f"❌ 数据扁平化失败: {e}")
+            logger.error(f"❌ 心象签数据扁平化失败: {e}")
             # 返回空字典，不影响主要功能
         
         return flattened

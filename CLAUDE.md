@@ -2,134 +2,293 @@
 
 此文件为 Claude Code (claude.ai/code) 在该代码仓库中工作时提供指导。
 
+## 前置小tips
+**对于内容过大的文本文件，采用分批次读取的方式**
+**严格控制每个代码文件的代码数量，及时拆分，避免单个文件过大**
+
 ## 项目概述
 
-这是一个基于微服务架构的 AI 明信片生成系统。核心创新在于 AI 不仅生成内容，更是充当"前端工程师"，编写可交互、带动画的 HTML/CSS/JS 代码，生成在微信小程序 web-view 中渲染的动态明信片。
+“AI 心象签”项目通过 AI 工作流在微信小程序中生成挂件式求签体验：用户在小程序内绘制情绪墨迹、回答心境问答，系统触发异步任务完成概念、文案、图像与结构化内容生成，最终展示可翻面的传统挂件与解签笺。微服务后端、Redis Streams 队列和丰富的资源配置共同支撑整套体验。
 
 ## 系统架构
 
-**微服务结构：**
-- `src/gateway-service/` - API 网关 (Node.js/Express)
-- `src/user-service/` - 用户管理 (Python/FastAPI)
-- `src/postcard-service/` - 明信片数据管理 (Python/FastAPI)  
-- `src/ai-agent-service/` - **核心 AI Agent** (Python/FastAPI) 包含编排器和工具集
-- 基础设施：PostgreSQL + Redis + Docker Compose
+- `src/gateway-service/` —— API 网关（FastAPI），统一处理小程序到后端的请求与转发。
+- `src/user-service/` —— 用户与认证服务（FastAPI），实现微信登录、JWT/RBAC、安全审计等能力。
+- `src/postcard-service/` —— 心象签任务与结果服务（FastAPI），负责配额、任务状态、结构化数据扁平化及持久化。
+- `src/ai-agent-service/` —— AI Agent（FastAPI + Worker），消费 Redis Stream 任务、执行 AI 编排并挂载静态资源。
+- 基础设施：PostgreSQL（`data/postgres`）+ Redis（`data/redis`）+ Docker Compose profiles；静态签体与题库位于 `resources/` 并通过 AI Agent 的 `/resources` 路径向外暴露。
 
-**AI Agent 工作流程：**
-1. 文本生成（概念/文案）
-2. 图片生成  
-3. **前端代码生成**（带动画的 HTML/CSS/JS）
-4. 返回完整的动态明信片代码
+系统围绕 Redis Stream `postcard_tasks` 解耦请求提交与 AI 生成，Worker 与服务均通过 `.env` 中的 `INTERNAL_SERVICE_TOKEN` 做内部鉴权。
 
-## 开发命令
+## AI Agent 工作流程
 
-### 环境搭建
-```bash
-# 初始化环境
-sh scripts/setup-dev-env.sh
-cp .env.example .env
-# 编辑 .env 配置文件
-sh scripts/validate-env.sh
-```
+工作流在 `PostcardWorkflow` 中定义，核心步骤如下：
+1. **ConceptGenerator**：结合墨迹分析、问答洞察与环境信息生成自然意象，并通过 `charm-config.json` 选择 18 款签体之一（多路径 fallback）。
+2. **ContentGenerator**：生成祝福语、笔触解读、生活指引等文案。
+3. **ImageGenerator**：调用 Gemini/META 图片通道，若缺失则提供占位图并记录元数据。
+4. **StructuredContentGenerator**：输出心象签结构化数据（含 `charm_identity`、`oracle_manifest`、`ai_selected_charm` 等），并写入背景图 URL。所有步骤配有兜底/回退策略。
 
-### 服务管理（主要方式）
-使用统一的开发脚本进行所有操作：
+执行完成后通过 `postcard-service` 的状态接口写入概念、文案、图片、结构化数据，失败时自动回滚配额并落盘错误信息。
+
+## 环境初始化与服务管理
+
+统一脚本为 `./scripts/run.sh`，支持容器构建、依赖准备与权限修复。
 
 ```bash
-# 启动服务
-sh scripts/dev.sh up gateway user          # API 网关 + 用户服务
-sh scripts/dev.sh up agent                 # AI Agent 服务
-sh scripts/dev.sh up postcard             # 明信片服务
-sh scripts/dev.sh up all                  # 所有服务
-
-# 查看服务状态和日志
-sh scripts/dev.sh ps                      # 服务状态
-sh scripts/dev.sh logs                    # 所有日志
-sh scripts/dev.sh logs ai-agent-service   # 特定服务日志
-
-# 停止服务
-sh scripts/dev.sh down
-
-# 在容器中执行命令
-sh scripts/dev.sh exec ai-agent-service bash
-sh scripts/dev.sh exec postgres psql -U postgres -d ai_postcard
-
-# 清理环境
-sh scripts/dev.sh clean                   # 删除所有容器/卷
+cp .env.example .env                 # 按需调整密钥/配置
+./scripts/run.sh init                # 初始化数据库 / Redis / 队列
+./scripts/run.sh up all              # 构建并启动全部服务
+./scripts/run.sh up gateway user     # 按 profile 启动指定服务
+./scripts/run.sh ps                  # 查看容器状态
+./scripts/run.sh logs ai-agent-service -f   # 跟踪某服务日志
+./scripts/run.sh exec postgres psql -U postgres -d ai_postcard   # 进入容器
+./scripts/run.sh down                # 停止并清理网络
+./scripts/run.sh clean              # （确认后）删除容器与数据卷
+./scripts/run.sh clean-user-data    # 仅清理业务数据，保留系统配置
 ```
 
-### 测试
-```bash
-# 运行服务测试
-sh scripts/dev.sh up ai-agent-tests       # AI Agent 测试
-sh scripts/dev.sh up user-tests          # 用户服务测试
-sh scripts/dev.sh up postcard-tests      # 明信片服务测试
+所有 profile 定义见 `docker-compose.yml`，包括 `all/gateway/user/postcard/agent/worker` 以及对应的测试 profile。
 
-# 在 ai-agent-service 中运行 Python 测试
-sh scripts/dev.sh exec ai-agent-service pytest
-sh scripts/dev.sh exec ai-agent-service pytest tests/test_claude_provider.py -v
-```
+## 测试与验证
 
-### 前端开发（AI Agent 服务）
-AI Agent 服务包含用于测试的 Vue.js 前端：
+默认策略是记录验证步骤而非强制执行，但需要测试时请使用对应 profile：
 
 ```bash
-# 在 ai-agent-service 容器内
-cd app/frontend
-npm run dev                              # 开发服务器
-npm run build                           # 生产构建
+./scripts/run.sh up agent-tests         # 运行 AI Agent 测试容器
+./scripts/run.sh up user-tests          # 运行用户服务测试容器
+./scripts/run.sh up postcard-tests      # 运行明信片服务测试容器
 ```
 
-### 直接使用 Docker Compose（备选方式）
+如需临时在容器内执行额外 pytest，可使用 `./scripts/run.sh exec ai-agent-service pytest ...`。验证记录与手动测试流程请归档至 `docs/tests/validation/`（最新记录：`2025-09-24-heart-oracle-comprehensive-fixes.md`）。
+
+## 配置要点
+
+- `.env` 为统一入口，关键变量包括数据库/缓存凭证（`DB_*`, `REDIS_*`）、内部通信密钥（`INTERNAL_SERVICE_TOKEN`）、JWT/RBAC 配置、AI Provider 选择（`AI_PROVIDER_TYPE`）、Claude 与 Gemini/META 的 API Key 及模型参数。
+- 静态资源：`resources/签体/` 存放 18 款签体 PNG 与 `charm-config.json`；`resources/题库/question.json` 提供心境速测题库。
+- 日志与持久化目录需可写（脚本会在 Linux/macOS 下自动调整权限）。
+
+## 数据与队列
+
+- PostgreSQL 关键表：`users`（微信用户信息与安全属性）、`postcards`（任务状态、中间结果、`structured_data` JSON、扁平化字段）。
+- Redis：`postcard_tasks` Stream + `ai_agent_workers` 消费者组用于任务编排；脚本会在初始化和数据清理时确保其存在。
+- 删除业务数据时务必保留 Stream 与消费者组，遵循 `scripts/run.sh clean-user-data` 内的安全路径。
+
+## 关键参考文档
+
+- `docs/design/00-system-architecture.md` —— 最新系统架构与异步流程说明。
+- `docs/design/10-containerization-and-dev-environment.md` —— 容器化与本地开发策略。
+- `docs/design/19-hanging-charm-experience.md` —— 挂件体验视觉与交互规范。
+- `CHANGELOG.md` —— 版本迭代、核心修复与优化记录。
+- `docs/tests/validation/2025-09-24-heart-oracle-comprehensive-fixes.md` —— 最近一次全链路验证报告。
+
+# 🔧 测试需知 (重要)
+
+**快速测试和调试的关键指南，必须熟练掌握这些方法以提高开发效率。**
+
+## 🔐 认证系统和Token获取
+
+### 登录体系架构
+- **微信小程序登录流程**: `code` → `session_key` + `openid` → JWT Token
+- **登录接口**: `POST /api/v1/miniprogram/auth/login`
+- **Token类型**: 
+  - `access_token`: 用于API请求认证 (Bearer Token)
+  - `refresh_token`: 用于刷新access_token
+
+### 快速获取测试Token
 ```bash
-# 基于 profile 的服务管理
-docker-compose --profile agent up -d    # 仅 AI Agent
-docker-compose --profile gateway up -d  # 仅网关
-docker-compose --profile all up -d      # 所有服务
+# 1. 使用测试用户登录获取token
+curl -X POST "http://localhost:8081/api/v1/miniprogram/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "code": "test_code_for_development", 
+    "userInfo": {
+      "nickName": "测试用户",
+      "avatarUrl": "https://example.com/avatar.jpg",
+      "gender": 1
+    }
+  }'
+
+# 2. 从响应中提取access_token
+# 响应格式: {"code": 0, "data": {"access_token": "eyJ...", "refresh_token": "..."}}
+
+# 3. 后续API请求使用Bearer Token
+curl -H "Authorization: Bearer <access_token>" \
+     "http://localhost:8083/api/v1/miniprogram/postcards/result/<task_id>"
 ```
 
-## 配置说明
+### 网关路由说明
+- **用户服务**: `localhost:8081` (直接访问)
+- **其他服务**: `localhost:8083` (通过网关访问)
+- **API Gateway路由**:
+  - `/api/v1/miniprogram/auth/*` → user-service
+  - `/api/v1/miniprogram/postcards/*` → postcard-service
+  - `/api/v1/environment/*` → ai-agent-service
 
-### 必需的环境变量
-- `DB_PASSWORD` - PostgreSQL 密码
-- `REDIS_PASSWORD` - Redis 密码  
-- `APP_SECRET` - 应用密钥
-- `ANTHROPIC_AUTH_TOKEN` - Claude API 密钥（AI Agent 使用）
-- `AI_PROVIDER_TYPE=claude` - AI 提供商选择
+## ⚡ 快速测试方法
 
-### 关键配置文件
-- `.env` - 环境变量（从 `.env.example` 复制）
-- `docker-compose.yml` - 包含 profiles 的服务定义
-- `src/ai-agent-service/requirements.txt` - Python 依赖
-- `src/gateway-service/package.json` - Node.js 依赖
+### 容器内文件热更新 (推荐)
+**无需重建镜像，直接拷贝修改的文件到容器内进行快速测试：**
 
-## AI Agent 服务详情
+```bash
+# Python服务快速更新流程
+# 1. 修改源码文件
+nano src/postcard-service/app/api/miniprogram.py
 
-**核心 Provider 系统：**
-- 位于 `src/ai-agent-service/app/coding_service/`
-- `providers/claude_provider.py` - 主要 Claude 集成
-- `providers/factory.py` - Provider 选择逻辑
-- 使用 `claude-code-sdk==0.0.20` 实现 AI 编码能力
+# 2. 拷贝到容器内对应路径
+docker cp src/postcard-service/app/api/miniprogram.py \
+  ai-postcard-postcard-service:/app/app/api/miniprogram.py
 
-**测试策略：**
-- `tests/test_claude_provider.py` - Provider 单元测试
-- `tests/test_sdk_smoke.py` - SDK 集成测试
-- 在 Docker 容器内运行测试以确保一致性
+# 3. 重启服务容器 (uvicorn会自动重载)
+./scripts/run.sh restart postcard-service
 
-## 数据库架构
+# 4. 立即测试修改效果
+curl -H "Authorization: Bearer <token>" \
+     "http://localhost:8083/api/v1/miniprogram/postcards/result/<task_id>"
+```
 
-**主要表：**
-- `users` - 用户资料，集成微信
-- `postcards` - 生成的明信片，`frontend_code` 字段存储 AI 生成的 HTML/CSS/JS
+### 常用快速拷贝命令
+```bash
+# PostCard Service
+docker cp src/postcard-service/app/api/miniprogram.py \
+  ai-postcard-postcard-service:/app/app/api/miniprogram.py
+
+docker cp src/postcard-service/app/services/postcard_service.py \
+  ai-postcard-postcard-service:/app/app/services/postcard_service.py
+
+# AI Agent Service  
+docker cp src/ai-agent-service/app/orchestrator/steps/structured_content_generator.py \
+  ai-postcard-ai-agent-service:/app/app/orchestrator/steps/structured_content_generator.py
+
+# User Service
+docker cp src/user-service/app/api/miniprogram.py \
+  ai-postcard-user-service:/app/app/api/miniprogram.py
+```
+
+### 服务重启命令
+```bash
+# 单个服务重启 (推荐)
+./scripts/run.sh restart postcard-service
+./scripts/run.sh restart ai-agent-service
+./scripts/run.sh restart user-service
+
+# 批量重启
+./scripts/run.sh restart postcard-service ai-agent-service
+```
+
+## 📊 调试和监控
+
+### 实时日志查看
+```bash
+# 查看特定服务日志
+./scripts/run.sh logs postcard-service -f
+./scripts/run.sh logs ai-agent-worker -f
+
+# 查看最近50行日志
+./scripts/run.sh logs postcard-service -n 50
+
+# 多服务日志并行查看
+./scripts/run.sh logs postcard-service ai-agent-service -f
+```
+
+### 数据库快速查询
+```bash
+# 进入PostgreSQL
+./scripts/run.sh exec postgres psql -U postgres -d ai_postcard
+
+# 常用查询
+SELECT id, status, created_at FROM postcards ORDER BY created_at DESC LIMIT 5;
+SELECT structured_data::json->'ai_selected_charm' FROM postcards WHERE id='<task_id>';
+```
+
+### 容器内执行命令
+```bash
+# 进入容器调试
+./scripts/run.sh exec postcard-service bash
+./scripts/run.sh exec ai-agent-service python -c "import json; print('test')"
+
+# 直接执行Python脚本测试
+docker exec ai-postcard-postcard-service python -c "
+from app.api.miniprogram import flatten_structured_data
+data = {'ai_selected_charm': {'charm_id': 'test'}}
+result = flatten_structured_data(data)
+print('✅ 扁平化测试:', result.get('ai_selected_charm_id'))
+"
+```
+
+## 🎯 完整测试流程示例
+
+### 端到端API测试流程
+```bash
+# 1. 获取登录Token
+TOKEN=$(curl -s -X POST "http://localhost:8081/api/v1/miniprogram/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"code": "test_code", "userInfo": {"nickName": "测试用户"}}' | \
+  python3 -c "import json,sys; print(json.load(sys.stdin)['data']['access_token'])")
+
+# 2. 创建明信片任务
+TASK_ID=$(curl -s -X POST "http://localhost:8083/api/v1/miniprogram/postcards/create" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"user_input": "测试心境", "style": "heart-oracle", "theme": "心象意境"}' | \
+  python3 -c "import json,sys; print(json.load(sys.stdin)['data']['task_id'])")
+
+# 3. 监控任务状态
+watch -n 2 "curl -s -H 'Authorization: Bearer $TOKEN' \
+  'http://localhost:8083/api/v1/miniprogram/postcards/status/$TASK_ID' | \
+  python3 -c 'import json,sys; data=json.load(sys.stdin); print(data[\"data\"][\"status\"])'"
+
+# 4. 获取完成结果
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8083/api/v1/miniprogram/postcards/result/$TASK_ID" | \
+  python3 -c "import json,sys; data=json.load(sys.stdin)['data']; print('签体:', data.get('ai_selected_charm_id', '未找到')); print('祝福:', data.get('oracle_affirmation', '未找到'))"
+```
+
+### 关键测试检查点
+1. **Token有效性**: 确保登录响应包含`access_token`
+2. **任务创建**: 确保返回有效的`task_id`
+3. **AI处理**: 检查`ai-agent-worker`日志无错误
+4. **数据扁平化**: 验证结果包含`ai_selected_charm_id`等关键字段
+5. **小程序数据**: 确认所有`oracle_*`字段正确传输
+
+## 🚨 常见问题快速解决
+
+### 401认证失败
+```bash
+# 检查token是否有效
+curl -H "Authorization: Bearer $TOKEN" "http://localhost:8081/api/v1/miniprogram/users/me"
+
+# 重新获取token
+TOKEN=$(curl -s ... # 使用上面的登录命令)
+```
+
+### 服务连接失败
+```bash
+# 检查服务状态
+./scripts/run.sh ps
+./scripts/run.sh logs gateway-service -n 20
+
+# 重启问题服务
+./scripts/run.sh restart <service-name>
+```
+
+### AI Agent处理异常
+```bash
+# 检查Worker健康状态
+./scripts/run.sh logs ai-agent-worker -n 50
+
+# 检查Redis队列状态
+./scripts/run.sh exec redis redis-cli XLEN postcard_tasks
+```
+
+---
 
 ## 重要提醒
 
-- **AI Agent 是核心** - 开发重点关注 `src/ai-agent-service/`
-- 所有服务使用开发 Dockerfile (`Dockerfile.dev`) 支持热重载
-- 前端代码生成是关键差异化功能 - AI 编写完整的交互式网页
-- 所有开发任务使用 `scripts/dev.sh` 包装脚本
-- 启动前务必用 `sh scripts/validate-env.sh` 验证环境
-- 项目使用 Docker profiles 实现选择性服务启动
+- AI Agent 服务与 Worker 依赖 `/resources` 挂载，请保证签体配置与 PNG 同步更新。
+- 所有敏感密钥应在 `.env` 中替换示例值，切勿提交真实凭证。
+- 提交异步任务前需确保 `postcard-service` 和 `ai-agent-worker` 均已运行，否则请求会一直处于排队状态。
+- 任何环境清理前请备份数据目录 (`data/`、`logs/`) 以及 `resources/` 中的新增素材。
+- README 的"快速开始"章节与本文件保持一致，遇到差异请优先更新这两处文档。
 
 ## 项目开发规则和规范
 

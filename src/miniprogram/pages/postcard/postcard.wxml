@@ -16,24 +16,61 @@
   <!-- 明信片内容 -->
   <view class="postcard-container" wx:else>
     
-    <!-- 结构化明信片渲染（最高优先级） -->
-    <view class="structured-card-section" wx:if="{{hasStructuredData}}">
-      <structured-postcard 
-        id="main-structured-postcard"
-        class="main-structured-postcard"
-        structured-data="{{structuredData}}"
-        background-image="{{structuredData.visual.background_image_url || postcard.image_url}}"
-        fallback-english="{{postcard.english}}"
+    <!-- 🔮 心象签主显示区域 - 挂件式心象签（完全照搬首页实现） -->
+    <view class="charm-main-area" wx:if="{{hasStructuredData && structuredData}}">
+      <hanging-charm 
+        oracle-data="{{postcard}}"
+        charm-type="{{structuredData.ai_selected_charm_id || selectedCharmType || 'lianhua-yuanpai'}}"
+        background-image="{{structuredData.visual_background_image || structuredData.image_url || postcard.image_url || postcard.image}}"
         show-animation="{{true}}"
-        size-mode="standard"
-        bind:cardtap="onStructuredCardTap"
-        bind:recommendationtap="onRecommendationTap"
-        bind:share="onShareStructuredCard"
-      ></structured-postcard>
-      
+        size-mode="large"
+        bind:flip="onCharmFlip"
+        bind:share="onCharmShare"
+      ></hanging-charm>
     </view>
 
-    <!-- 🔥 降级方案：全新超简单卡片 -->
+    <!-- 降级显示区域：传统卡片 -->
+    <view class="fallback-card-area" wx:elif="{{postcard && !hasStructuredData}}">
+      <view class="beautiful-postcard {{postcard.layout_mode}}">
+        <!-- 背景图层 -->
+        <view class="postcard-background">
+          <image 
+            class="background-image" 
+            src="{{postcard.image || postcard.card_image || postcard.image_url}}" 
+            mode="aspectFill"
+            lazy-load="true"
+          ></image>
+          <view class="background-overlay"></view>
+        </view>
+        
+        <!-- 内容层 -->
+        <view class="postcard-content">
+          <!-- 顶部标题区 -->
+          <view class="postcard-header">
+            <text class="postcard-title">{{postcard.keyword || postcard.title || '心象签'}}</text>
+          </view>
+          
+          <!-- 主文案区 -->
+          <view class="postcard-body">
+            <view class="main-quote">
+              <text class="quote-text">{{postcard.quote || postcard.content || '感受生活的诗意'}}</text>
+            </view>
+            <view class="english-ribbon" wx:if="{{postcard.english}}">
+              <text class="english-text">{{postcard.english}}</text>
+            </view>
+          </view>
+          
+          <!-- 底部装饰区 -->
+          <view class="postcard-footer">
+            <view class="signature">
+              <text class="signature-text">— 心象签</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 🔥 降级方案2：全新超简单卡片 -->
     <view class="new-simple-card" wx:elif="{{postcard}}">
       <text class="simple-card-title">今日心情</text>
       <text class="card-content">{{postcard.content ? '内容解析中...' : '杭州夏夜，微风轻拂'}}</text>
@@ -84,7 +121,7 @@
         </button>
         <button class="action-btn danger" bindtap="handleDelete">
           <text class="btn-icon">🗑️</text>
-          <text class="btn-text">删除明信片</text>
+          <text class="btn-text">删除心象签</text>
         </button>
       </view>
     </view>
@@ -95,8 +132,8 @@
 
     <!-- 底部信息 -->
     <view class="footer-section">
-      <text class="footer-text">由 AI明信片 创作生成</text>
-      <text class="footer-link" bindtap="goHome">创建更多明信片 ></text>
+      <text class="footer-text">由 AI心象签 创作生成</text>
+      <text class="footer-link" bindtap="goHome">创建更多心象签 ></text>
     </view>
   </view>
 </view>

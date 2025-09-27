@@ -2,11 +2,13 @@
 const ENV_CONFIG = {
   // 开发环境配置
   development: {
-    baseURL: 'https://ai.elvis1949.cloudns.pro/postcard', // 网关服务端口
-    // baseURL: 'http://localhost:8083', // 网关服务端口
+    // baseURL: 'https://ai.elvis1949.cloudns.pro/postcard', // 网关服务端口
+    baseURL: 'http://localhost:8083', // 网关服务端口
     apiPrefix: '/api/v1',
     timeout: 60000, // 延长到60秒，支持大模型调用和准确性优先
-    debug: true
+    debug: true,
+    // AI Agent服务的公共资源URL（用于动态资源加载）
+    AI_AGENT_PUBLIC_URL: 'http://localhost:8080'
   },
   
   // 测试环境配置
@@ -14,7 +16,8 @@ const ENV_CONFIG = {
     baseURL: 'https://test-api.your-domain.com', // 测试服务器
     apiPrefix: '/api/v1', 
     timeout: 45000, // 测试环境也延长到45秒
-    debug: true
+    debug: true,
+    AI_AGENT_PUBLIC_URL: 'https://test-ai-agent.your-domain.com'
   },
   
   // 生产环境配置
@@ -22,7 +25,8 @@ const ENV_CONFIG = {
     baseURL: 'https://api.your-domain.com', // 生产服务器
     apiPrefix: '/api/v1',
     timeout: 30000, // 生产环境延长到30秒，平衡体验和准确性
-    debug: false
+    debug: false,
+    AI_AGENT_PUBLIC_URL: 'https://ai-agent.your-domain.com'
   }
 };
 

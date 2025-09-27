@@ -1,0 +1,134 @@
+<!-- hanging-charm.wxml - 🔮 挂件式心象签组件模板 -->
+
+<!-- 第1层：透视容器 -->
+<view class="charm-scene" style="{{containerStyle}}">
+  
+  <!-- 第2层：翻转控制器 -->
+  <view class="charm-flipper {{isFlipped ? 'flipped' : ''}}" animation="{{animationData}}" bindtap="onCharmTap" hover-class="none">
+    
+    <!-- 第3层：正面容器 - 挂件形式 -->
+    <view class="charm-face charm-face-front">
+      
+      
+      <!-- 挂件图片层 -->
+      <view class="charm-container">
+        <image 
+          class="charm-image" 
+          src="{{charmImagePath}}" 
+          mode="aspectFit"
+          wx:if="{{charmImagePath}}"
+        ></image>
+        
+        <!-- 默认挂件形状（当没有图片时） -->
+        <view class="charm-default-shape" wx:else></view>
+        
+        <!-- 挂件内容覆盖层 -->
+        <view class="charm-content-overlay">
+          
+          <!-- 🔮 左上角竖排签名 -->
+          <view class="charm-name-vertical" wx:if="{{charmNameChars.length}}" 
+                style="color: {{oracleData.charm_main_color || charmMainColor || '#2D3748'}};">
+            <text 
+              class="name-char" 
+              wx:for="{{charmNameChars}}" 
+              wx:for-index="idx" 
+              wx:key="idx"
+            >{{item}}</text>
+          </view>
+          
+          <!-- 移除中间装饰区域，保持签体简洁 -->
+          
+          <!-- 简化内容，只保留签名和简要祝福 -->
+          
+          <!-- 简要祝福 -->
+          <view class="charm-blessing" wx:if="{{oracleData.charm_blessing}}" style="color: {{oracleData.charm_main_color || '#8B7355'}};">
+            {{oracleData.charm_blessing}}
+          </view>
+          
+        </view>
+        
+        <!-- 挂件装饰效果 - 保留sparkle闪烁增加灵动感 -->
+        <view class="charm-decoration" wx:if="{{showAnimation}}">
+          <view class="charm-sparkle charm-sparkle-1"></view>
+          <view class="charm-sparkle charm-sparkle-2"></view>
+          <view class="charm-sparkle charm-sparkle-3"></view>
+        </view>
+        
+      </view>
+      
+      <!-- 翻面提示 -->
+      <view class="flip-hint-charm">
+        <text class="flip-hint-icon">↻</text>
+        <text class="flip-hint-text">查看解签</text>
+      </view>
+      
+    </view>
+    
+    <!-- 第3层：背面容器 - 解签笺形式 -->
+    <view class="charm-face charm-face-back">
+      
+      <!-- 解签笺容器 - 竖排布局 -->
+      <view class="interpretation-scroll-vertical {{showInterpretation ? 'visible' : ''}}">
+        
+        <!-- 背景图片层 -->
+        <view 
+          class="scroll-background-image" 
+          wx:if="{{backgroundImage || oracleData.visual_background_image || oracleData.image_url}}"
+          style="background-image: url({{backgroundImage || oracleData.visual_background_image || oracleData.image_url}});"
+        ></view>
+        
+        <!-- 简化背面内容 - 只保留空白区域作为占位 -->
+        <view class="simplified-back-content">
+          
+          <!-- 解签笺竖排文字 -->
+          <view class="oracle-label-back">
+            <text class="oracle-char-back">解</text>
+            <text class="oracle-char-back">签</text>
+            <text class="oracle-char-back">笺</text>
+            <view class="oracle-line-back"></view>
+          </view>
+          
+          <!-- 红色框区域：竖排文字内容 -->
+          <view class="oracle-content-vertical">
+            <!-- 卦象名称和洞察 -->
+            <view class="oracle-column" wx:if="{{extractedOracleData.oracle_hexagram_name || extractedOracleData.oracle_hexagram_insight}}">
+              <text class="oracle-text" wx:if="{{extractedOracleData.oracle_hexagram_insight}}">{{extractedOracleData.oracle_hexagram_insight}}</text>
+            </view>
+            
+            <!-- 生活指引 -->
+            <view class="oracle-column" wx:if="{{extractedOracleData.oracle_daily_guides && extractedOracleData.oracle_daily_guides.length > 0}}">
+              <block wx:for="{{extractedOracleData.oracle_daily_guides}}" wx:key="index">
+                <text class="oracle-text">{{item}}</text>
+              </block>
+            </view>
+            
+            <!-- 风水和仪式建议 -->
+            <view class="oracle-column" wx:if="{{extractedOracleData.oracle_fengshui_focus || extractedOracleData.oracle_ritual_hint}}">
+              <text class="oracle-text" wx:if="{{extractedOracleData.oracle_fengshui_focus}}">{{extractedOracleData.oracle_fengshui_focus}}</text>
+              <text class="oracle-text" wx:if="{{extractedOracleData.oracle_ritual_hint}}">{{extractedOracleData.oracle_ritual_hint}}</text>
+            </view>
+          </view>
+          
+        </view>
+        
+        <!-- 底部区域 - 简化版 -->
+        <view class="scroll-footer-vertical">
+          
+          <!-- 分享按钮（保留） -->
+          <view class="share-button-vertical" catchtap="onShareCharm">
+            <text class="share-icon">🔮</text>
+            <text class="share-text">分享挂件</text>
+          </view>
+          
+          <!-- 责任说明（底部显示） -->
+          <view class="disclaimer-bottom">
+            <text class="disclaimer-text-small">{{oracleData.oracle_culture_note || '灵感源自传统文化启迪，不作吉凶断言。'}}</text>
+          </view>
+        </view>
+        
+      </view>
+      
+    </view>
+    
+  </view>
+</view>

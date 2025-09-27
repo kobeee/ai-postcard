@@ -1,8 +1,10 @@
-// pages/index/index.js - 情绪罗盘首页
+// pages/index/index.js - 心象签首页
 const { postcardAPI, authAPI, envAPI } = require('../../utils/enhanced-request.js');
 const { enhancedAuthManager: authUtil } = require('../../utils/enhanced-auth.js');
 const { startPolling, POLLING_CONFIGS } = require('../../utils/task-polling.js');
 const { parseCardData } = require('../../utils/data-parser.js');
+const { CardDataManager } = require('../../utils/card-data-manager.js');
+const { resourceCache } = require('../../utils/resource-cache.js');
 const envConfig = require('../../config/env.js');
 
 Page({
@@ -17,11 +19,10 @@ Page({
     // 问候语和环境信息
     greetingText: '',
     currentDate: '',
-    weatherInfo: '获取中...',
     
     // 环境信息获取状态
     environmentReady: false,
-    locationPermissionGranted: false,
+    
     
     // 今日卡片
     todayCard: null,
@@ -47,11 +48,37 @@ Page({
     showProfileSetup: false,
     tempAvatarUrl: '',
     tempNickname: '',
-    canCompleteSetup: false
+    canCompleteSetup: false,
+    
+    // 🔮 心境速测问答系统
+    showQuizModal: false,
+    currentQuestionIndex: 0,
+    quizQuestions: [],
+    quizAnswers: [],
+    quizCompleted: false,
+    
+    // 🔮 挂件式心象签显示控制
+    selectedCharmType: 'lianhua-yuanpai', // 当前选择的挂件类型
+    availableCharmTypes: [ // 可选的挂件类型
+      'lianhua-yuanpai',
+      'bagua-jinnang', 
+      'qingyu-tuanshan'
+    ],
+    charmConfigs: [], // 🔮 从远程加载的挂件配置数据
+    
+    // 🔮 资源加载状态管理
+    resourcesLoading: {
+      charmConfigs: false,
+      quizQuestions: false
+    },
+    resourcesLoaded: {
+      charmConfigs: false,
+      quizQuestions: false
+    }
   },
 
   onLoad(options) {
-    envConfig.log('情绪罗盘启动', options);
+    envConfig.log('心象签启动', options);
     // 初始化调试标志（仅开发环境可开启）
     this.setData({ envDebug: !!envConfig.debug, showDebug: false });
     
@@ -75,10 +102,21 @@ Page({
         this.setData({ todayCard: null, needEmotionInput: true, cardFlipped: false });
         this.clearInk();
         this.initCanvas();
-        // 刷新记忆画廊
+        // 🚀 刷新记忆画廊（会重新缓存最新数据）
         this.loadUserCards();
         // 跳过本次配额检查，直接展示画布
         return;
+      }
+    } catch (_) {}
+    
+    // 🚀 检查是否有从详情页返回的缓存更新标记
+    try {
+      const app = getApp();
+      if (app.globalData && app.globalData.refreshUserCards) {
+        app.globalData.refreshUserCards = false;
+        // 刷新用户历史卡片
+        this.loadUserCards();
+        envConfig.log('✅ 从详情页返回，已刷新用户卡片');
       }
     } catch (_) {}
     
@@ -115,21 +153,20 @@ Page({
     // 设置当前时间
     this.setCurrentDate();
     
-    // 获取位置和天气
-    this.getLocationAndWeather();
+    // 设置环境为就绪状态
+    this.setEnvironmentReady();
     
     // 取消30秒降级：准确性优先，仅在拿到真实数据后置为就绪
     // 同时尝试读取预取缓存以缩短等待
     try {
       const cache = wx.getStorageSync('envCache');
       if (cache && cache.ts && (Date.now() - cache.ts) < 5 * 60 * 1000) {
-        this.setData({
-          userLocation: cache.location,
-          cityName: cache.cityName || this.data.cityName,
-          weatherInfo: cache.weatherInfo || this.data.weatherInfo
-        });
+        // 不再使用缓存的位置和天气信息
       }
     } catch (e) {}
+    
+    // 🔮 预加载心象签资源
+    this.preloadCharmResources();
     
     // 检查用户状态
     this.checkUserStatus();
@@ -207,147 +244,25 @@ Page({
   },
 
   /**
-   * 获取地理位置和天气信息
+   * 设置环境为就绪状态（简化版：不依赖位置和天气）
    */
-  async getLocationAndWeather() {
+  setEnvironmentReady() {
     try {
-      // 首先检查位置权限
-      const authSetting = await new Promise((resolve, reject) => {
-        wx.getSetting({
-          success: resolve,
-          fail: reject
-        });
-      });
-
-      let hasLocationAuth = authSetting.authSetting['scope.userLocation'];
-
-      // 如果没有权限，先请求授权
-      if (hasLocationAuth === false) {
-        // 用户之前拒绝过，显示说明
-        wx.showModal({
-          title: '位置权限',
-          content: '获取您的位置信息可以为您推荐当地相关的情绪内容，是否开启？',
-          success: (res) => {
-            if (res.confirm) {
-              wx.openSetting({
-                success: (settingRes) => {
-                  if (settingRes.authSetting['scope.userLocation']) {
-                    this.doGetLocation();
-                  } else {
-                    this.setDefaultWeather();
-                  }
-                }
-              });
-            } else {
-              this.setDefaultWeather();
-            }
-          }
-        });
-        return;
-      } else if (hasLocationAuth === undefined) {
-        // 首次请求，直接尝试获取位置
-        this.doGetLocation();
-      } else {
-        // 已有权限，直接获取
-        this.doGetLocation();
-      }
-
-    } catch (error) {
-      envConfig.error('检查位置权限失败:', error);
-      this.setDefaultWeather();
-    }
-  },
-
-  /**
-   * 实际获取位置的方法
-   */
-  async doGetLocation() {
-    try {
-      // 为提升成功率：开启高精度并添加手动超时兜底（8秒）
-      const location = await Promise.race([
-        new Promise((resolve, reject) => {
-          wx.getLocation({
-            type: 'gcj02',
-            isHighAccuracy: true,
-            highAccuracyExpireTime: 3000,
-            success: resolve,
-            fail: reject
-          });
-        }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('LOCATION_TIMEOUT')), 8000))
-      ]);
-
-      envConfig.log('获取位置成功:', location);
+      envConfig.log('设置环境为就绪状态');
       
-      // 保存位置信息
-      const latitude = location.latitude;
-      const longitude = location.longitude;
+      // 直接设置环境为就绪，不再依赖位置和天气信息
       this.setData({
-        userLocation: { latitude, longitude }
+        environmentReady: true
       });
-
-      // 并行获取城市与天气
-      const { envAPI } = require('../../utils/enhanced-request.js');
-      const [cityRes, weatherRes] = await Promise.all([
-        envAPI.reverseGeocode(latitude, longitude, 'zh'),
-        envAPI.getWeather(latitude, longitude)
-      ]);
-
-      const cityName = (cityRes && (cityRes.city || cityRes.name)) || '';
-      const weatherText = (weatherRes && weatherRes.weather_text) || this.data.weatherInfo;
-      const temperature = weatherRes && weatherRes.temperature;
-      const weatherInfo = typeof temperature === 'number' ? `${weatherText} · ${temperature}°C` : weatherText;
-
-      this.setData({
-        cityName,
-        weatherInfo,
-        environmentReady: true,  // 仅在真实数据返回后置为就绪
-        locationPermissionGranted: true
-      });
-
-      envConfig.log('✅ 环境信息获取完成:', { cityName, weatherInfo });
-
-      // 获取城市热点并写入灵感文案第一条
-      try {
-        const trendingRes = await envAPI.getTrending(cityName || '本地');
-        const items = (trendingRes && trendingRes.items) || [];
-        if (items.length > 0) {
-          // 将最热标题插入 inspirations 第一位
-          const inspirations = this.data.todayCard?.inspirations || [
-            { icon: '🌍', text: `因为今天是${this.data.weatherInfo}` },
-            { icon: '🎨', text: '你的情绪很独特' },
-            { icon: '✨', text: '基于当下的热点话题' },
-            { icon: '💫', text: '来自你的情绪墨迹' }
-          ];
-          inspirations[2] = { icon: '📰', text: items[0].title || '今日热点' };
-          this.setData({
-            todayCard: this.data.todayCard ? { ...this.data.todayCard, inspirations } : this.data.todayCard
-          });
-        }
-      } catch (e) {
-        // 静默降级
-      }
-
+      
     } catch (error) {
-      envConfig.error('获取位置失败:', error);
-      // 不降级：保持等待，由用户决定是否继续
+      envConfig.error('设置环境就绪失败:', error);
       this.setData({
-        environmentReady: false,
-        locationPermissionGranted: false
+        environmentReady: true
       });
     }
   },
 
-  /**
-   * 设置默认天气信息
-   */
-  setDefaultWeather() {
-    // 移除默认环境就绪逻辑：准确性优先，不设置为就绪
-    this.setData({
-      environmentReady: false
-    });
-    envConfig.log('保持等待真实环境信息，不使用默认降级');
-  },
 
   /**
    * 检查用户状态
@@ -363,7 +278,7 @@ Page({
       
       this.setData({
         userInfo: enhancedUserInfo,
-        hasUserInfo: true
+        hasUserInfo: true,
       });
       
       // 设置个性化问候语 - 优化昵称获取逻辑
@@ -581,6 +496,17 @@ Page({
       const parseResult = parseCardData(cardData);
       const structuredData = parseResult.structuredData;
       
+      // 🔮 调试：检查解析后的心象签关键字段
+      envConfig.log('🔮 解析结果调试:', {
+        hasStructuredData: parseResult.hasStructuredData,
+        dataSource: parseResult.debugInfo?.dataSource,
+        ai_selected_charm_id: structuredData?.ai_selected_charm_id,
+        ai_selected_charm_name: structuredData?.ai_selected_charm_name,
+        oracle_title: structuredData?.oracle_title,
+        oracle_affirmation: structuredData?.oracle_affirmation,
+        parsedKeys: Object.keys(structuredData || {}).slice(0, 20) // 只显示前20个键
+      });
+      
       // 初始化基础数据，从解析结果中提取
       let mainText = '每一天都值得被温柔记录';
       let englishQuote = 'Every day deserves to be gently remembered';
@@ -620,6 +546,35 @@ Page({
         if (cardData.concept && typeof cardData.concept === 'string') {
           keyword = cardData.concept;
         }
+        
+        // 🔮 为老数据创建基本的 structured_data，确保挂件能显示
+        const fallbackStructuredData = {
+          title: keyword,
+          content: {
+            main_text: mainText,
+            quote: {
+              text: englishQuote
+            }
+          },
+          mood: {
+            primary: "平和",
+            intensity: 0.6
+          },
+          visual: {
+            background_image_url: cardData.card_image_url || cardData.image_url || '',
+            style_hints: {
+              layout_style: "standard",
+              animation_type: "float"
+            }
+          },
+          oracle: {
+            interpretation: mainText,
+            guidance: "保持当下的心境，感受生活的美好"
+          }
+        };
+        
+        cardData.structured_data = fallbackStructuredData;
+        envConfig.log('🔮 为老数据创建了 structured_data:', fallbackStructuredData);
       }
       
       // 构建最终数据 - 只包含模板实际使用的字段，提升性能
@@ -665,7 +620,42 @@ Page({
         } : null
       };
       
+      // 🔮 智能选择挂件类型 - 使用解析后的完整structuredData
+      if (structuredData && Object.keys(structuredData).length > 0) {
+        const smartCharmType = this.autoSelectCharmType(structuredData);
+        this.setData({
+          selectedCharmType: smartCharmType
+        });
+        envConfig.log('🔮 智能选择挂件类型:', smartCharmType, '基于数据:', {
+          ai_selected_charm_id: structuredData.ai_selected_charm_id,
+          ai_selected_charm_name: structuredData.ai_selected_charm_name
+        });
+      } else {
+        // 降级：如果没有解析的数据，使用原始的structured_data
+        if (cardData.structured_data) {
+          const smartCharmType = this.autoSelectCharmType(cardData.structured_data);
+          this.setData({
+            selectedCharmType: smartCharmType
+          });
+          envConfig.log('🔮 降级智能选择挂件类型:', smartCharmType);
+        }
+      }
+      
       envConfig.log('格式化完成的卡片数据:', result);
+      
+      // 🚀 添加缓存逻辑（不影响原有返回值）
+      if (cardData && cardData.id) {
+        try {
+          // 异步缓存，不阻塞页面渲染
+          setTimeout(() => {
+            CardDataManager.processAndCacheCard(cardData);
+          }, 0);
+        } catch (cacheError) {
+          envConfig.error('缓存卡片数据失败:', cacheError);
+          // 缓存失败不影响主流程
+        }
+      }
+      
       return result;
       
     } catch (error) {
@@ -735,8 +725,7 @@ Page({
         }
       },
       context: {
-        location: this.data.cityName || '当前位置',
-        weather: this.data.weatherInfo || ''
+        location: '当前位置'
       }
     };
     return structured;
@@ -806,13 +795,17 @@ Page({
         envConfig.error('同步认证状态失败:', error);
       }
 
-      // 直接设置用户信息（不再引导完善资料）
+      // 直接设置用户信息并进入主内容
       const enhancedUserInfo = this.processUserInfo(authResult.userInfo);
       this.setData({
         userInfo: enhancedUserInfo,
         hasUserInfo: true,
-        showProfileSetup: false
+        showProfileSetup: false,
       });
+      
+      // 立即初始化相关功能
+      this.setEnvironmentReady();
+      this.initCanvas();
       this.checkUserStatus();
 
       wx.hideLoading();
@@ -827,6 +820,7 @@ Page({
       envConfig.error('快速登录失败:', error);
     }
   },
+
 
   /**
    * 点击头像更换 - 简化版
@@ -1050,6 +1044,7 @@ Page({
     this.emotionAnalysis = null;
     this.emotionImagePath = null;
   },
+
   
   /**
    * 获取canvas的base64数据
@@ -1161,7 +1156,7 @@ Page({
   },
 
   /**
-   * 分析绘画轨迹数据，提供详细的绘制特征分析
+   * 分析绘画轨迹数据，提供详细的绘制特征分析 - 心象签专用版本
    */
   analyzeDrawingTrajectory() {
     if (!this.emotionPath || this.emotionPath.length < 2) {
@@ -1173,7 +1168,14 @@ Page({
         direction_changes: 0,
         pressure_variation: 'steady',
         pattern_type: 'undefined',
-        emotion_indicators: []
+        emotion_indicators: [],
+        // 🔮 心象签专用指标
+        dominant_quadrant: 'center',
+        stroke_density: 0,
+        rhythm_pattern: 'steady',
+        energy_distribution: 'balanced',
+        geometric_tendency: 'organic',
+        emotional_resonance: 'neutral'
       };
     }
 
@@ -1181,10 +1183,19 @@ Page({
     const totalPoints = path.length;
     const totalTime = path[totalPoints - 1].time - path[0].time;
     
-    // 计算总路径长度
+    // 计算Canvas尺寸用于象限分析（假设Canvas为400x300）
+    const canvasWidth = 400;
+    const canvasHeight = 300;
+    const centerX = canvasWidth / 2;
+    const centerY = canvasHeight / 2;
+    
+    // 🔮 心象签精准感应信号采集
     let totalDistance = 0;
     let directionChanges = 0;
     let speeds = [];
+    let quadrantDistribution = { topLeft: 0, topRight: 0, bottomLeft: 0, bottomRight: 0, center: 0 };
+    let energyPoints = []; // 记录能量密集点
+    let rhythmIntervals = []; // 记录绘画节奏
     
     for (let i = 1; i < totalPoints; i++) {
       const prev = path[i - 1];
@@ -1195,7 +1206,30 @@ Page({
       totalDistance += distance;
       
       if (timeInterval > 0) {
-        speeds.push(distance / timeInterval);
+        const speed = distance / timeInterval;
+        speeds.push(speed);
+        rhythmIntervals.push(timeInterval);
+        
+        // 🔮 记录高能量点
+        if (speed > 1) {
+          energyPoints.push({ x: curr.x, y: curr.y, energy: speed });
+        }
+      }
+      
+      // 🔮 象限分布分析
+      const deltaX = Math.abs(curr.x - centerX);
+      const deltaY = Math.abs(curr.y - centerY);
+      
+      if (deltaX < canvasWidth * 0.15 && deltaY < canvasHeight * 0.15) {
+        quadrantDistribution.center++;
+      } else if (curr.x < centerX && curr.y < centerY) {
+        quadrantDistribution.topLeft++;
+      } else if (curr.x >= centerX && curr.y < centerY) {
+        quadrantDistribution.topRight++;
+      } else if (curr.x < centerX && curr.y >= centerY) {
+        quadrantDistribution.bottomLeft++;
+      } else {
+        quadrantDistribution.bottomRight++;
       }
       
       // 检测方向变化
@@ -1213,6 +1247,69 @@ Page({
     
     const averageSpeed = speeds.length > 0 ? speeds.reduce((a, b) => a + b, 0) / speeds.length : 0;
     const speedVariance = speeds.length > 0 ? speeds.reduce((acc, speed) => acc + Math.pow(speed - averageSpeed, 2), 0) / speeds.length : 0;
+    
+    // 🔮 心象签专用分析
+    
+    // 1. 主导象限分析
+    const maxQuadrant = Object.keys(quadrantDistribution).reduce((a, b) => 
+      quadrantDistribution[a] > quadrantDistribution[b] ? a : b
+    );
+    
+    // 2. 笔画密度计算
+    const canvasArea = canvasWidth * canvasHeight;
+    const strokeDensity = totalDistance / canvasArea;
+    
+    // 3. 节奏模式分析
+    let rhythmPattern = 'steady';
+    if (rhythmIntervals.length > 5) {
+      const rhythmVariance = rhythmIntervals.reduce((acc, interval, idx) => {
+        if (idx === 0) return 0;
+        return acc + Math.abs(interval - rhythmIntervals[idx - 1]);
+      }, 0) / rhythmIntervals.length;
+      
+      if (rhythmVariance > 100) {
+        rhythmPattern = 'irregular';
+      } else if (rhythmVariance > 50) {
+        rhythmPattern = 'varied';
+      } else {
+        rhythmPattern = 'steady';
+      }
+    }
+    
+    // 4. 能量分布分析
+    let energyDistribution = 'balanced';
+    if (energyPoints.length > 0) {
+      const energyVariance = energyPoints.reduce((acc, point) => acc + point.energy, 0) / energyPoints.length;
+      if (energyVariance > 3) {
+        energyDistribution = 'explosive';
+      } else if (energyVariance > 1.5) {
+        energyDistribution = 'dynamic';
+      } else if (energyVariance < 0.5) {
+        energyDistribution = 'gentle';
+      }
+    }
+    
+    // 5. 几何倾向分析
+    let geometricTendency = 'organic';
+    const directionalConsistency = 1 - (directionChanges / totalPoints);
+    if (directionalConsistency > 0.8) {
+      geometricTendency = 'linear';
+    } else if (directionalConsistency > 0.6) {
+      geometricTendency = 'structured';
+    } else if (directionChanges / totalPoints > 0.4) {
+      geometricTendency = 'chaotic';
+    }
+    
+    // 6. 情感共鸣度分析
+    let emotionalResonance = 'neutral';
+    const emotionScore = this.calculateEmotionScore(averageSpeed, totalTime, directionChanges, totalPoints);
+    if (emotionScore > 0.7) {
+      emotionalResonance = 'intense';
+    } else if (emotionScore > 0.4) {
+      emotionalResonance = 'moderate';
+    } else if (emotionScore < 0.2) {
+      emotionalResonance = 'calm';
+    }
     
     // 分析绘制模式
     let patternType = 'undefined';
@@ -1256,7 +1353,22 @@ Page({
       emotionIndicators.push('concentrated');
     }
     
+    // 🔮 心象签特有情感指标
+    if (maxQuadrant === 'center') {
+      emotionIndicators.push('introspective');
+    }
+    if (energyDistribution === 'explosive') {
+      emotionIndicators.push('passionate');
+    }
+    if (rhythmPattern === 'steady' && geometricTendency === 'linear') {
+      emotionIndicators.push('focused');
+    }
+    if (strokeDensity > 0.5) {
+      emotionIndicators.push('expressive');
+    }
+    
     return {
+      // 🔥 基础指标
       stroke_count: 1, // 当前实现为单笔画
       drawing_time: totalTime,
       total_distance: totalDistance,
@@ -1269,11 +1381,162 @@ Page({
       pattern_type: patternType,
       emotion_indicators: emotionIndicators,
       point_count: totalPoints,
-      // 提供给AI的文本描述
-      drawing_description: this.generateDrawingDescription(
-        patternType, complexity, averageSpeed, totalTime, emotionIndicators
+      
+      // 🔮 心象签专用精准感应信号
+      dominant_quadrant: maxQuadrant,
+      stroke_density: strokeDensity,
+      rhythm_pattern: rhythmPattern,
+      energy_distribution: energyDistribution,
+      geometric_tendency: geometricTendency,
+      emotional_resonance: emotionalResonance,
+      quadrant_distribution: quadrantDistribution,
+      energy_points_count: energyPoints.length,
+      rhythm_consistency: rhythmPattern === 'steady' ? 0.8 : (rhythmPattern === 'varied' ? 0.5 : 0.2),
+      
+      // 🔮 心象签文本描述（供AI理解）
+      drawing_description: this.generateHeartOracleDescription(
+        maxQuadrant, strokeDensity, rhythmPattern, energyDistribution, 
+        geometricTendency, emotionalResonance, patternType, complexity, 
+        averageSpeed, totalTime, emotionIndicators
       )
     };
+  },
+
+  /**
+   * 计算情感共鸣度评分 - 心象签专用
+   */
+  calculateEmotionScore(averageSpeed, totalTime, directionChanges, totalPoints) {
+    // 基于多维度数据计算情感共鸣度（0-1之间）
+    let score = 0;
+    
+    // 速度维度（30%权重）
+    const normalizedSpeed = Math.min(averageSpeed / 5, 1); // 规范化到0-1
+    score += normalizedSpeed * 0.3;
+    
+    // 时间维度（25%权重）
+    const normalizedTime = Math.min(totalTime / 15000, 1); // 15秒为满分
+    score += normalizedTime * 0.25;
+    
+    // 变化频率维度（25%权重）
+    const changeRate = directionChanges / totalPoints;
+    const normalizedChangeRate = Math.min(changeRate / 0.5, 1); // 50%变化率为满分
+    score += normalizedChangeRate * 0.25;
+    
+    // 表达丰富度维度（20%权重）
+    const normalizedRichness = Math.min(totalPoints / 100, 1); // 100个点为满分
+    score += normalizedRichness * 0.2;
+    
+    return Math.min(score, 1); // 确保不超过1
+  },
+
+  /**
+   * 生成心象签专用描述供AI理解
+   */
+  generateHeartOracleDescription(
+    dominantQuadrant, strokeDensity, rhythmPattern, energyDistribution,
+    geometricTendency, emotionalResonance, patternType, complexity,
+    averageSpeed, totalTime, emotionIndicators
+  ) {
+    let description = [];
+    
+    // 🔮 心象签核心描述
+    description.push('心象墨迹感应：');
+    
+    // 象限能量描述
+    const quadrantMap = {
+      'center': '内心聚焦，能量向内收敛',
+      'topLeft': '向往理想，思维活跃',
+      'topRight': '积极主动，目标明确',
+      'bottomLeft': '情感深沉，回顾过往',
+      'bottomRight': '稳定务实，脚踏实地'
+    };
+    description.push(quadrantMap[dominantQuadrant] || '能量分布均衡');
+    
+    // 笔画密度描述
+    if (strokeDensity > 0.8) {
+      description.push('笔触稠密，表达强烈');
+    } else if (strokeDensity > 0.4) {
+      description.push('笔触适中，表达平衡');
+    } else {
+      description.push('笔触疏淡，内心宁静');
+    }
+    
+    // 节奏描述
+    const rhythmMap = {
+      'steady': '绘制节奏稳定，内心平和',
+      'varied': '绘制节奏多变，情感丰富',
+      'irregular': '绘制节奏不规律，内心波动'
+    };
+    description.push(rhythmMap[rhythmPattern]);
+    
+    // 能量分布描述
+    const energyMap = {
+      'balanced': '能量分布均衡',
+      'gentle': '能量温和内敛',
+      'dynamic': '能量变化多样',
+      'explosive': '能量强烈释放'
+    };
+    description.push(energyMap[energyDistribution]);
+    
+    // 几何倾向描述
+    const geometryMap = {
+      'linear': '偏向直线，思维理性',
+      'structured': '偏向规整，条理清晰',
+      'organic': '偏向自然，感性流动',
+      'chaotic': '偏向混沌，情感复杂'
+    };
+    description.push(geometryMap[geometricTendency]);
+    
+    // 情感共鸣度描述
+    const resonanceMap = {
+      'calm': '情感共鸣温和平静',
+      'neutral': '情感共鸣适中稳定',
+      'moderate': '情感共鸣较为强烈',
+      'intense': '情感共鸣深度强烈'
+    };
+    description.push(resonanceMap[emotionalResonance]);
+    
+    // 时长与速度的综合描述
+    const timeInSeconds = Math.round(totalTime / 1000);
+    if (timeInSeconds > 15) {
+      description.push('深思熟虑的长时间表达');
+    } else if (timeInSeconds > 8) {
+      description.push('适度思考的中等时长表达');
+    } else {
+      description.push('直觉快速的即时表达');
+    }
+    
+    if (averageSpeed > 3) {
+      description.push('笔触迅疾，情绪激昂');
+    } else if (averageSpeed > 1) {
+      description.push('笔触适中，情绪稳定');
+    } else {
+      description.push('笔触缓慢，内心安详');
+    }
+    
+    // 情感指标综合描述
+    if (emotionIndicators.length > 0) {
+      const indicatorMap = {
+        'energetic': '充满活力',
+        'contemplative': '深度思考',
+        'restless': '内心不安',
+        'concentrated': '高度专注',
+        'introspective': '内省自观',
+        'passionate': '热情澎湃',
+        'focused': '目标清晰',
+        'expressive': '表达丰富'
+      };
+      
+      const mappedIndicators = emotionIndicators
+        .map(indicator => indicatorMap[indicator] || indicator)
+        .slice(0, 3); // 最多取3个主要指标
+      
+      if (mappedIndicators.length > 0) {
+        description.push(`主要情感特征：${mappedIndicators.join('、')}`);
+      }
+    }
+    
+    return description.join('，');
   },
 
   /**
@@ -1569,11 +1832,10 @@ Page({
         envConfig.log('热点获取失败，使用基础信息', e);
       }
       
-      // 增强的环境感知信息
+      // 简化的环境感知信息
       const locationInfo = {
-        city: this.data.cityName || '本地',
-        weather: this.data.weatherInfo || '温和',
-        coordinates: this.data.userLocation ? `${this.data.userLocation.latitude.toFixed(3)}, ${this.data.userLocation.longitude.toFixed(3)}` : '当前位置'
+        city: '当前环境',
+        coordinates: '当前位置'
       };
       
       // 深度情绪分析
@@ -1612,7 +1874,9 @@ Page({
           analysis: drawingAnalysis
         },
         // 🆕 直接传递base64编码的情绪图片数据
-        emotion_image_base64: emotionImageBase64
+        emotion_image_base64: emotionImageBase64,
+        // 🔮 传递心境速测问答数据
+        quiz_answers: this.data.quizAnswers || []
       };
 
       // 发送生成请求
@@ -1621,7 +1885,7 @@ Page({
       
       // 保存任务ID以便错误处理时清理
       this.currentTaskId = task_id;
-      envConfig.log('开始明信片生成任务:', task_id);
+      envConfig.log('开始心象签生成任务:', task_id);
 
       // 开始轮询任务状态 - 使用AI生成专用配置，支持长时间任务
       const finalResult = await startPolling(task_id, {
@@ -1722,10 +1986,34 @@ Page({
     if (!this.data.hasUserInfo) return;
 
     try {
+      // 确保签体配置已加载（用于缩略图显示）
+      if (!this.data.resourcesLoaded.charmConfigs) {
+        await this.loadCharmConfigs();
+      }
       const response = await postcardAPI.getUserPostcards(this.data.userInfo.id, 1, 10);
       const cards = response.postcards || [];
       
-      const formattedCards = cards.map(card => {
+      // 过滤近7天的卡片
+      const now = new Date();
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      
+      const recentCards = cards.filter(card => {
+        const cardDate = new Date(card.created_at);
+        return cardDate >= sevenDaysAgo;
+      });
+      
+      const formattedCards = recentCards.map(card => {
+        // 🚀 异步缓存历史卡片数据（不阻塞UI）
+        if (card && card.id) {
+          setTimeout(() => {
+            try {
+              CardDataManager.processAndCacheCard(card);
+            } catch (cacheError) {
+              envConfig.error('缓存历史卡片失败:', cacheError);
+            }
+          }, 0);
+        }
+        
         // 解析结构化数据，提取预览内容
         let previewData = {
           title: card.concept || '回忆',
@@ -1740,11 +2028,28 @@ Page({
               ? JSON.parse(card.structured_data) 
               : card.structured_data;
             
+            // 优先使用签体缩略图，提供更好的识别度
+            let thumbnailImage = '';
+            
+            // 从ai_selected_charm_id获取签体图片
+            if (card.ai_selected_charm_id && this.data.charmConfigs.length > 0) {
+              const charmConfig = this.data.charmConfigs.find(c => c.id === card.ai_selected_charm_id);
+              if (charmConfig && charmConfig.imageUrl) {
+                thumbnailImage = charmConfig.imageUrl;
+              }
+            }
+            
+            // 降级到背景图片
+            if (!thumbnailImage) {
+              thumbnailImage = structured.visual?.background_image_url || card.image || '';
+            }
+            
             previewData = {
               title: structured.title || card.concept || '回忆',
               mainText: structured.content?.main_text || card.quote || '',
               mood: structured.mood?.primary || '',
-              backgroundImage: structured.visual?.background_image_url || card.image || ''
+              backgroundImage: thumbnailImage,
+              charmId: card.ai_selected_charm_id || ''
             };
           } catch (e) {
             envConfig.warn('解析结构化数据失败:', e);
@@ -1755,7 +2060,8 @@ Page({
             title: card.concept || '回忆',
             mainText: card.quote || '',
             mood: card.emotion_type || '',
-            backgroundImage: card.image || ''
+            backgroundImage: card.image || '',
+            charmId: ''
           };
         }
         
@@ -1769,6 +2075,7 @@ Page({
           mainText: previewData.mainText.substring(0, 20) + (previewData.mainText.length > 20 ? '...' : ''),
           mood: previewData.mood,
           backgroundImage: previewData.backgroundImage,
+          charmId: previewData.charmId,
           moodColor: this.getMoodColor(card.emotion_type)
         };
       });
@@ -1848,14 +2155,14 @@ Page({
   onShareAppMessage() {
     if (this.data.todayCard) {
       const card = this.data.todayCard;
-      let shareTitle = '我在AI明信片记录了今天的心情';
+      let shareTitle = '我创建了一张AI心象签';
       
       // 使用更丰富的分享标题
       if (card.keyword && card.keyword !== '今日心境') {
-        shareTitle = `${card.keyword} | 我的AI明信片`;
+        shareTitle = `${card.keyword} | 我的AI心象签`;
       } else if (card.quote && card.quote.length > 0) {
         const shortQuote = card.quote.length > 20 ? card.quote.substring(0, 20) + '...' : card.quote;
-        shareTitle = `"${shortQuote}" | 我的AI明信片`;
+        shareTitle = `"${shortQuote}" | 我的AI心象签`;
       }
       
       return {
@@ -1866,7 +2173,7 @@ Page({
     }
     
     return {
-      title: 'AI明信片 - 每一天，都值得被温柔记录',
+      title: 'AI心象签 - 将心情映射为自然意象',
       path: '/pages/index/index'
     };
   },
@@ -1875,23 +2182,14 @@ Page({
    * 分享到朋友圈
    */
   onShareTimeline() {
-    const cityName = this.data.cityName;
-    const weatherInfo = this.data.weatherInfo;
+    let timelineTitle = 'AI心象签 - 将心情映射为自然意象';
     
-    let timelineTitle = 'AI明信片 - 每一天，都值得被温柔记录';
-    
-    // 结合环境信息的朋友圈标题
+    // 简化朋友圈标题，仅基于卡片内容
     if (this.data.todayCard) {
       const card = this.data.todayCard;
-      if (card.keyword && cityName) {
-        timelineTitle = `${card.keyword} | ${cityName}的AI明信片`;
-      } else if (cityName && weatherInfo) {
-        timelineTitle = `${cityName}，${weatherInfo} | AI明信片记录`;
-      } else if (card.keyword) {
-        timelineTitle = `${card.keyword} | AI明信片`;
+      if (card.keyword) {
+        timelineTitle = `${card.keyword} | AI心象签`;
       }
-    } else if (cityName && weatherInfo) {
-      timelineTitle = `${cityName}，${weatherInfo} | AI明信片创作`;
     }
     
     return {
@@ -1975,11 +2273,10 @@ Page({
    * 构建增强AI提示
    */
   buildEnhancedPrompt(locationInfo, emotionInfo, timeContext, trendingTopics) {
-    const prompt = `心绪花开 - 智能情绪明信片生成
+    const prompt = `心象意境 - 智能心象签生成
 
 环境感知：
 • 地理位置：${locationInfo.city}（${locationInfo.coordinates}）
-• 天气状况：${locationInfo.weather}
 • 时间背景：${timeContext.weekday} ${timeContext.period} (${timeContext.season})
 ${trendingTopics ? `• 当地热点：${trendingTopics}` : ''}
 
@@ -1990,8 +2287,8 @@ ${trendingTopics ? `• 当地热点：${trendingTopics}` : ''}
 • 情感复杂度：${emotionInfo.complexity}
 • 表达时长：${Math.round(emotionInfo.duration / 1000)}秒
 
-请基于以上信息生成一张个性化的动态明信片，要求：
-1. 深度融合地理环境、天气状况和当地热点话题
+请基于以上信息生成一张个性化的动态心象签，要求：
+1. 深度融合地理环境和当地热点话题
 2. 准确反映用户的情绪状态和表达方式
 3. 结合时间背景营造恰当的氛围
 4. 生成有趣、温暖、具有个人意义的内容
@@ -2020,14 +2317,8 @@ ${trendingTopics ? `• 当地热点：${trendingTopics}` : ''}
   retryEnvironmentInfo() {
     envConfig.log('用户手动重试获取环境信息');
     
-    // 重置环境状态
-    this.setData({
-      environmentReady: false,
-      weatherInfo: '获取中...'
-    });
-    
-    // 重新获取位置和天气
-    this.getLocationAndWeather();
+    // 简化：直接设置环境为就绪
+    this.setEnvironmentReady();
   },
 
   /**
@@ -2035,10 +2326,7 @@ ${trendingTopics ? `• 当地热点：${trendingTopics}` : ''}
    */
   checkEnvironmentStatus() {
     return {
-      ready: this.data.environmentReady,
-      hasLocation: this.data.locationPermissionGranted,
-      city: this.data.cityName || '未知',
-      weather: this.data.weatherInfo || '未知'
+      ready: this.data.environmentReady
     };
   },
 
@@ -2159,5 +2447,697 @@ ${trendingTopics ? `• 当地热点：${trendingTopics}` : ''}
     wx.navigateTo({
       url: '/pages/flip-test/flip-test'
     });
+  },
+
+  // ==================== 🔮 心象签资源动态加载系统 ====================
+
+  /**
+   * 🔮 预加载心象签资源（异步，不阻塞页面启动）
+   */
+  async preloadCharmResources() {
+    envConfig.log('开始预加载心象签资源');
+    
+    // 异步加载，避免阻塞页面初始化
+    setTimeout(async () => {
+      try {
+        await this.loadCharmConfigs();
+        envConfig.log('✅ 心象签资源预加载完成');
+      } catch (error) {
+        envConfig.error('心象签资源预加载失败:', error);
+      }
+    }, 1000);
+  },
+
+  /**
+   * 🔮 从AI Agent服务动态加载挂件配置
+   */
+  async loadCharmConfigs() {
+    // 避免重复加载
+    if (this.data.resourcesLoading.charmConfigs || this.data.resourcesLoaded.charmConfigs) {
+      return this.data.charmConfigs;
+    }
+    
+    try {
+      // 设置加载状态
+      this.setData({
+        'resourcesLoading.charmConfigs': true
+      });
+      
+      const AI_AGENT_PUBLIC_URL = envConfig.AI_AGENT_PUBLIC_URL || 'http://localhost:8080';
+      const configUrl = `${AI_AGENT_PUBLIC_URL}/resources/签体/charm-config.json`;
+      
+      envConfig.log('加载挂件配置:', configUrl);
+      
+      const response = await new Promise((resolve, reject) => {
+        wx.request({
+          url: configUrl,
+          method: 'GET',
+          success: resolve,
+          fail: reject
+        });
+      });
+      
+      if (response.statusCode === 200 && response.data) {
+        // 缓存挂件配置到本地
+        wx.setStorageSync('charmConfigs', {
+          data: response.data,
+          timestamp: Date.now()
+        });
+        
+        // 为每个挂件配置添加完整的图片URL（URL编码处理）
+        const charmsWithImageUrls = response.data.map(charm => ({
+          ...charm,
+          imageUrl: `${AI_AGENT_PUBLIC_URL}/resources/签体/${encodeURIComponent(charm.image)}`
+        }));
+        
+        // 更新页面数据中的可用挂件类型
+        this.setData({
+          availableCharmTypes: charmsWithImageUrls.map(c => c.id),
+          charmConfigs: charmsWithImageUrls,
+          'resourcesLoading.charmConfigs': false,
+          'resourcesLoaded.charmConfigs': true
+        });
+        
+        envConfig.log('✅ 挂件配置加载成功，共', response.data.length, '种挂件');
+        
+        // 🔄 异步预下载挂件资源（不阻塞UI）
+        this.preloadCharmImages(charmsWithImageUrls);
+        
+        return charmsWithImageUrls;
+        
+      } else {
+        throw new Error(`HTTP ${response.statusCode}`);
+      }
+      
+    } catch (error) {
+      envConfig.error('加载挂件配置失败:', error);
+      
+      // 重置加载状态
+      this.setData({
+        'resourcesLoading.charmConfigs': false
+      });
+      
+      // 使用缓存的配置
+      try {
+        const cached = wx.getStorageSync('charmConfigs');
+        if (cached && cached.data && (Date.now() - cached.timestamp) < 24 * 60 * 60 * 1000) {
+          envConfig.log('使用缓存的挂件配置');
+          const charmsWithImageUrls = cached.data.map(charm => ({
+            ...charm,
+            imageUrl: `${envConfig.AI_AGENT_PUBLIC_URL || 'http://localhost:8080'}/resources/签体/${encodeURIComponent(charm.image)}`
+          }));
+          
+          this.setData({
+            availableCharmTypes: charmsWithImageUrls.map(c => c.id),
+            charmConfigs: charmsWithImageUrls,
+            'resourcesLoaded.charmConfigs': true
+          });
+          
+          // 🔄 异步预下载缓存的挂件资源
+          this.preloadCharmImages(charmsWithImageUrls);
+          
+          return charmsWithImageUrls;
+        }
+      } catch (e) {
+        envConfig.error('读取缓存配置失败:', e);
+      }
+      
+      // 最后使用默认配置
+      envConfig.warn('使用默认挂件配置');
+      this.setData({
+        availableCharmTypes: ['lianhua-yuanpai', 'bagua-jinnang', 'qingyu-tuanshan']
+      });
+      return [];
+    }
+  },
+
+  /**
+   * 🔄 预下载挂件资源（异步后台执行）
+   */
+  async preloadCharmImages(charmConfigs) {
+    if (!Array.isArray(charmConfigs) || charmConfigs.length === 0) {
+      return;
+    }
+
+    try {
+      // 提取所有图片URL
+      const imageUrls = charmConfigs
+        .filter(charm => charm.imageUrl)
+        .map(charm => charm.imageUrl);
+
+      if (imageUrls.length === 0) {
+        envConfig.log('没有需要预下载的挂件资源');
+        return;
+      }
+
+      envConfig.log('🚀 开始预下载挂件资源:', imageUrls.length, '个');
+
+      // 使用资源缓存管理器批量预下载
+      const results = await resourceCache.preloadResources(imageUrls);
+      
+      // 统计下载结果
+      const successCount = Object.values(results).filter(r => r.success).length;
+      const failCount = imageUrls.length - successCount;
+      
+      envConfig.log('✅ 挂件资源预下载完成:', {
+        total: imageUrls.length,
+        success: successCount,
+        failed: failCount
+      });
+
+      // 如果有失败的资源，记录详细信息
+      if (failCount > 0) {
+        const failedResources = Object.entries(results)
+          .filter(([url, result]) => !result.success)
+          .map(([url, result]) => ({ url, error: result.error }));
+        
+        envConfig.warn('预下载失败的资源:', failedResources);
+      }
+
+    } catch (error) {
+      envConfig.error('挂件资源预下载失败:', error);
+    }
+  },
+
+  // ==================== 🔮 心境速测问答系统 ====================
+
+  /**
+   * 🔮 从AI Agent服务动态加载心境速测题库
+   */
+  async loadQuizQuestions() {
+    // 避免重复加载
+    if (this.data.resourcesLoading.quizQuestions) {
+      return this.data.quizQuestions;
+    }
+    
+    try {
+      envConfig.log('开始加载心境速测题库');
+      
+      // 设置加载状态
+      this.setData({
+        'resourcesLoading.quizQuestions': true
+      });
+      
+      // 优先从AI Agent服务动态加载题库
+      let questions = [];
+      
+      try {
+        // 🔮 从AI_AGENT_PUBLIC_URL动态加载题库
+        const AI_AGENT_PUBLIC_URL = envConfig.AI_AGENT_PUBLIC_URL || 'http://localhost:8080';
+        const questionsUrl = `${AI_AGENT_PUBLIC_URL}/resources/题库/question.json`;
+        
+        envConfig.log('尝试从远程加载题库:', questionsUrl);
+        
+        const response = await new Promise((resolve, reject) => {
+          wx.request({
+            url: questionsUrl,
+            method: 'GET',
+            success: resolve,
+            fail: reject
+          });
+        });
+        
+        if (response.statusCode === 200 && response.data) {
+          questions = response.data;
+          envConfig.log('✅ 远程题库加载成功，题目数量:', questions.length);
+        } else {
+          throw new Error(`HTTP ${response.statusCode}`);
+        }
+        
+      } catch (e) {
+        envConfig.warn('远程题库加载失败，使用默认题库:', e.message || e);
+        questions = this.getDefaultQuizQuestions();
+      }
+      
+      // 从5个分类中各选1题，共3题（智能选择）
+      const selectedQuestions = this.selectQuizQuestions(questions);
+      
+      this.setData({
+        quizQuestions: selectedQuestions,
+        'resourcesLoading.quizQuestions': false,
+        'resourcesLoaded.quizQuestions': true
+      });
+      
+      envConfig.log('心境速测题库加载完成，选中题目:', selectedQuestions.length);
+      return selectedQuestions;
+      
+    } catch (error) {
+      envConfig.error('加载心境速测题库失败:', error);
+      
+      // 重置加载状态
+      this.setData({
+        'resourcesLoading.quizQuestions': false
+      });
+      
+      // 使用最基础的默认题库
+      const fallbackQuestions = this.getFallbackQuestions();
+      this.setData({
+        quizQuestions: fallbackQuestions
+      });
+      return fallbackQuestions;
+    }
+  },
+
+  /**
+   * 获取默认问答题库（内嵌到代码中）
+   */
+  getDefaultQuizQuestions() {
+    return [
+      {
+        "id": "mood_weather_01",
+        "category": "mood", 
+        "question": "如果用心绪描绘今天的天气，它会是？",
+        "options": [
+          { "id": "sunny", "label": "一望无际的晴空" },
+          { "id": "breeze", "label": "有微风拂过的午后" },
+          { "id": "overcast", "label": "云层有点厚的阴天" },
+          { "id": "storm", "label": "一场突如其来的阵雨" }
+        ]
+      },
+      {
+        "id": "mood_color_02",
+        "category": "mood",
+        "question": "此刻，哪种颜色更能代表你的心情？",
+        "options": [
+          { "id": "warm_orange", "label": "温暖的橘黄" },
+          { "id": "calm_blue", "label": "平静的浅蓝" },
+          { "id": "deep_purple", "label": "深邃的暗紫" },
+          { "id": "fresh_green", "label": "有生机的草绿" }
+        ]
+      },
+      {
+        "id": "pressure_source_01",
+        "category": "pressure",
+        "question": "最近，让你感到最有压力的是？",
+        "options": [
+          { "id": "work", "label": "工作或学业上的任务" },
+          { "id": "relationship", "label": "人际关系中的纠葛" },
+          { "id": "self_expectation", "label": "对自己的高要求" },
+          { "id": "uncertainty", "label": "对未来的迷茫感" }
+        ]
+      },
+      {
+        "id": "needs_space_01",
+        "category": "needs",
+        "question": "你现在最渴望拥有一个怎样的空间？",
+        "options": [
+          { "id": "quiet_corner", "label": "一个无人打扰的角落" },
+          { "id": "open_field", "label": "一片可以尽情奔跑的原野" },
+          { "id": "warm_hug", "label": "一个温暖且安心的怀抱" },
+          { "id": "lively_gathering", "label": "一个充满欢声笑语的聚会" }
+        ]
+      },
+      {
+        "id": "action_tendency_01",
+        "category": "action",
+        "question": "面对思绪混乱时，你更倾向于？",
+        "options": [
+          { "id": "organize", "label": "立刻开始整理和计划" },
+          { "id": "distract", "label": "做点别的事分散注意力" },
+          { "id": "express", "label": "找人倾诉或写下来" },
+          { "id": "let_it_be", "label": "什么都不做，让它自然平息" }
+        ]
+      },
+      {
+        "id": "future_expectation_01",
+        "category": "future",
+        "question": "对于明天，你抱着怎样的期待？",
+        "options": [
+          { "id": "surprise", "label": "期待一些意料之外的惊喜" },
+          { "id": "calm", "label": "希望是平稳顺利的一天" },
+          { "id": "progress", "label": "能比今天进步一点点就好" },
+          { "id": "as_it_comes", "label": "顺其自然，不预设太多" }
+        ]
+      }
+    ];
+  },
+
+  /**
+   * 智能选择3道问答题（从不同分类中选择）
+   */
+  selectQuizQuestions(allQuestions) {
+    try {
+      // 按分类分组
+      const categories = {};
+      allQuestions.forEach(q => {
+        if (!categories[q.category]) {
+          categories[q.category] = [];
+        }
+        categories[q.category].push(q);
+      });
+      
+      const selectedQuestions = [];
+      const availableCategories = Object.keys(categories);
+      
+      // 优先选择的分类顺序
+      const preferredOrder = ['mood', 'pressure', 'needs', 'action', 'future'];
+      
+      // 确保选择3个不同分类的问题
+      for (let i = 0; i < 3 && i < preferredOrder.length; i++) {
+        const category = preferredOrder[i];
+        if (categories[category] && categories[category].length > 0) {
+          // 从该分类中随机选择一题
+          const randomIndex = Math.floor(Math.random() * categories[category].length);
+          selectedQuestions.push(categories[category][randomIndex]);
+        }
+      }
+      
+      // 如果不足3题，从剩余分类中补充
+      while (selectedQuestions.length < 3 && availableCategories.length > 0) {
+        for (const category of availableCategories) {
+          if (selectedQuestions.length >= 3) break;
+          if (categories[category] && categories[category].length > 0) {
+            // 检查是否已选择过该分类
+            const alreadySelected = selectedQuestions.some(q => q.category === category);
+            if (!alreadySelected) {
+              const randomIndex = Math.floor(Math.random() * categories[category].length);
+              selectedQuestions.push(categories[category][randomIndex]);
+            }
+          }
+        }
+        break; // 防止无限循环
+      }
+      
+      envConfig.log('智能选择的问题:', selectedQuestions.map(q => `${q.category}: ${q.question}`));
+      return selectedQuestions;
+      
+    } catch (error) {
+      envConfig.error('智能选择问题失败:', error);
+      // 降级：直接返回前3题
+      return allQuestions.slice(0, 3);
+    }
+  },
+
+  /**
+   * 获取降级题库（最基础的3题）
+   */
+  getFallbackQuestions() {
+    return [
+      {
+        "id": "fallback_mood",
+        "category": "mood",
+        "question": "此刻你的心情是？",
+        "options": [
+          { "id": "good", "label": "很好" },
+          { "id": "okay", "label": "还行" },
+          { "id": "not_great", "label": "不太好" },
+          { "id": "tired", "label": "有点累" }
+        ]
+      },
+      {
+        "id": "fallback_need",
+        "category": "needs",
+        "question": "你现在最需要什么？",
+        "options": [
+          { "id": "rest", "label": "休息" },
+          { "id": "company", "label": "陪伴" },
+          { "id": "space", "label": "空间" },
+          { "id": "encouragement", "label": "鼓励" }
+        ]
+      },
+      {
+        "id": "fallback_future",
+        "category": "future",
+        "question": "对未来你是什么态度？",
+        "options": [
+          { "id": "optimistic", "label": "乐观期待" },
+          { "id": "cautious", "label": "谨慎观望" },
+          { "id": "uncertain", "label": "不太确定" },
+          { "id": "go_with_flow", "label": "顺其自然" }
+        ]
+      }
+    ];
+  },
+
+  /**
+   * 开始心境速测
+   */
+  async startQuiz() {
+    try {
+      envConfig.log('开始心境速测');
+      
+      // 加载问题
+      await this.loadQuizQuestions();
+      
+      // 重置问答状态
+      this.setData({
+        showQuizModal: true,
+        currentQuestionIndex: 0,
+        quizAnswers: [],
+        quizCompleted: false
+      });
+      
+      envConfig.log('心境速测开始，题目数量:', this.data.quizQuestions.length);
+      
+    } catch (error) {
+      envConfig.error('开始心境速测失败:', error);
+      wx.showToast({
+        title: '问答加载失败，请重试',
+        icon: 'none'
+      });
+    }
+  },
+
+  /**
+   * 选择问答答案
+   */
+  selectQuizAnswer(e) {
+    try {
+      const { questionId, optionId, optionLabel } = e.currentTarget.dataset;
+      
+      if (!questionId || !optionId) {
+        envConfig.error('问答答案数据不完整:', { questionId, optionId, optionLabel });
+        return;
+      }
+      
+      envConfig.log('选择答案:', { questionId, optionId, optionLabel });
+      
+      // 记录答案
+      const answer = {
+        question_id: questionId,
+        option_id: optionId,
+        option_label: optionLabel
+      };
+      
+      const newAnswers = [...this.data.quizAnswers, answer];
+      
+      this.setData({
+        quizAnswers: newAnswers
+      });
+      
+      // 检查是否还有下一题
+      const nextQuestionIndex = this.data.currentQuestionIndex + 1;
+      
+      if (nextQuestionIndex < this.data.quizQuestions.length) {
+        // 还有下一题，继续
+        this.nextQuestion();
+      } else {
+        // 所有题目完成，结束问答
+        this.completeQuiz();
+      }
+      
+    } catch (error) {
+      envConfig.error('选择答案失败:', error);
+      wx.showToast({
+        title: '答案选择失败',
+        icon: 'none'
+      });
+    }
+  },
+
+  /**
+   * 下一题
+   */
+  nextQuestion() {
+    const nextIndex = this.data.currentQuestionIndex + 1;
+    
+    if (nextIndex < this.data.quizQuestions.length) {
+      this.setData({
+        currentQuestionIndex: nextIndex
+      });
+      envConfig.log('切换到下一题:', nextIndex + 1, '/', this.data.quizQuestions.length);
+    } else {
+      this.completeQuiz();
+    }
+  },
+
+  /**
+   * 完成心境速测
+   */
+  completeQuiz() {
+    try {
+      envConfig.log('心境速测完成，答案:', this.data.quizAnswers);
+      
+      this.setData({
+        quizCompleted: true
+      });
+      
+      // 延迟关闭弹窗，给用户看到完成状态
+      setTimeout(() => {
+        this.setData({
+          showQuizModal: false
+        });
+        
+        // 提示用户可以开始绘制
+        wx.showToast({
+          title: '心境速测完成，开始绘制吧！',
+          icon: 'success',
+          duration: 2000
+        });
+        
+      }, 1500);
+      
+    } catch (error) {
+      envConfig.error('完成心境速测失败:', error);
+      // 强制关闭弹窗
+      this.closeQuizModal();
+    }
+  },
+
+  /**
+   * 关闭问答弹窗
+   */
+  closeQuizModal() {
+    this.setData({
+      showQuizModal: false,
+      currentQuestionIndex: 0,
+      quizCompleted: false
+    });
+    envConfig.log('心境速测弹窗已关闭');
+  },
+
+  /**
+   * 跳过心境速测
+   */
+  skipQuiz() {
+    wx.showModal({
+      title: '跳过心境速测',
+      content: '心境速测有助于AI更好地理解你的状态。确定要跳过吗？',
+      confirmText: '确定跳过',
+      cancelText: '继续答题',
+      success: (res) => {
+        if (res.confirm) {
+          this.closeQuizModal();
+          wx.showToast({
+            title: '已跳过，可以直接绘制',
+            icon: 'success'
+          });
+        }
+      }
+    });
+  },
+
+  // ==================== 🔮 挂件组件事件处理 ====================
+
+  /**
+   * 挂件翻面事件处理
+   */
+  onCharmFlip(e) {
+    const { isFlipped } = e.detail;
+    envConfig.log('🔮 挂件翻面状态:', isFlipped ? '背面（解签笺）' : '正面（挂件）');
+    
+    // 可以在这里添加翻面时的额外逻辑，比如统计、音效等
+    if (isFlipped) {
+      // 翻到解签笺背面
+      console.log('🔮 用户查看解签笺');
+    } else {
+      // 翻回挂件正面  
+      console.log('🔮 用户返回挂件正面');
+    }
+  },
+
+  /**
+   * 挂件分享事件处理
+   */
+  onCharmShare(e) {
+    const { oracleData, charmType } = e.detail;
+    envConfig.log('🔮 分享挂件:', { charmType, hasData: !!oracleData });
+    
+    // 触发小程序分享功能
+    wx.showShareMenu({
+      withShareTicket: true,
+      success: () => {
+        wx.showToast({
+          title: '分享成功',
+          icon: 'success'
+        });
+      }
+    });
+  },
+
+
+  /**
+   * 选择挂件类型
+   */
+  selectCharmType(e) {
+    const charmType = e.currentTarget.dataset.charmType;
+    if (!charmType) return;
+    
+    this.setData({
+      selectedCharmType: charmType
+    });
+    
+    wx.showToast({
+      title: '挂件类型已更新',
+      icon: 'success'
+    });
+    
+    envConfig.log('🔮 选择挂件类型:', charmType);
+  },
+
+  /**
+   * 智能选择挂件类型（基于AI生成的内容）
+   */
+  autoSelectCharmType(structuredData) {
+    try {
+      if (!structuredData) return 'lianhua-yuanpai';
+      
+      // 🔮 优先使用AI在后端选择的签体类型
+      if (structuredData.ai_selected_charm_id) {
+        envConfig.log('🔮 使用AI在后端选择的签体类型:', structuredData.ai_selected_charm_id, structuredData.ai_selected_charm_reasoning);
+        return structuredData.ai_selected_charm_id;
+      }
+      
+      // 降级：根据心象签的内容特征智能选择挂件类型
+      const { oracle_hexagram_name, oracle_affirmation, oracle_session_time } = structuredData;
+      
+      // 基于卦象名称选择
+      if (oracle_hexagram_name) {
+        if (oracle_hexagram_name.includes('乾') || oracle_hexagram_name.includes('坤')) {
+          return 'bagua-jinnang'; // 八卦锦囊适合传统卦象
+        }
+        if (oracle_hexagram_name.includes('风') || oracle_hexagram_name.includes('水')) {
+          return 'qingyu-tuanshan'; // 团扇适合风水元素
+        }
+      }
+      
+      // 基于祝福内容的情绪色调选择
+      if (oracle_affirmation) {
+        if (oracle_affirmation.includes('平和') || oracle_affirmation.includes('宁静')) {
+          return 'lianhua-yuanpai'; // 莲花圆牌适合平和内容
+        }
+        if (oracle_affirmation.includes('神秘') || oracle_affirmation.includes('守护')) {
+          return 'bagua-jinnang'; // 八角锦囊适合神秘内容
+        }
+      }
+      
+      // 基于时段选择
+      if (oracle_session_time) {
+        if (oracle_session_time.includes('傍晚') || oracle_session_time.includes('夜晚')) {
+          return 'bagua-jinnang'; // 夜晚使用更神秘的八角锦囊
+        }
+        if (oracle_session_time.includes('午后') || oracle_session_time.includes('下午')) {
+          return 'qingyu-tuanshan'; // 午后适合清雅的团扇
+        }
+      }
+      
+      // 默认使用莲花圆牌
+      return 'lianhua-yuanpai';
+      
+    } catch (error) {
+      envConfig.error('🔮 智能选择挂件类型失败:', error);
+      return 'lianhua-yuanpai';
+    }
   }
+
 });

@@ -1,703 +1,619 @@
-/* 结构化明信片组件样式 - 重构后的5层架构 */
+/* structured-postcard.wxss - 🔮 心象签组件样式（拷贝自首页挂件） */
 
-/* ================== 第1层：透视容器 ================== */
-.card-scene {
+/* ==================== 基础3D场景 ==================== */
+
+.charm-scene {
   position: relative;
-  width: 690rpx;
-  height: 1100rpx; 
   margin: 0 auto;
   perspective: 1000rpx;
   perspective-origin: center center;
-  /* 只负责3D透视，无其他样式 */
 }
 
-/* ================== 第2层：翻转控制器 ================== */
-.card-flipper {
+.charm-flipper {
   position: relative;
   width: 100%;
   height: 100%;
   transform-style: preserve-3d;
-  transform-origin: center center;
-  transition: transform 0.8s ease;
-  /* 只负责3D翻转变换，无其他样式 */
+  transition: transform 0.5s ease-in-out;
 }
 
-.card-flipper.flipped {
+.charm-flipper.flipped {
   transform: rotateY(180deg);
-  /* 纯净的3D翻转，无任何其他transform干扰 */
 }
 
-/* ================== 第3层：正反面容器 ================== */
-.card-face {
+.charm-face {
   position: absolute;
-  top: 0;
-  left: 0; 
   width: 100%;
   height: 100%;
   backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-  /* 只负责3D面向控制，无其他样式 */
-}
-
-.card-face-back {
-  transform: rotateY(180deg);
-  /* 背面预旋转180度 */
-}
-
-/* ================== 第4层：视觉外壳 ================== */
-.postcard-shell {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  border-radius: 32rpx;
+  border-radius: 24rpx;
   overflow: hidden;
-  box-shadow: 0 16rpx 48rpx rgba(0, 0, 0, 0.12), 0 8rpx 16rpx rgba(0, 0, 0, 0.08);
-  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  backdrop-filter: blur(10rpx);
-  cursor: pointer;
-  /* 负责所有视觉效果：阴影、圆角、背景模糊等 */
 }
 
-.postcard-shell:hover {
-  transform: translateY(-4rpx) scale(1.02);
-  box-shadow: 0 24rpx 64rpx rgba(0, 0, 0, 0.16), 0 12rpx 24rpx rgba(0, 0, 0, 0.12);
-  /* hover效果只在视觉外壳层，不干扰3D翻转 */
-}
-
-.postcard-shell.animated {
-  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  /* 动画状态样式 */
-}
-
-/* 背面视觉外壳的特殊样式 */
-.postcard-shell-back {
-  background: linear-gradient(135deg, 
-    rgba(255, 255, 255, 0.95) 0%, 
-    rgba(248, 250, 252, 0.95) 50%,
-    rgba(255, 255, 255, 0.95) 100%);
-  /* 背面纯色背景，无背景图片 */
-}
-
-/* 背景图片归属第4层 */
-.background-image {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+.charm-face-back {
   z-index: 1;
-  opacity: 1;
-  object-fit: cover;
+  transform: rotateY(180deg);
+  background: transparent;
+  /* 完全透明，只让解签笺有背景 */
+}
+
+.charm-face-front {
+  z-index: 2;
+  transform: rotateY(0deg);
+}
+
+
+/* ==================== 正面挂件样式 ==================== */
+
+
+/* 🔮 左上角竖排签名 - 调整位置更靠近挂件 */
+.charm-name-vertical {
+  position: absolute;
+  top: 12%;  /* 往下调整 */
+  left: 20%; /* 往右调整，更靠近挂件 */
+  z-index: 20;
+  font-family: 'STKaiti', 'KaiTi', serif;
+  pointer-events: none;
+  /* 🔑 关键：简单的竖排布局 */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* 📦 背景装饰 */
+  background: rgba(255, 255, 255, 0.15);
+  padding: 10rpx 8rpx;
+  border-radius: 16rpx;
+  backdrop-filter: blur(6rpx);
+  border: 1rpx solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.1);
+}
+
+.name-char {
+  display: block;
+  font-size: 48rpx;
+  font-weight: 600;
+  line-height: 1;
+  /* 🔑 关键：移除冲突的样式 */
+  margin-bottom: 4rpx;
+  /* 🎨 文字效果 */
+  text-shadow: 
+    0 1rpx 3rpx rgba(0, 0, 0, 0.4),
+    0 0 6rpx rgba(255, 255, 255, 0.2);
+  -webkit-font-smoothing: antialiased;
+}
+
+.charm-name-vertical .name-char:last-child {
+  margin-bottom: 0;
+}
+
+/* 🎨 签名装饰点缀 - 简化版 */
+.charm-name-decoration {
+  width: 3rpx;
+  height: 30rpx;
+  margin-top: 6rpx;
+  border-radius: 2rpx;
+  opacity: 0.5;
+}
+
+/* 已移除不必要的中间装饰元素，保持签体简洁美观 */
+
+/* 祝福文字样式调整 - 显示在挂件下方 */
+.charm-blessing {
+  position: absolute;
+  bottom: 80rpx;  /* 调整位置到翻面提示上方 */
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 28rpx;  /* 稍微缩小 */
+  font-weight: 400;
+  text-align: center;
+  opacity: 0.85;
+  text-shadow: 2rpx 2rpx 4rpx rgba(0, 0, 0, 0.2);
+  max-width: 80%;
+  word-wrap: break-word;
+}
+
+.charm-glow-layer {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+}
+
+.charm-glow {
+  transform: scale(1.2);
   transition: opacity 0.3s ease;
 }
 
-/* 装饰层归属第4层 */
-.decoration-layer {
+.charm-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  animation: charmHang 4s ease-in-out infinite alternate;
+  transform: scale(1.0); /* 调大挂件到标准大小 */
+}
+
+@keyframes charmHang {
+  0% {
+    transform: scale(1.0) translateY(0) rotate(0deg);
+  }
+  100% {
+    transform: scale(1.0) translateY(-10rpx) rotate(2deg);
+  }
+}
+
+.charm-image {
+  width: 950rpx;   /* 进一步增大，利用PNG透明背景 */
+  height: 950rpx;  /* iPhone 15 Pro Max约475px */
+  filter: drop-shadow(0 8rpx 24rpx rgba(0, 0, 0, 0.15));
+  transition: filter 0.3s ease;
+}
+
+.charm-default-shape {
+  width: 950rpx;   /* 进一步增大，利用PNG透明背景 */
+  height: 950rpx;  /* iPhone 15 Pro Max约475px */
+  background: linear-gradient(135deg, 
+    rgba(232, 244, 253, 0.9) 0%, 
+    rgba(178, 190, 195, 0.8) 50%,
+    rgba(232, 244, 253, 0.9) 100%
+  );
+  border-radius: 50%;
+  border: 6rpx solid rgba(255, 255, 255, 0.9);
+  box-shadow: 
+    0 8rpx 24rpx rgba(0, 0, 0, 0.15),
+    inset 0 2rpx 8rpx rgba(255, 255, 255, 0.8),
+    inset 0 -2rpx 8rpx rgba(0, 0, 0, 0.05);
+  backdrop-filter: blur(4rpx); /* 减弱模糊效果，提高清晰度 */
+  position: relative;
+  overflow: hidden;
+}
+
+/* 为默认形状添加莲花纹理 */
+.charm-default-shape::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 60%;
+  height: 60%;
+  transform: translate(-50%, -50%);
+  background-image: 
+    radial-gradient(circle at 30% 40%, rgba(255, 255, 255, 0.6) 2rpx, transparent 2rpx),
+    radial-gradient(circle at 70% 30%, rgba(255, 255, 255, 0.4) 1rpx, transparent 1rpx),
+    radial-gradient(circle at 40% 70%, rgba(255, 255, 255, 0.5) 1.5rpx, transparent 1.5rpx),
+    radial-gradient(circle at 60% 60%, rgba(255, 255, 255, 0.3) 1rpx, transparent 1rpx);
+  background-size: 80rpx 80rpx, 120rpx 120rpx, 100rpx 100rpx, 60rpx 60rpx;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.charm-content-overlay {
   position: absolute;
   top: 0;
   left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 3;
-  pointer-events: none;
-  border-radius: 32rpx;
-  overflow: hidden;
-}
-
-.gradient-overlay {
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(
-    45deg,
-    rgba(99, 102, 241, 0.08) 0%,
-    rgba(139, 92, 246, 0.08) 25%,
-    rgba(236, 72, 153, 0.08) 50%,
-    rgba(139, 92, 246, 0.08) 75%,
-    rgba(99, 102, 241, 0.08) 100%
-  );
-  background-size: 400% 400%;
-  animation: gradientShift 6s ease-in-out infinite;
-  opacity: 0.6;
-}
-
-@keyframes gradientShift {
-  0%, 100% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-}
-
-/* ================== 第5层：内容层 ================== */
-.postcard-content {
-  position: relative;
-  z-index: 2;
-  height: 100%;
+  right: 0;
+  bottom: 0;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(to bottom, 
-    rgba(255, 255, 255, 0.75) 0%,
-    rgba(255, 255, 255, 0.65) 30%,
-    rgba(255, 255, 255, 0.7) 70%,
-    rgba(255, 255, 255, 0.75) 100%);
-  backdrop-filter: blur(8rpx);
-  padding: 40rpx 30rpx;
-  box-sizing: border-box;
-  /* 内容层负责内容的布局和背景 */
-}
-
-/* 背面内容层特殊样式 - 支持滚动，隐藏滚动条 */
-.back-content {
-  background: linear-gradient(135deg, 
-    rgba(255, 255, 255, 0.95) 0%,
-    rgba(248, 250, 252, 0.95) 50%,
-    rgba(255, 255, 255, 0.95) 100%);
-  backdrop-filter: blur(12rpx);
-  
-  /* 启用垂直滚动 */
-  overflow-y: auto;
-  overflow-x: hidden;
-  
-  /* 隐藏滚动条 - 兼容各种浏览器 */
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* IE and Edge */
-  
-  /* 滚动行为优化 */
-  scroll-behavior: smooth;
-  -webkit-overflow-scrolling: touch; /* iOS滚动优化 */
-}
-
-/* 隐藏 Webkit 浏览器滚动条 */
-.back-content::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
-}
-
-/* ================== 内容样式（保持原有设计） ================== */
-
-/* 标题和情绪区域 */
-.header-section {
-  margin-bottom: 28rpx;
-}
-
-.card-title {
-  /* 🎨 优化：实现单行居中，多行左对齐的美观效果 */
-  display: inline-block;
-  width: fit-content;
-  width: -moz-fit-content;
-  max-width: 100%;
-  margin: 0 auto 16rpx auto;
-  text-align: left;
-  font-size: 38rpx;
-  font-weight: 700;
-  color: #1a1a1a;
-  line-height: 1.3;
-  text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.1);
-  letter-spacing: 0.5rpx;
-}
-
-/* 主要文案 */
-.main-content-section {
-  flex: 1;
-  margin-bottom: 28rpx;
-}
-
-.main-text {
-  font-size: 28rpx;
-  line-height: 1.7;
-  color: #2d3748;
-  text-align: justify;
-  text-justify: inter-ideograph;
-  letter-spacing: 0.5rpx;
-  text-shadow: 0 1rpx 2rpx rgba(0, 0, 0, 0.05);
-  font-weight: 400;
-}
-
-/* 感受分享 */
-.feelings-section {
-  margin-bottom: 28rpx;
-}
-
-.feeling-item {
-  display: flex;
-  align-items: flex-start;
-  margin-bottom: 14rpx;
-  padding: 0 8rpx;
-}
-
-.feeling-prefix {
-  font-size: 32rpx;
-  color: #8b5cf6;
-  margin-right: 12rpx;
-  line-height: 1.2;
-  margin-top: 2rpx;
-  text-shadow: 0 0 8rpx rgba(139, 92, 246, 0.3);
-}
-
-.feeling-text {
-  font-size: 24rpx;
-  color: #4a5568;
-  line-height: 1.6;
-  flex: 1;
-  font-style: italic;
-  opacity: 0.95;
-}
-
-/* 名言警句 */
-.quote-section {
-  margin-bottom: 28rpx;
-  padding: 24rpx;
-  background: linear-gradient(135deg, rgba(243, 244, 246, 0.9), rgba(229, 231, 235, 0.9));
-  border-radius: 20rpx;
-  border-left: 8rpx solid #6366f1;
-  backdrop-filter: blur(4rpx);
-  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.05);
-}
-
-.quote-text {
-  /* 🎨 优化：英文格言采用居中对齐，多行时保持美观 */
-  display: block;
-  font-size: 26rpx;
-  font-style: italic;
-  color: #374151;
-  margin-bottom: 14rpx;
-  line-height: 1.5;
-  font-weight: 500;
-  text-align: center;
-  word-break: break-word;
-  hyphens: auto;
-}
-
-.quote-author {
-  display: block;
-  font-size: 22rpx;
-  color: #6b7280;
-  text-align: right;
-  margin-bottom: 10rpx;
-  font-weight: 600;
-}
-
-.quote-translation {
-  /* 🎨 优化：中文翻译使用单行居中多行左对齐的美观效果 */
-  display: inline-block;
-  width: fit-content;
-  width: -moz-fit-content;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: left;
-  font-size: 24rpx;
-  color: #9ca3af;
-  font-weight: 400;
-  opacity: 0.9;
-  word-break: break-word;
-}
-
-/* 推荐内容 */
-.recommendations-section {
-  margin-bottom: 28rpx;
-}
-
-.recommendations-header {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 18rpx 0;
-  border-bottom: 3rpx solid rgba(229, 231, 235, 0.8);
-  cursor: pointer;
-  transition: all 0.2s ease;
+  justify-content: center;
+  text-align: center;
+  padding: 40rpx;
+  z-index: 3;
 }
 
-.recommendations-header:active {
-  transform: scale(0.98);
+/* 简化标题样式，不再需要复杂的标题显示 */
+
+/* 挂件装饰效果 - 保留适度的sparkle闪烁效果 */
+.charm-decoration {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 4;
 }
 
-.recommendations-title {
-  font-size: 28rpx;
-  font-weight: 700;
-  color: #374151;
-  letter-spacing: 0.5rpx;
+.charm-sparkle {
+  position: absolute;
+  width: 8rpx;
+  height: 8rpx;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.3) 100%);
+  border-radius: 50%;
+  animation: sparkle 3s ease-in-out infinite;
 }
 
-.expand-icon {
-  font-size: 24rpx;
-  color: #6b7280;
-  transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  transform-origin: center;
+.charm-sparkle-1 {
+  top: 20%;
+  left: 15%;
+  animation-delay: 0s;
 }
 
-.expand-icon.expanded {
-  transform: rotate(180deg);
-  color: #6366f1;
+.charm-sparkle-2 {
+  top: 30%;
+  right: 20%;
+  animation-delay: 1s;
 }
 
-.recommendations-content {
-  max-height: 0;
-  overflow: hidden;
-  transition: max-height 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.3s ease;
-  opacity: 0;
+.charm-sparkle-3 {
+  bottom: 25%;
+  left: 25%;
+  animation-delay: 2s;
 }
 
-.recommendations-content.expanded {
-  max-height: 1000rpx;
+@keyframes sparkle {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+/* 翻面提示 */
+.flip-hint-charm {
+  position: absolute;
+  bottom: 20rpx;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 12rpx 24rpx;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 20rpx;
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(3rpx); /* 减弱模糊效果，保持层次感 */
+  z-index: 5;
+  opacity: 0.7;
+  transition: opacity 0.3s ease;
+}
+
+.charm-flipper:hover .flip-hint-charm {
   opacity: 1;
 }
 
-.recommendation-item {
-  display: flex;
-  align-items: flex-start;
-  padding: 20rpx;
-  margin-top: 16rpx;
-  background: rgba(255, 255, 255, 0.9);
-  border-radius: 18rpx;
-  border: 2rpx solid transparent;
-  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  cursor: pointer;
-  backdrop-filter: blur(4rpx);
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+.flip-hint-icon {
+  font-size: 24rpx;
+  color: #667eea;
 }
 
-.recommendation-item:hover {
-  border-color: #6366f1;
-  background: rgba(99, 102, 241, 0.08);
-  transform: translateX(8rpx) translateY(-2rpx);
-  box-shadow: 0 8rpx 24rpx rgba(99, 102, 241, 0.15);
+.flip-hint-text {
+  font-size: 22rpx;
+  color: #4b5563;
+  font-weight: 500;
 }
 
-.recommendation-item:active {
-  transform: translateX(6rpx) translateY(-1rpx) scale(0.98);
-}
+/* ==================== 背面解签笺样式 ==================== */
 
-.recommendation-item.music {
-  border-left: 6rpx solid #f59e0b;
-}
-
-.recommendation-item.book {
-  border-left: 6rpx solid #10b981;
-}
-
-.recommendation-item.movie {
-  border-left: 6rpx solid #ef4444;
-}
-
-.rec-icon {
-  font-size: 36rpx;
-  margin-right: 18rpx;
-  margin-top: 2rpx;
-  transition: transform 0.2s ease;
-}
-
-.recommendation-item:hover .rec-icon {
-  transform: scale(1.1) rotate(5deg);
-}
-
-.rec-content {
-  flex: 1;
+/* 解签笺竖排文字样式 - 增强版 */
+.oracle-label-back {
+  position: absolute;
+  left: 30rpx;
+  top: 40rpx;
+  z-index: 999;
   display: flex;
   flex-direction: column;
-}
-
-.rec-title {
-  font-size: 26rpx;
-  font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 6rpx;
-  line-height: 1.3;
-}
-
-.rec-subtitle {
-  font-size: 22rpx;
-  color: #6b7280;
-  margin-bottom: 8rpx;
-  opacity: 0.9;
-}
-
-.rec-reason {
-  font-size: 20rpx;
-  color: #9ca3af;
-  line-height: 1.3;
-  font-style: italic;
-}
-
-/* 底部信息 */
-.footer-section {
-  margin-top: auto;
-  padding-top: 20rpx;
-}
-
-/* 翻转提示样式 */
-.flip-hint, .flip-back-hint {
-  display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 16rpx 24rpx;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(139, 92, 246, 0.12));
+  padding: 20rpx 12rpx;
+  /* 增强标题背景 */
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.9) 0%, 
+    rgba(254, 251, 243, 0.8) 100%);
+  border-radius: 16rpx;
+  backdrop-filter: blur(8rpx);
+  border: 2rpx solid #d4af8c;
+  box-shadow: 
+    0 6rpx 20rpx rgba(139, 69, 19, 0.25),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.8),
+    inset 0 -1rpx 0 rgba(139, 69, 19, 0.1);
+}
+
+.oracle-char-back {
+  display: block;
+  font-size: 40rpx;  /* 稍微减小，避免过于突兀 */
+  font-weight: 700;
+  color: #5a3e2b;    /* 更深的颜色增强层次 */
+  font-family: 'STKaiti', 'STXihei', 'KaiTi', 'Microsoft YaHei', serif;
+  line-height: 1.1;
+  margin-bottom: 8rpx;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  /* 增强文字效果 */
+  text-shadow: 
+    0 1rpx 2rpx rgba(255, 255, 255, 0.8),
+    0 2rpx 4rpx rgba(139, 69, 19, 0.2);
+}
+
+.oracle-line-back {
+  width: 6rpx;
+  height: 50rpx;
+  background: linear-gradient(180deg, 
+    #d4af8c 0%, 
+    #a0522d 20%, 
+    #8b4513 40%, 
+    #654321 60%, 
+    #8b4513 80%, 
+    #d4af8c 100%);
+  margin-top: 8rpx;
+  border-radius: 3rpx;
+  box-shadow: 
+    2rpx 2rpx 6rpx rgba(139, 69, 19, 0.3),
+    0 0 10rpx rgba(255, 255, 255, 0.6),
+    inset 1rpx 1rpx 3rpx rgba(212, 175, 140, 0.5),
+    inset -1rpx -1rpx 2rpx rgba(90, 62, 43, 0.3);
+}
+
+/* 缩小挂件装饰 - 现在在解签笺头部 */
+.charm-decoration-mini {
+  position: absolute;
+  top: 16rpx;
+  right: 24rpx;
+  width: 80rpx;  /* 略小一些，适应解签笺头部 */
+  height: 80rpx;
+  z-index: 3;
+  opacity: 0;
+  transform: translateY(10rpx) scale(0.8);
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.charm-decoration-mini.visible {
+  opacity: 0.6;
+  transform: translateY(0) scale(1);
+}
+
+.mini-charm-image {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 4rpx 12rpx rgba(0, 0, 0, 0.1));
+}
+
+.mini-charm-sway {
+  position: absolute;
+  top: -10rpx;
+  left: 50%;
+  width: 2rpx;
+  height: 20rpx;
+  background: linear-gradient(to bottom, #d1d5db, transparent);
+  transform: translateX(-50%);
+  animation: sway 4s ease-in-out infinite alternate;
+}
+
+@keyframes sway {
+  0% {
+    transform: translateX(-50%) rotate(-2deg);
+  }
+  100% {
+    transform: translateX(-50%) rotate(2deg);
+  }
+}
+
+/* 以上样式已合并到竖排解签笺中，此处删除重复代码 */
+
+/* ==================== 简化背面样式 ==================== */
+
+/* 简化的背面内容容器 */
+.simplified-back-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  /* 确保背景透明，不遮挡解签笺文字 */
+}
+
+/* 竖排解签笺容器 - 增强版 */
+.interpretation-scroll-vertical {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 72%;
+  height: 100%;
+  transform: translate(-50%, -50%);
+  background: linear-gradient(135deg, 
+    #fffef7 0%, 
+    #fefbf3 30%, 
+    #fdf8ed 70%, 
+    #fcf5e8 100%);
   border-radius: 24rpx;
-  border: 2rpx solid rgba(99, 102, 241, 0.25);
-  backdrop-filter: blur(4rpx);
-  transition: all 0.3s ease;
-  cursor: pointer;
+  /* 增强边框装饰 */
+  border: 3rpx solid #d4af8c;
+  box-shadow: 
+    0 16rpx 48rpx rgba(0, 0, 0, 0.15),
+    0 4rpx 16rpx rgba(0, 0, 0, 0.1),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1rpx 0 rgba(139, 69, 19, 0.1);
+  opacity: 0;
+  transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  z-index: 2;
+  overflow: hidden;
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
 }
 
-.flip-hint:hover, .flip-back-hint:hover {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.18), rgba(139, 92, 246, 0.18));
-  border-color: rgba(99, 102, 241, 0.4);
-  transform: translateY(-2rpx);
+/* 添加纸张纹理效果 */
+.interpretation-scroll-vertical::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    radial-gradient(circle at 20% 30%, rgba(212, 175, 140, 0.03) 1rpx, transparent 1rpx),
+    radial-gradient(circle at 80% 70%, rgba(139, 69, 19, 0.02) 1rpx, transparent 1rpx),
+    radial-gradient(circle at 40% 80%, rgba(212, 175, 140, 0.02) 1rpx, transparent 1rpx);
+  background-size: 60rpx 60rpx, 80rpx 80rpx, 100rpx 100rpx;
+  pointer-events: none;
+  z-index: 1;
 }
 
-.flip-icon {
-  font-size: 24rpx;
-  margin-right: 10rpx;
-  color: #6366f1;
-  transition: transform 0.3s ease;
-  animation: flipHint 2s ease-in-out infinite;
+/* 解签笺背景图片层 */
+.scroll-background-image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 120rpx;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  z-index: -1;
 }
 
-@keyframes flipHint {
-  0%, 100% { transform: rotateY(0deg); }
-  50% { transform: rotateY(180deg); }
+.interpretation-scroll-vertical.visible {
+  opacity: 1;
+  transform: translate(-50%, -50%) translateY(0);
 }
 
-.flip-text {
-  font-size: 22rpx;
-  color: #6366f1;
-  font-weight: 600;
-  letter-spacing: 0.5rpx;
+/* ==================== 简化样式 - 只保留必要的底部区域 ==================== */
+
+/* 简化的背面内容区域 */
+.simplified-back-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  /* 移除flex布局，改用相对定位以支持绝对定位的解签笺文字 */
 }
 
-/* ================== 背面内容样式 ================== */
+/* 保留底部区域样式 */
 
-/* 🎨 新增：背面区块标题的美观排版类 */
-.back-block-title {
-  display: inline-block;
-  width: fit-content;
-  width: -moz-fit-content;
-  max-width: 100%;
-  margin: 0 auto 12rpx auto;
-  text-align: left;
-  font-size: 26rpx;
-  font-weight: 600;
-  color: #374151;
-  letter-spacing: 0.5rpx;
+/* 已移除复杂的背面内容样式 */
+
+/* 底部区域 - 增强版 */
+.scroll-footer-vertical {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 20rpx 32rpx 24rpx;
+  background: linear-gradient(135deg, 
+    #fdf8ed 0%, 
+    #fcf5e8 50%, 
+    #f9f2e3 100%);
+  border-radius: 0 0 20rpx 20rpx;
+  border-top: 2rpx solid rgba(212, 175, 140, 0.3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12rpx;
+  /* 增强底部装饰 */
+  box-shadow: inset 0 1rpx 0 rgba(255, 255, 255, 0.6);
 }
 
-/* 背面扩展内容样式 */
-.back-extras {
-  margin-bottom: 28rpx;
-}
-
-.back-block {
-  margin-bottom: 24rpx;
-  padding: 22rpx;
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 18rpx;
-  border: 2rpx solid rgba(229, 231, 235, 0.6);
-  backdrop-filter: blur(4rpx);
-  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.06);
-  transition: all 0.3s ease;
-}
-
-.back-block:hover {
-  transform: translateY(-2rpx);
-  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.1);
-}
-
-.extras-list {
-  margin-top: 10rpx;
-}
-
-.extras-li {
-  /* 🎨 优化：背面内容列表项的文字排版 */
-  font-size: 22rpx;
-  color: #374151;
-  line-height: 1.6;
-  margin-bottom: 8rpx;
-  word-break: break-word;
-  text-align: justify;
-  text-justify: inter-ideograph;
-  letter-spacing: 0.2rpx;
-}
-
-.back-header {
-  text-align: center;
-  margin-bottom: 30rpx;
-}
-
-.back-title {
-  /* 🎨 优化：背面标题也采用相同的美观换行处理 */
-  display: inline-block;
-  width: fit-content;
-  width: -moz-fit-content;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: left;
-  font-size: 32rpx;
-  font-weight: bold;
-  color: #1a1a1a;
-}
-
-/* 背面推荐项样式 */
-.back-recommendations {
-  margin-bottom: 30rpx;
-}
-
-.back-item {
-  margin-bottom: 25rpx;
-  padding: 20rpx;
-  background: rgba(255, 255, 255, 0.9);
-  border-radius: 18rpx;
-  border: 2rpx solid transparent;
-}
-
-.back-item.music-detail {
-  border-left: 6rpx solid #f59e0b;
-}
-
-.back-item.book-detail {
-  border-left: 6rpx solid #10b981;
-}
-
-.back-item.movie-detail {
-  border-left: 6rpx solid #ef4444;
-}
-
-.back-item-header {
+.share-button-vertical {
   display: flex;
   align-items: center;
-  margin-bottom: 12rpx;
-}
-
-.back-icon {
-  font-size: 24rpx;
-  margin-right: 8rpx;
-}
-
-.back-label {
-  /* 🎨 优化：背面区块标题文字排版 */
-  font-size: 20rpx;
-  color: #6b7280;
-  font-weight: 600;
-  letter-spacing: 0.5rpx;
-  word-break: keep-all;
-}
-
-.back-item-title {
-  display: block;
-  font-size: 26rpx;
-  font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 6rpx;
-}
-
-.back-item-subtitle {
-  display: block;
-  font-size: 22rpx;
-  color: #6b7280;
-  margin-bottom: 8rpx;
-}
-
-.back-item-reason {
-  display: block;
-  font-size: 20rpx;
-  color: #9ca3af;
-  line-height: 1.4;
-}
-
-/* 背面补充文案 */
-.back-sub-text {
-  margin-bottom: 30rpx;
-  padding: 20rpx;
-  background: rgba(139, 92, 246, 0.1);
-  border-radius: 18rpx;
-  border-left: 6rpx solid #8b5cf6;
-}
-
-.sub-text-content {
-  font-size: 24rpx;
-  color: #374151;
-  line-height: 1.5;
-  font-style: italic;
-}
-
-/* 背面底部 */
-.back-footer {
-  margin-top: auto;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 20rpx;
-}
-
-.share-button {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 14rpx;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  gap: 6rpx;
+  padding: 12rpx 24rpx;
+  background: linear-gradient(135deg, 
+    #d4af8c 0%, 
+    #b8956f 50%, 
+    #a0845c 100%);
   color: white;
-  border-radius: 18rpx;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-size: 22rpx;
-}
-
-.share-button:hover {
-  background: linear-gradient(135deg, #4f46e5, #7c3aed);
-  transform: translateY(-2rpx);
-}
-
-.share-icon {
-  font-size: 24rpx;
-  margin-right: 8rpx;
-}
-
-.share-text {
+  border-radius: 16rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.3);
+  box-shadow: 
+    0 3rpx 8rpx rgba(139, 69, 19, 0.25),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.4);
+  transition: all 0.2s ease;
   font-size: 22rpx;
   font-weight: 500;
 }
 
-.back-footer .flip-back-hint {
-  flex: 1;
+.share-button-vertical:active {
+  transform: translateY(1rpx) scale(0.98);
+  box-shadow: 
+    0 2rpx 4rpx rgba(139, 69, 19, 0.3),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.3);
 }
 
-/* 响应式调整 */
-@media (max-width: 750rpx) {
-  .card-scene {
-    width: 95vw;
-    max-width: 650rpx;
-  }
-  
-  .card-title {
-    font-size: 34rpx;
-  }
-  
-  .main-text {
-    font-size: 26rpx;
-  }
-  
-  .quote-text {
-    font-size: 24rpx;
-  }
-  
-  .rec-title {
-    font-size: 24rpx;
-  }
-  
-  .postcard-content {
-    padding: 35rpx 25rpx;
-  }
-  
-  .back-content {
-    padding: 35rpx 25rpx;
-  }
+.disclaimer-bottom {
+  text-align: center;
+  padding: 0 16rpx;
 }
 
-/* ================== 隐藏Canvas样式 ================== */
-.hidden-canvas {
-  position: fixed;
-  top: -9999rpx;
-  left: -9999rpx;
-  width: 690rpx;  /* 与卡片尺寸保持一致 */
-  height: 1100rpx; /* 与卡片尺寸保持一致 */
-  z-index: -999;
-  opacity: 0;
-  pointer-events: none;
+.disclaimer-text-small {
+  font-size: 18rpx;
+  color: #8b6914;
+  line-height: 1.3;
+  opacity: 0.75;
+  text-shadow: 0 1rpx 1rpx rgba(255, 255, 255, 0.6);
+}
+
+/* ==================== 竖排文字内容样式 ==================== */
+
+/* 竖排文字容器 - 优化版 */
+.oracle-content-vertical {
+  position: absolute;
+  top: 120rpx;
+  left: 120rpx;
+  right: 50rpx;
+  bottom: 240rpx;
+  writing-mode: vertical-lr;
+  text-orientation: upright;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  align-content: flex-start;
+  padding: 20rpx;
+  z-index: 10;
+  /* 添加装饰边框 */
+  border: 2rpx solid rgba(139, 69, 19, 0.15);
+  border-radius: 16rpx;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(3rpx);
+}
+
+/* 单列容器 - 增强版 */
+.oracle-column {
+  writing-mode: vertical-lr;
+  text-orientation: upright;
+  margin-right: 32rpx;
+  flex: 0 0 auto;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* 添加列分隔线 */
+.oracle-column:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: -16rpx;
+  top: 10%;
+  bottom: 10%;
+  width: 1rpx;
+  background: linear-gradient(180deg, 
+    transparent 0%, 
+    rgba(139, 69, 19, 0.3) 20%, 
+    rgba(139, 69, 19, 0.5) 50%, 
+    rgba(139, 69, 19, 0.3) 80%, 
+    transparent 100%);
+}
+
+/* 文字样式 - 优化版 */
+.oracle-text {
+  font-size: 27rpx;  /* 增大字号提升可读性 */
+  line-height: 1.4;   /* 适当调整行距 */
+  color: #4a3a2a;     /* 更深的颜色增强层次 */
+  opacity: 0.95;
+  display: block;
+  margin-bottom: 10rpx;  /* 稍微增加段间距 */
+  font-family: 'STKaiti', 'KaiTi', 'Microsoft YaHei', serif;
+  writing-mode: vertical-lr;
+  text-orientation: upright;
+  font-weight: 500;
+  /* 添加文字阴影增强可读性 */
+  text-shadow: 0 1rpx 2rpx rgba(255, 255, 255, 0.8);
 }

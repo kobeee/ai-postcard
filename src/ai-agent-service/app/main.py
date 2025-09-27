@@ -2,7 +2,7 @@
 AI Agent Service - AI明信片项目的核心AI服务
 包含AI代码生成、明信片创作等功能
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import os
@@ -44,7 +44,10 @@ def setup_logging():
     os.makedirs(log_dir, exist_ok=True)
     
     # 日志文件路径
-    log_file = os.path.join(log_dir, f"ai-agent-service-{datetime.now().strftime('%Y-%m-%d')}.log")
+    # 使用中国时区生成日志文件名
+    from zoneinfo import ZoneInfo
+    china_time = datetime.now(ZoneInfo("Asia/Shanghai"))
+    log_file = os.path.join(log_dir, f"ai-agent-service-{china_time.strftime('%Y-%m-%d')}.log")
     
     # 日志配置
     logging_config = {
@@ -95,7 +98,8 @@ def setup_logging():
     logging.config.dictConfig(logging_config)
     logger = logging.getLogger(__name__)
     logger.info(f"Logging configured. Log file: {log_file}")
-    logger.info(f"AI Agent Service starting up at {datetime.now()}")
+    china_time = datetime.now(ZoneInfo("Asia/Shanghai"))
+    logger.info(f"AI Agent Service starting up at {china_time}")
     return logger
 
 # 初始化日志系统
@@ -221,6 +225,17 @@ os.makedirs(images_dir, exist_ok=True)
 # 创建情绪图片上传目录
 emotions_dir = os.path.join(generated_dir, "emotions")
 os.makedirs(emotions_dir, exist_ok=True)
+
+# 🔮 挂载心象签资源目录 - 为小程序提供动态资源加载
+resources_dir = "/app/resources"  # Docker容器中的挂载路径
+if os.path.exists(resources_dir):
+    app.mount("/resources", StaticFiles(directory=resources_dir), name="resources")
+    main_logger.info(f"✅ 心象签资源已挂载: {resources_dir}")
+    main_logger.info(f"   📁 签体配置: /resources/签体/charm-config.json")
+    main_logger.info(f"   📁 问题题库: /resources/题库/question.json") 
+    main_logger.info(f"   🖼️  挂件图片: /resources/签体/*.png")
+else:
+    main_logger.error(f"❌ 资源目录不存在: {resources_dir}")
 
 # 添加根路径静态文件处理，用于AI生成的文件引用
 @app.get("/script.js")

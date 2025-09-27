@@ -2,7 +2,18 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime
 import logging
+import sys
+import os
 from typing import Optional, Dict, Any
+from zoneinfo import ZoneInfo
+
+# 添加common模块路径并导入时区工具
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../../..'))
+try:
+    from common.timezone_utils import china_now
+except ImportError:
+    def china_now():
+        return datetime.now(ZoneInfo("Asia/Shanghai"))
 
 from ..models.user import User
 
@@ -72,7 +83,7 @@ class UserService:
                 if hasattr(user, key):
                     setattr(user, key, value)
             
-            user.updated_at = datetime.utcnow()
+            user.updated_at = china_now()
             self.db.commit()
             self.db.refresh(user)
             
@@ -89,7 +100,7 @@ class UserService:
         try:
             user = self.db.query(User).filter(User.id == user_id).first()
             if user:
-                user.last_login_at = datetime.utcnow()
+                user.last_login_at = china_now()
                 self.db.commit()
                 return True
             return False
@@ -103,7 +114,7 @@ class UserService:
             user = self.db.query(User).filter(User.id == user_id).first()
             if user:
                 user.is_active = False
-                user.updated_at = datetime.utcnow()
+                user.updated_at = china_now()
                 self.db.commit()
                 logger.info(f"用户已停用: {user_id}")
                 return True

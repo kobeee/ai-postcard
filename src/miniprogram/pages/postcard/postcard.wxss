@@ -67,6 +67,37 @@ page {
   z-index: -1;
 }
 
+/* 🔮 心象签主显示区域 - 详情页挂件布局 */
+.charm-main-area {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 70vh;  /* 适中的高度，确保有足够空间显示 */
+  padding: 20rpx;
+  margin: 20rpx auto 40rpx auto; /* 增加上下边距 */
+  box-sizing: border-box;
+  position: relative;
+  z-index: 10;
+}
+
+/* 挂件组件样式优化 */
+.charm-main-area hanging-charm {
+  filter: drop-shadow(0 20rpx 40rpx rgba(0, 0, 0, 0.15));
+  transition: transform 0.3s ease;
+  z-index: 11;
+}
+
+/* 降级显示区域 */
+.fallback-card-area {
+  width: 90%;
+  max-width: 600rpx;
+  margin: 40rpx auto;
+  border-radius: 24rpx;
+  overflow: hidden;
+  box-shadow: 0 20rpx 40rpx rgba(0, 0, 0, 0.1);
+}
+
 /* 加载状态 */
 .loading-container {
   display: flex;
@@ -158,7 +189,7 @@ page {
 
 /* 明信片容器 */
 .postcard-container {
-  max-width: 750rpx;
+  max-width: 95%;
   margin: 0 auto;
 }
 
@@ -389,7 +420,6 @@ page {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 32rpx 16rpx;
   border-radius: 24rpx;
   border: none;
   font-size: 26rpx;
@@ -497,6 +527,31 @@ page {
 .footer-link:hover {
   color: rgba(255, 255, 255, 0.8);
   text-shadow: 0 0 10rpx rgba(255, 255, 255, 0.5);
+}
+
+/* ===== 🔥 详情页专用卡片区域 ===== */
+.detail-card-section {
+  margin-bottom: 40rpx;
+}
+
+.main-detail-oracle-card {
+  width: 100%;
+}
+
+/* 降级模式提示 */
+.fallback-notice {
+  text-align: center;
+  padding: 16rpx 24rpx;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-radius: 20rpx;
+  margin-top: 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(245, 158, 11, 0.1);
+}
+
+.notice-text {
+  font-size: 24rpx;
+  color: #d97706;
+  font-weight: 500;
 }
 
 /* ===== ✅ 结构化明信片区域 ===== */
@@ -902,5 +957,176 @@ page {
   
   .dynamic-section, .image-section, .structured-section {
     border-radius: 24rpx;
+  }
+}
+
+/* ==================== 美化卡片组件样式（降级显示用） ==================== */
+.beautiful-postcard {
+  position: relative;
+  width: 690rpx;
+  height: 920rpx;
+  margin: 0 auto;
+  border-radius: 32rpx;
+  overflow: hidden;
+  box-shadow: 
+    0 32rpx 100rpx rgba(0, 0, 0, 0.3),
+    0 0 0 1rpx rgba(255, 255, 255, 0.1);
+  background: #fff;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.beautiful-postcard:active {
+  transform: scale(0.98);
+  box-shadow: 
+    0 16rpx 50rpx rgba(0, 0, 0, 0.4),
+    0 0 0 1rpx rgba(255, 255, 255, 0.2);
+}
+
+.postcard-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+.postcard-background .background-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.background-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  /* 升级背景遮罩渐变 */
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.98) 0%,
+    rgba(255, 255, 255, 0.85) 30%,
+    rgba(255, 255, 255, 0.75) 50%,
+    rgba(255, 255, 255, 0.85) 70%,
+    rgba(255, 255, 255, 0.98) 100%
+  );
+  backdrop-filter: blur(3rpx);
+}
+
+.postcard-content {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  padding: 70rpx 56rpx;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.postcard-header {
+  text-align: center;
+  margin-bottom: 28rpx;
+}
+
+.postcard-date {
+  display: block;
+  font-size: 26rpx;
+  color: #8b5cf6;
+  font-weight: 500;
+  margin-bottom: 20rpx;
+  letter-spacing: 2rpx;
+}
+
+.postcard-title {
+  display: block;
+  font-size: 54rpx;
+  font-weight: bold;
+  /* 升级标题渐变效果 */
+  background: linear-gradient(135deg, #1a1a1a 0%, #667eea 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1.2;
+  margin-bottom: 16rpx;
+  text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.1);
+}
+
+.postcard-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+  margin: 16rpx 0 24rpx 0;
+}
+
+.main-quote {
+  margin-bottom: 40rpx;
+}
+
+.quote-text {
+  display: block;
+  font-size: 30rpx;
+  line-height: 1.6;
+  color: #2d3748;
+  font-weight: 400;
+  text-align: center;
+  padding: 0 20rpx;
+}
+
+.english-ribbon {
+  margin-top: 24rpx;
+  background: linear-gradient(135deg, rgba(99,102,241,.12), rgba(139,92,246,.12));
+  border: 2rpx solid rgba(99,102,241,.25);
+  border-radius: 20rpx;
+  padding: 16rpx 24rpx;
+}
+
+.english-text {
+  display: block;
+  font-size: 24rpx;
+  color: #6b7280;
+  font-style: italic;
+  line-height: 1.5;
+  text-align: center;
+  font-family: 'Georgia', serif;
+}
+
+.postcard-footer {
+  margin-top: auto;
+  text-align: center;
+}
+
+.signature {
+  margin-top: 20rpx;
+}
+
+.signature-text {
+  font-size: 22rpx;
+  color: #9ca3af;
+  font-weight: 300;
+  letter-spacing: 1rpx;
+}
+
+/* 卡片动画效果 */
+.beautiful-postcard {
+  animation: cardFadeIn 1s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.beautiful-postcard:active {
+  transform: scale(0.98);
+}
+
+@keyframes cardFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(60rpx) scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
