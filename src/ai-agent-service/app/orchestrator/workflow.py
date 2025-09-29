@@ -21,84 +21,155 @@ class PostcardWorkflow:
         self.steps = []
     
     async def execute(self, task_data: Dict[str, Any]):
-        """执行完整的明信片生成工作流 - 增强容错版本"""
+        """执行完整的明信片生成工作流 - 支持新旧版本切换"""
         task_id = task_data.get("task_id")
         context = {"task": task_data, "results": {}}
         
+        # 获取工作流版本配置
+        workflow_version = os.getenv("WORKFLOW_VERSION", "two_stage")  # "legacy" | "unified" | "two_stage"
+        
         try:
-            # 更新任务状态为处理中（屏蔽取消影响）
             await asyncio.shield(self.update_task_status(task_id, "processing"))
             
             # 💫 心象签精准感应信号采集和处理
             await self.collect_precision_signals(task_data)
             
-            # 导入步骤类（避免循环导入）
-            from .steps.concept_generator import ConceptGenerator
-            from .steps.content_generator import ContentGenerator
-            from .steps.image_generator import ImageGenerator
-            from .steps.structured_content_generator import StructuredContentGenerator
+            if workflow_version == "two_stage":
+                # 🆕 两段式工作流 (2次文本 + 1次生图)
+                self.logger.info(f"🚀 使用两段式工作流: {task_id}")
+                await self._execute_two_stage_workflow(context)
+            elif workflow_version == "unified":
+                # 统一工作流 (1次文本 + 1次生图)
+                self.logger.info(f"🚀 使用优化版工作流: {task_id}")
+                await self._execute_unified_workflow(context)
+            else:
+                # 传统工作流 (3次文本 + 1次生图)  
+                self.logger.info(f"🔄 使用传统版工作流: {task_id}")
+                await self._execute_legacy_workflow(context)
             
-            # 🔧 简化为4步工作流程（去除AI小程序组件生成器）
-            self.steps = [
-                ConceptGenerator(),                 # 第1步：概念生成
-                ContentGenerator(),                 # 第2步：文案生成  
-                ImageGenerator(),                   # 第3步：图片生成
-                StructuredContentGenerator()        # 第4步：结构化内容生成（最终步）
-            ]
-            
-            # 🔒 容错执行各个步骤
-            completed_steps = 0
-            critical_failures = []
-            
-            for i, step in enumerate(self.steps, 1):
-                step_name = step.__class__.__name__
-                self.logger.info(f"📍 执行步骤 {i}/4: {step_name}")
-                
-                try:
-                    context = await step.execute(context)
-                    
-                    # 保存中间结果
-                    await self.save_intermediate_result(task_id, step_name, context["results"])
-                    
-                    self.logger.info(f"✅ 步骤 {i}/4 完成: {step_name}")
-                    completed_steps += 1
-                    
-                except Exception as e:
-                    self.logger.error(f"❌ 步骤 {i}/4 失败: {step_name} - {e}")
-                    
-                    # 🔒 根据步骤重要性决定是否继续
-                    if await self._handle_step_failure(step_name, i, e, context):
-                        self.logger.warning(f"⚠️ 步骤 {step_name} 失败但已使用fallback，继续执行")
-                        completed_steps += 1
-                    else:
-                        critical_failures.append(f"步骤{i}-{step_name}: {str(e)}")
-                        # 🔒 如果是关键步骤失败，尝试使用完整fallback
-                        if i <= 2:  # 概念生成或文案生成失败
-                            context["results"] = await self._get_emergency_fallback(task_data)
-                            self.logger.warning(f"⚠️ 关键步骤 {step_name} 失败，使用紧急fallback")
-                            break
-                        else:
-                            # 非关键步骤失败，继续执行剩余步骤
-                            continue
-            
-            # 🔒 最终检查和兜底
-            if completed_steps == 0:
-                # 所有步骤都失败，使用紧急fallback
-                context["results"] = await self._get_emergency_fallback(task_data)
-                self.logger.error(f"🚨 所有步骤失败，使用紧急fallback: {critical_failures}")
-            elif "structured_data" not in context["results"]:
-                # 没有结构化数据，补充默认的心象签结构
-                context["results"]["structured_data"] = await self._get_default_oracle_structure(task_data)
-                self.logger.warning("⚠️ 缺少结构化数据，补充默认心象签结构")
-            
-            # 保存最终结果（屏蔽取消影响）
+            # 保存最终结果
             await asyncio.shield(self.save_final_result(task_id, context["results"]))
             await asyncio.shield(self.update_task_status(task_id, "completed"))
             
-            if critical_failures:
-                self.logger.warning(f"🎯 工作流完成但有部分失败: {task_id}, 失败步骤: {critical_failures}")
-            else:
-                self.logger.info(f"🎉 工作流执行完成: {task_id}")
+            self.logger.info(f"🎉 工作流执行完成: {task_id}")
+            
+        except Exception as e:
+            self.logger.error(f"❌ 工作流执行失败: {task_id} - {e}")
+            await self._handle_workflow_failure(task_id, e, context)
+
+    async def _execute_unified_workflow(self, context):
+        """执行优化版统一工作流"""
+        
+        # 步骤1：统一内容生成（整合原有3步）
+        from .steps.unified_content_generator import UnifiedContentGenerator
+        unified_generator = UnifiedContentGenerator()
+        context = await unified_generator.execute(context)
+        
+        # 步骤2：图像生成
+        from .steps.image_generator import ImageGenerator
+        image_generator = ImageGenerator()
+        context = await image_generator.execute(context)
+        
+        return context
+
+    async def _execute_two_stage_workflow(self, context):
+        """执行两段式工作流"""
+        
+        # 阶段1：用户洞察分析
+        from .steps.two_stage_analyzer import TwoStageAnalyzer
+        analyzer = TwoStageAnalyzer()
+        context = await analyzer.execute(context)
+        
+        # 阶段2：心象签生成
+        from .steps.two_stage_generator import TwoStageGenerator
+        generator = TwoStageGenerator()
+        context = await generator.execute(context)
+        
+        # 阶段3：图像生成
+        from .steps.image_generator import ImageGenerator
+        image_generator = ImageGenerator()
+        context = await image_generator.execute(context)
+        
+        return context
+
+    async def _execute_legacy_workflow(self, context):
+        """执行传统版工作流（保留作为回滚方案）"""
+        
+        # 原有的4步工作流逻辑保持不变
+        from .steps.concept_generator import ConceptGenerator
+        from .steps.content_generator import ContentGenerator  
+        from .steps.image_generator import ImageGenerator
+        from .steps.structured_content_generator import StructuredContentGenerator
+        
+        steps = [
+            ConceptGenerator(),                 # 第1步：概念生成
+            ContentGenerator(),                 # 第2步：文案生成  
+            ImageGenerator(),                   # 第3步：图片生成
+            StructuredContentGenerator()        # 第4步：结构化内容生成（最终步）
+        ]
+        
+        # 🔒 容错执行各个步骤
+        completed_steps = 0
+        critical_failures = []
+        
+        for i, step in enumerate(steps, 1):
+            step_name = step.__class__.__name__
+            self.logger.info(f"📍 执行步骤 {i}/4: {step_name}")
+            
+            try:
+                context = await step.execute(context)
+                
+                # 保存中间结果
+                await self.save_intermediate_result(context["task"].get("task_id"), step_name, context["results"])
+                
+                self.logger.info(f"✅ 步骤 {i}/4 完成: {step_name}")
+                completed_steps += 1
+                
+            except Exception as e:
+                self.logger.error(f"❌ 步骤 {i}/4 失败: {step_name} - {e}")
+                
+                # 🔒 根据步骤重要性决定是否继续
+                if await self._handle_step_failure(step_name, i, e, context):
+                    self.logger.warning(f"⚠️ 步骤 {step_name} 失败但已使用fallback，继续执行")
+                    completed_steps += 1
+                else:
+                    critical_failures.append(f"步骤{i}-{step_name}: {str(e)}")
+                    # 🔒 如果是关键步骤失败，尝试使用完整fallback
+                    if i <= 2:  # 概念生成或文案生成失败
+                        context["results"] = await self._get_emergency_fallback(context["task"])
+                        self.logger.warning(f"⚠️ 关键步骤 {step_name} 失败，使用紧急fallback")
+                        break
+                    else:
+                        # 非关键步骤失败，继续执行剩余步骤
+                        continue
+        
+        # 🔒 最终检查和兜底
+        if completed_steps == 0:
+            # 所有步骤都失败，使用紧急fallback
+            context["results"] = await self._get_emergency_fallback(context["task"])
+            self.logger.error(f"🚨 所有步骤失败，使用紧急fallback: {critical_failures}")
+        elif "structured_data" not in context["results"]:
+            # 没有结构化数据，补充默认的心象签结构
+            context["results"]["structured_data"] = await self._get_default_oracle_structure(context["task"])
+            self.logger.warning("⚠️ 缺少结构化数据，补充默认心象签结构")
+        
+        return context
+    
+    async def _handle_workflow_failure(self, task_id: str, error: Exception, context: Dict[str, Any]):
+        """处理工作流失败"""
+        # 🔒 最后的兜底处理
+        try:
+            fallback_results = await self._get_emergency_fallback(context["task"])
+            await asyncio.shield(self.save_final_result(task_id, fallback_results))
+            await asyncio.shield(self.update_task_status(task_id, "completed"))
+            self.logger.warning(f"⚠️ 工作流异常但已使用紧急fallback完成: {task_id}")
+        except Exception as fallback_error:
+            self.logger.error(f"🚨 紧急fallback也失败: {fallback_error}")
+            try:
+                await asyncio.shield(self.update_task_status(task_id, "failed", str(error)))
+            except Exception:
+                pass
+            raise
             
         except Exception as e:
             self.logger.error(f"❌ 工作流执行失败: {task_id} - {e}")

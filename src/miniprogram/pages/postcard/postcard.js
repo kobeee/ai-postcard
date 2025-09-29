@@ -352,8 +352,12 @@ Page({
         // 🆕 无论删除今日还是历史卡片，都需要刷新回廊数据
         app.globalData.refreshUserCards = true;
         
+        // 🔥 新增：记录被删除的卡片ID，用于首页检测当前显示的卡片是否被删除
+        app.globalData.deletedCardId = this.postcardId;
+        
         envConfig.log('✅ 删除卡片后设置刷新标记:', { 
           isToday, 
+          deletedCardId: this.postcardId,
           resetToCanvas: app.globalData.resetToCanvas, 
           refreshUserCards: app.globalData.refreshUserCards 
         });

@@ -1,5 +1,6 @@
 import logging
 import json
+import os
 from ...providers.provider_factory import ProviderFactory
 
 logger = logging.getLogger(__name__)
@@ -8,9 +9,11 @@ class ImageGenerator:
     """图片生成器 - 第3步：基于心象签概念生成自然祝福图"""
     
     def __init__(self):
-        # 图片生成使用 Gemini
-        self.provider = ProviderFactory.create_image_provider("gemini")
+        # 根据环境变量选择图片生成provider
+        provider_type = os.getenv("IMAGE_PROVIDER_TYPE", "gemini")
+        self.provider = ProviderFactory.create_image_provider(provider_type)
         self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger.info(f"✅ 图片生成器初始化，使用provider: {provider_type}")
     
     async def execute(self, context):
         """基于心象签数据生成自然祝福图"""
@@ -39,44 +42,28 @@ class ImageGenerator:
         oracle_theme = structured_data.get("oracle_theme", {})
         natural_scene = oracle_theme.get("title", "晨光照进窗") if isinstance(oracle_theme, dict) else "晨光照进窗"
         
-        # 构建心象签自然祝福图生成提示词
-        image_prompt = f"""
-为心象签生成自然祝福图，基于以下心象意境：
+        # 构建心象签自然祝福图生成提示词（完整专业版本）
+        image_prompt = f"""Create a high-quality watercolor background image for a heart oracle postcard:
 
-核心意象：{natural_scene}
-艺术指导：{image_prompt_base}
-色彩灵感：{palette}
-动画提示：{animation_hint}
+Scene: "{natural_scene}"
+Color Palette: {palette[0]}, {palette[1]}, {palette[2]} 
+Lighting Effect: {animation_hint}
 
-设计要求：
-- 专注于自然奇景的抽象艺术表现（水彩、油画或插画风格）
-- 体现"{natural_scene}"这一自然意象的核心美感
-- 使用指定色彩{palette}作为主色调，营造和谐氛围
-- 抽象而不失意境，让人感受到自然的美好与祝福
-- 适合在小程序webview中作为背景展示
-- 考虑{animation_hint}的视觉效果需求
+Style Requirements:
+- Abstract watercolor technique with soft, flowing edges
+- Harmonious and artistic color blending
+- Atmospheric and elegant composition
+- Suitable for text overlay placement
+- Positive and peaceful mood
+- Resolution: 1024x1024 pixels
 
-心象签核心理念：
-- 通过自然现象传达内在情感和祝福
-- 画面要有疗愈感和温暖感
-- 避免过于具象，保持诗意的抽象美感
-- 色彩柔和，适合冥想和反思
+Important Constraints:
+- NO TEXT, NO WORDS, NO LETTERS, NO CHARACTERS of any kind
+- NO symbols, logos, or written content
+- Focus purely on visual elements: landscapes, nature, abstract patterns
+- Create pure artistic background without textual elements
 
-严格约束条件：
-- 🚫 绝对禁止任何文字、字母、数字、符号或宗教标识
-- 🚫 不能有任何可识别的文本内容或类文字图案
-- 🚫 避免人工建筑物、具体物品、人物形象
-- ✅ 纯自然元素：光影、云彩、水流、植物、山川、天空等
-- ✅ 通过色彩、光影、纹理传达自然的祝福力量
-
-艺术风格：
-- 现代抽象水彩/油画风格
-- 色彩过渡自然，层次丰富
-- 光影变化体现"{animation_hint}"的动态美感
-- 整体画面传达宁静、祝福、希望的情感
-
-请生成一张体现"{natural_scene}"意境的纯自然抽象祝福图。
-"""
+Generate a beautiful, serene watercolor background that captures the essence of "{natural_scene}" using the specified colors and lighting."""
         
         try:
             # 调用Gemini图片生成

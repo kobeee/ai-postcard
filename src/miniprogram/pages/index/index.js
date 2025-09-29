@@ -118,6 +118,21 @@ Page({
         this.loadUserCards();
         envConfig.log('✅ 从详情页返回，已刷新用户卡片');
       }
+      
+      // 🔥 新增：检查当前显示的卡片是否被删除
+      if (app.globalData && app.globalData.deletedCardId) {
+        const deletedId = app.globalData.deletedCardId;
+        app.globalData.deletedCardId = null; // 清理标记
+        
+        // 检查当前显示的卡片是否就是被删除的卡片
+        const currentCard = this.data.todayCard;
+        if (currentCard && (currentCard.id === deletedId || currentCard.task_id === deletedId)) {
+          envConfig.log('🔥 当前显示的卡片被删除，重新检查今日卡片状态');
+          // 重新检查今日卡片状态，这会自动处理卡片被删除的情况
+          this.checkTodayCard();
+          return; // 跳过后续的检查
+        }
+      }
     } catch (_) {}
     
     // 检查是否有今日卡片

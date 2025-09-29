@@ -108,12 +108,38 @@ curl -X POST "http://localhost:8081/api/v1/miniprogram/auth/login" \
     }
   }'
 
-# 2. 从响应中提取access_token
-# 响应格式: {"code": 0, "data": {"access_token": "eyJ...", "refresh_token": "..."}}
+# 2. 从响应中提取token字段（注意：字段名是"token"而非"access_token"）
+# 响应格式: {"code": 0, "data": {"token": "eyJ...", "refreshToken": "..."}}
 
-# 3. 后续API请求使用Bearer Token
-curl -H "Authorization: Bearer <access_token>" \
+# 3. 后续API请求使用Bearer Token格式
+curl -H "Authorization: Bearer <token>" \
      "http://localhost:8083/api/v1/miniprogram/postcards/result/<task_id>"
+```
+
+### ⚠️ 认证常见问题和解决方案
+```bash
+# 问题1: 401认证失败 - 字段名错误
+# ❌ 错误：使用 "access_token" 字段
+TOKEN=$(curl ... | python3 -c "import json,sys; print(json.load(sys.stdin)['data']['access_token'])")
+
+# ✅ 正确：使用 "token" 字段  
+TOKEN=$(curl ... | python3 -c "import json,sys; print(json.load(sys.stdin)['data']['token'])")
+
+# 问题2: 401认证失败 - Bearer格式错误
+# ❌ 错误：缺少Bearer前缀
+curl -H "Authorization: $TOKEN" "http://localhost:8083/..."
+
+# ✅ 正确：使用Bearer前缀
+curl -H "Authorization: Bearer $TOKEN" "http://localhost:8083/..."
+
+# 问题3: 验证Token有效性
+curl -H "Authorization: Bearer $TOKEN" "http://localhost:8081/api/v1/miniprogram/users/me"
+
+# 问题4: 重新获取Token（如果过期）
+TOKEN=$(curl -s -X POST "http://localhost:8081/api/v1/miniprogram/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"code": "test_code_for_development", "userInfo": {"nickName": "测试用户"}}' | \
+  python3 -c "import json,sys; print(json.load(sys.stdin)['data']['token'])")
 ```
 
 ### 网关路由说明
@@ -219,28 +245,77 @@ print('✅ 扁平化测试:', result.get('ai_selected_charm_id'))
 
 ### 端到端API测试流程
 ```bash
-# 1. 获取登录Token
+# ✅ 正确的完整测试流程
+# 1. 获取登录Token（注意使用正确的字段名"token"）
 TOKEN=$(curl -s -X POST "http://localhost:8081/api/v1/miniprogram/auth/login" \
   -H "Content-Type: application/json" \
-  -d '{"code": "test_code", "userInfo": {"nickName": "测试用户"}}' | \
-  python3 -c "import json,sys; print(json.load(sys.stdin)['data']['access_token'])")
+  -d '{"code": "test_code_for_development", "userInfo": {"nickName": "测试用户"}}' | \
+  python3 -c "import json,sys; print(json.load(sys.stdin)['data']['token'])")
 
-# 2. 创建明信片任务
+# 验证Token获取成功
+echo "获取的Token: $TOKEN"
+
+# 2. 创建心象签任务（包含完整的测试数据）
 TASK_ID=$(curl -s -X POST "http://localhost:8083/api/v1/miniprogram/postcards/create" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"user_input": "测试心境", "style": "heart-oracle", "theme": "心象意境"}' | \
-  python3 -c "import json,sys; print(json.load(sys.stdin)['data']['task_id'])")
+  -d '{
+    "user_input": "今天心情很平静，想要感受内心的宁静", 
+    "style": "heart-oracle", 
+    "theme": "心象意境",
+    "questions": [
+      {"question": "你最近的心境如何？", "answer": "内心很平和"},
+      {"question": "你希望得到什么指引？", "answer": "希望保持内心的宁静"}
+    ]
+  }' | python3 -c "import json,sys; print(json.load(sys.stdin)['data']['task_id'])")
 
-# 3. 监控任务状态
-watch -n 2 "curl -s -H 'Authorization: Bearer $TOKEN' \
-  'http://localhost:8083/api/v1/miniprogram/postcards/status/$TASK_ID' | \
-  python3 -c 'import json,sys; data=json.load(sys.stdin); print(data[\"data\"][\"status\"])'"
+echo "创建的任务ID: $TASK_ID"
 
-# 4. 获取完成结果
+# 3. 检查任务状态
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8083/api/v1/miniprogram/postcards/status/$TASK_ID"
+
+# 4. 监控AI Agent处理日志（可选）
+# ./scripts/run.sh logs ai-agent-worker -f
+
+# 5. 等待任务完成后获取结果
 curl -s -H "Authorization: Bearer $TOKEN" \
   "http://localhost:8083/api/v1/miniprogram/postcards/result/$TASK_ID" | \
-  python3 -c "import json,sys; data=json.load(sys.stdin)['data']; print('签体:', data.get('ai_selected_charm_id', '未找到')); print('祝福:', data.get('oracle_affirmation', '未找到'))"
+  python3 -c "
+import json,sys
+data = json.load(sys.stdin)['data']
+print('✅ 统一内容生成器测试结果:')
+print(f'  状态: {data.get(\"status\", \"未找到\")}')
+print(f'  AI选择的签体: {data.get(\"ai_selected_charm_id\", \"未找到\")}')
+print(f'  签名: {data.get(\"charm_name\", \"未找到\")}') 
+print(f'  祝福语: {data.get(\"oracle_affirmation\", \"未找到\")}')
+print(f'  背景图片: {data.get(\"background_image_url\", \"未找到\")}')
+"
+```
+
+### 🔥 统一内容生成器工作流验证
+```bash
+# 验证2025-09-28优化后的4步工作流
+# 1. 检查工作流版本配置
+grep "WORKFLOW_VERSION" .env
+
+# 2. 验证日志中的步骤进度（应显示1/4到4/4）
+./scripts/run.sh logs ai-agent-worker -n 20 | grep "步骤"
+
+# 3. 验证统一内容生成器的输出结构
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8083/api/v1/miniprogram/postcards/result/$TASK_ID" | \
+  python3 -c "
+import json,sys
+data = json.load(sys.stdin)['data']
+structured_data = data.get('structured_data', {})
+print('🔥 统一内容生成器字段验证:')
+key_fields = ['oracle_theme', 'charm_identity', 'ai_selected_charm', 'oracle_manifest', 'visual']
+for field in key_fields:
+    status = '✅' if field in structured_data else '❌'
+    print(f'  {status} {field}')
+print(f'生成的字段总数: {len(structured_data)}')
+"
 ```
 
 ### 关键测试检查点
@@ -254,11 +329,41 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 
 ### 401认证失败
 ```bash
-# 检查token是否有效
+# 🔍 诊断步骤1: 检查Token是否正确获取
+echo "当前Token: $TOKEN"
+if [ -z "$TOKEN" ]; then
+  echo "❌ Token为空，需要重新获取"
+else
+  echo "✅ Token已获取"
+fi
+
+# 🔍 诊断步骤2: 验证Token格式和有效性
 curl -H "Authorization: Bearer $TOKEN" "http://localhost:8081/api/v1/miniprogram/users/me"
 
-# 重新获取token
-TOKEN=$(curl -s ... # 使用上面的登录命令)
+# 🔧 解决方案1: 重新获取Token（使用正确的字段名）
+TOKEN=$(curl -s -X POST "http://localhost:8081/api/v1/miniprogram/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"code": "test_code_for_development", "userInfo": {"nickName": "测试用户"}}' | \
+  python3 -c "import json,sys; print(json.load(sys.stdin)['data']['token'])")
+
+# 🔧 解决方案2: 检查API响应格式
+curl -s -X POST "http://localhost:8081/api/v1/miniprogram/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"code": "test_code_for_development", "userInfo": {"nickName": "测试用户"}}' | \
+  python3 -c "import json,sys; data=json.load(sys.stdin); print('字段名:', list(data['data'].keys()))"
+
+# 🔧 解决方案3: 确保使用Bearer前缀
+# ❌ 错误示例: curl -H "Authorization: $TOKEN"
+# ✅ 正确示例: curl -H "Authorization: Bearer $TOKEN"
+```
+
+### 🚨 Token常见错误对照表
+```
+错误代码          | 原因                    | 解决方案
+401认证失败       | 使用了access_token字段   | 改用token字段
+401认证失败       | 缺少Bearer前缀          | 添加"Bearer "前缀  
+Token为空        | JSON解析字段名错误       | 检查响应结构使用正确字段
+-401缺少身份验证令牌| 完全没有Authorization头  | 添加完整的Authorization头
 ```
 
 ### 服务连接失败

@@ -2,6 +2,7 @@ from typing import Dict, Type, Any
 from .base_provider import BaseTextProvider, BaseImageProvider, BaseCodeProvider
 from .gemini_text_provider import GeminiTextProvider
 from .gemini_image_provider import GeminiImageProvider
+from .laozhang_image_provider import LaoZhangImageProvider
 from ..coding_service.providers.claude_provider import ClaudeCodeProvider
 
 class ProviderFactory:
@@ -14,6 +15,7 @@ class ProviderFactory:
     
     _image_providers: Dict[str, Type[BaseImageProvider]] = {
         "gemini": GeminiImageProvider,
+        "laozhang": LaoZhangImageProvider,
         # "dalle": DalleProvider,  # 未来扩展
     }
     

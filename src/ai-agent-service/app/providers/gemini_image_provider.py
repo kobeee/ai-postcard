@@ -25,7 +25,7 @@ class GeminiImageProvider(BaseImageProvider):
         self.api_key = api_key
         self.base_url = os.getenv("META_BASE_URL", "https://generativelanguage.googleapis.com")
         self.model_name = os.getenv("GEMINI_IMAGE_MODEL", "gemini-2.0-flash-preview-image-generation")
-        self.default_size = os.getenv("GEMINI_IMAGE_SIZE", "1024x1024")
+        self.default_size = os.getenv("GEMINI_IMAGE_SIZE", "512x512")
         self.default_quality = os.getenv("GEMINI_IMAGE_QUALITY", "standard")
         
         # 配置Gemini客户端（按官网教程）
@@ -70,23 +70,10 @@ class GeminiImageProvider(BaseImageProvider):
                     }
                 }
             
-            # 构建完整的prompt
-            full_prompt = f"""Create a high-quality postcard image:
-
-Theme: {prompt}
-
-Requirements:
-- Resolution: {size}
-- Quality: {quality}
-- Style: illustration style, harmonious colors, artistic and elegant
-- Layout: suitable for postcard use, leave space for text overlay
-- Mood: positive and beautiful
-- IMPORTANT: NO TEXT, NO WORDS, NO LETTERS, NO CHARACTERS of any kind in the image
-- Create pure visual artwork without any textual elements
-- Focus on landscapes, nature, abstract patterns, or atmospheric scenes
-- Avoid any symbols, logos, or written content
-
-Please create a beautiful pure visual image without any text or written elements."""
+            # 直接使用传入的prompt，不再重复包装
+            # image_generator.py已经构建了完整的专业提示词
+            final_prompt = prompt
+            self.logger.info(f"📝 使用传入的完整prompt（长度: {len(final_prompt)} 字符）")
             
             # 按照官网教程调用图片生成API
             loop = asyncio.get_event_loop()
@@ -95,7 +82,7 @@ Please create a beautiful pure visual image without any text or written elements
                 None,
                 lambda: self.client.models.generate_content(
                     model=self.model_name,
-                    contents=full_prompt,
+                    contents=final_prompt,
                     config=genai.types.GenerateContentConfig(
                         response_modalities=['TEXT', 'IMAGE']
                     )
