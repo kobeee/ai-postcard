@@ -270,11 +270,21 @@ Page({
         environmentReady: true
       });
       
+      // 🎯 自动引导心境速测
+      setTimeout(() => {
+        this.checkAndTriggerQuizGuide();
+      }, 3000);
+      
     } catch (error) {
       envConfig.error('设置环境就绪失败:', error);
       this.setData({
         environmentReady: true
       });
+      
+      // 即使出错也要尝试自动引导
+      setTimeout(() => {
+        this.checkAndTriggerQuizGuide();
+      }, 3000);
     }
   },
 
@@ -1613,6 +1623,36 @@ Page({
       return;
     }
 
+    // 🎯 优化：检查是否完成心境速测，未完成则提示
+    const { quizCompleted, quizAnswers } = this.data;
+    if (!quizCompleted && quizAnswers.length === 0) {
+      wx.showModal({
+        title: '💡 建议完成心境速测',
+        content: '完成心境速测后，AI能更准确地感知你的状态，生成更贴合你心境的心象签。',
+        confirmText: '先去测试',
+        cancelText: '直接生成',
+        success: (res) => {
+          if (res.confirm) {
+            // 用户选择先测试
+            this.startQuiz();
+          } else {
+            // 用户选择直接生成，继续执行
+            this.proceedWithGeneration();
+          }
+        }
+      });
+      return;
+    }
+
+    // 直接进入生成流程
+    this.proceedWithGeneration();
+  },
+
+  /**
+   * 继续生成流程（从原generateDailyCard中提取）
+   */
+  async proceedWithGeneration() {
+
     // 🔥 检查用户生成配额
     try {
       const app = getApp();
@@ -2874,6 +2914,54 @@ ${trendingTopics ? `• 当地热点：${trendingTopics}` : ''}
   },
 
   /**
+   * 🎯 检查并触发自动引导心境速测
+   */
+  checkAndTriggerQuizGuide() {
+    try {
+      const { hasUserInfo, needEmotionInput, quizCompleted, quizAnswers, todayCard } = this.data;
+      
+      // 检查是否满足自动引导条件
+      const shouldTriggerGuide = 
+        hasUserInfo && // 用户已登录
+        needEmotionInput && // 需要情绪输入（即可以生成）
+        !todayCard && // 今天还没有卡片
+        !quizCompleted && // 还没完成测试
+        quizAnswers.length === 0; // 没有答案记录
+        
+      if (shouldTriggerGuide) {
+        envConfig.log('触发自动心境速测引导');
+        
+        // 显示引导弹窗
+        wx.showModal({
+          title: '🔮 心境速测',
+          content: '为了让AI更好地感知你的当下状态，建议先完成心境速测哦！只需要几个简单的问题。',
+          confirmText: '开始测试',
+          cancelText: '稍后再说',
+          success: (res) => {
+            if (res.confirm) {
+              // 用户选择开始测试
+              this.startQuiz();
+            } else {
+              envConfig.log('用户选择稍后进行心境速测');
+            }
+          }
+        });
+      } else {
+        envConfig.log('不满足自动引导条件，跳过引导', {
+          hasUserInfo,
+          needEmotionInput,
+          todayCard: !!todayCard,
+          quizCompleted,
+          quizAnswersLength: quizAnswers.length
+        });
+      }
+      
+    } catch (error) {
+      envConfig.error('自动引导心境速测失败:', error);
+    }
+  },
+
+  /**
    * 开始心境速测
    */
   async startQuiz() {
@@ -2982,11 +3070,12 @@ ${trendingTopics ? `• 当地热点：${trendingTopics}` : ''}
           showQuizModal: false
         });
         
-        // 提示用户可以开始绘制
-        wx.showToast({
-          title: '心境速测完成，开始绘制吧！',
-          icon: 'success',
-          duration: 2000
+        // 提示用户可以开始绘制 - 使用Modal确保完整显示
+        wx.showModal({
+          title: '✨ 测试完成',
+          content: '心境速测已完成，现在开始绘制你的情绪墨迹吧！',
+          showCancel: false,
+          confirmText: '开始绘制'
         });
         
       }, 1500);

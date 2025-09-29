@@ -111,16 +111,30 @@
       ></canvas>
       
       <view class="ink-actions">
+        <!-- 清空按钮 - 始终显示 -->
         <button class="ink-btn clear" bindtap="clearInk">清空</button>
-        <!-- 🔮 心境速测触发按钮 -->
-        <button class="ink-btn quiz" bindtap="startQuiz" wx:if="{{!quizCompleted && quizAnswers.length === 0}}">
-          🔮 心境速测
-        </button>
-        <button class="ink-btn generate {{isGenerating ? 'loading' : ''}} {{!environmentReady ? 'waiting' : ''}}" bindtap="generateDailyCard" disabled="{{isGenerating || !environmentReady}}">
-          <text wx:if="{{!environmentReady && !isGenerating}}">🌍 感知时空背景中...</text>
-          <text wx:elif="{{!isGenerating}}">✨ 生成心象签</text>
-          <text wx:else>🔮 AI感知自然意象中</text>
-        </button>
+        
+        <!-- 动态主按钮区域 -->
+        <view class="main-action-area">
+          <!-- 状态1：未完成测试时显示测试按钮 -->
+          <button 
+            class="ink-btn quiz-primary" 
+            bindtap="startQuiz" 
+            wx:if="{{!quizCompleted && quizAnswers.length === 0}}">
+            🔮 心境速测
+          </button>
+          
+          <!-- 状态2：已完成测试，显示生成按钮 -->
+          <button 
+            class="ink-btn generate-primary {{isGenerating ? 'loading' : ''}} {{!environmentReady ? 'waiting' : ''}}" 
+            bindtap="generateDailyCard" 
+            disabled="{{isGenerating || !environmentReady}}"
+            wx:elif="{{quizCompleted || quizAnswers.length > 0}}">
+            <text wx:if="{{!environmentReady && !isGenerating}}">🌍 感知时空背景中...</text>
+            <text wx:elif="{{!isGenerating}}">✨ 生成心象签</text>
+            <text wx:else>🔮 AI感知自然意象中</text>
+          </button>
+        </view>
       </view>
     </view>
   
