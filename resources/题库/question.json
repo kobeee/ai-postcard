@@ -1,332 +1,624 @@
-[
-  {
-    "id": "mood_weather_01",
-    "category": "mood",
-    "question": "如果用心绪描绘今天的天气，它会是？",
-    "options": [
-      { "id": "sunny", "label": "一望无际的晴空" },
-      { "id": "breeze", "label": "有微风拂过的午后" },
-      { "id": "overcast", "label": "云层有点厚的阴天" },
-      { "id": "storm", "label": "一场突如其来的阵雨" }
-    ]
+{
+  "config": {
+    "totalQuestions": 50,
+    "questionsPerSession": 15,
+    "questionsPerCategory": {
+      "mood": {"available": 8, "selectMin": 2, "selectMax": 3},
+      "pressure": {"available": 8, "selectMin": 2, "selectMax": 3}, 
+      "needs": {"available": 8, "selectMin": 2, "selectMax": 3},
+      "action": {"available": 8, "selectMin": 2, "selectMax": 3},
+      "future": {"available": 8, "selectMin": 2, "selectMax": 3},
+      "relationship": {"available": 10, "selectMin": 3, "selectMax": 4}
+    },
+    "randomizeOptions": true,
+    "avoidRepeatInterval": 7,
+    "description": "AI心象签心境速测增强版题库，支持随机性抽题机制"
   },
-  {
-    "id": "mood_color_02",
-    "category": "mood",
-    "question": "此刻，哪种颜色更能代表你的心情？",
-    "options": [
-      { "id": "warm_orange", "label": "温暖的橘黄" },
-      { "id": "calm_blue", "label": "平静的浅蓝" },
-      { "id": "deep_purple", "label": "深邃的暗紫" },
-      { "id": "fresh_green", "label": "有生机的草绿" }
-    ]
-  },
-  {
-    "id": "mood_sound_03",
-    "category": "mood",
-    "question": "假如情绪能发出声音，你听到的是什么？",
-    "options": [
-      { "id": "stream", "label": "潺潺的流水声" },
-      { "id": "wind_chime", "label": "清脆的风铃声" },
-      { "id": "static", "label": "收音机的白噪音" },
-      { "id": "distant_thunder", "label": "远方的隐隐雷声" }
-    ]
-  },
-  {
-    "id": "mood_plant_04",
-    "category": "mood",
-    "question": "你感觉自己当下的状态，更像哪种植物？",
-    "options": [
-      { "id": "sprout", "label": "正在努力破土的新芽" },
-      { "id": "succulent", "label": "默默储蓄能量的多肉" },
-      { "id": "vine", "label": "需要一些支撑的藤蔓" },
-      { "id": "autumn_leaf", "label": "准备静静飘落的秋叶" }
-    ]
-  },
-  {
-    "id": "mood_temperature_05",
-    "category": "mood",
-    "question": "如果心情有温度，你现在大约是多少度？",
-    "options": [
-      { "id": "warm", "label": "像阳光晒在背上，暖暖的" },
-      { "id": "tepid", "label": "像一杯温水，不冷不热" },
-      { "id": "cool", "label": "像雨后的空气，凉爽的" },
-      { "id": "icy", "label": "像指尖碰到冰块，冰冷的" }
-    ]
-  },
-  {
-    "id": "mood_container_06",
-    "category": "mood",
-    "question": "你的心像一个容器，它现在的状态是？",
-    "options": [
-      { "id": "overflowing", "label": "装得满满的，快溢出来了" },
-      { "id": "half_full", "label": "半满，还有容纳的空间" },
-      { "id": "leaking", "label": "好像有个缺口，存不住东西" },
-      { "id": "empty", "label": "空空荡荡，等待被填满" }
-    ]
-  },
-  {
-    "id": "pressure_source_01",
-    "category": "pressure",
-    "question": "最近，让你感到最有压力的是？",
-    "options": [
-      { "id": "work", "label": "工作或学业上的任务" },
-      { "id": "relationship", "label": "人际关系中的纠葛" },
-      { "id": "self_expectation", "label": "对自己的高要求" },
-      { "id": "uncertainty", "label": "对未来的迷茫感" }
-    ]
-  },
-  {
-    "id": "pressure_body_02",
-    "category": "pressure",
-    "question": "如果压力有重量，它正落在你的哪个部位？",
-    "options": [
-      { "id": "shoulders", "label": "沉甸甸的肩膀" },
-      { "id": "head", "label": "胀痛的太阳穴" },
-      { "id": "chest", "label": "有点发闷的胸口" },
-      { "id": "stomach", "label": "隐隐作痛的胃" }
-    ]
-  },
-  {
-    "id": "pressure_metaphor_03",
-    "category": "pressure",
-    "question": "你觉得眼前的挑战更像什么？",
-    "options": [
-      { "id": "mountain", "label": "一座需要翻越的高山" },
-      { "id": "fog", "label": "一片看不清方向的迷雾" },
-      { "id": "knot", "label": "一个错综复杂的绳结" },
-      { "id": "race", "label": "一场停不下来的赛跑" }
-    ]
-  },
-  {
-    "id": "pressure_time_04",
-    "category": "pressure",
-    "question": "你感觉最近的时间过得怎么样？",
-    "options": [
-      { "id": "too_fast", "label": "像按了快进键，不够用" },
-      { "id": "too_slow", "label": "像静止了一样，很煎熬" },
-      { "id": "disordered", "label": "时快时慢，节奏是乱的" },
-      { "id": "just_right", "label": "刚刚好，一切都在掌控中" }
-    ]
-  },
-  {
-    "id": "pressure_voice_05",
-    "category": "pressure",
-    "question": "当你感到焦虑时，脑海里更常出现哪种声音？",
-    "options": [
-      { "id": "critic", "label": "一个严厉的批评者" },
-      { "id": "worrier", "label": "一个过分担忧的提醒者" },
-      { "id": "cheerleader", "label": "一个为你加油的鼓励者" },
-      { "id": "silence", "label": "一片空白，什么声音都没有" }
-    ]
-  },
-  {
-    "id": "pressure_room_06",
-    "category": "pressure",
-    "question": "如果把烦心事比作一个房间，你希望如何处理它？",
-    "options": [
-      { "id": "clean_up", "label": "立刻打扫，整理得井井有条" },
-      { "id": "redecorate", "label": "重新装修，换个风格" },
-      { "id": "open_window", "label": "打开窗户，让空气流通" },
-      { "id": "lock_door", "label": "关上门，暂时不去想它" }
-    ]
-  },
-  {
-    "id": "needs_space_01",
-    "category": "needs",
-    "question": "你现在最渴望拥有一个怎样的空间？",
-    "options": [
-      { "id": "quiet_corner", "label": "一个无人打扰的角落" },
-      { "id": "open_field", "label": "一片可以尽情奔跑的原野" },
-      { "id": "warm_hug", "label": "一个温暖且安心的怀抱" },
-      { "id": "lively_gathering", "label": "一个充满欢声笑语的聚会" }
-    ]
-  },
-  {
-    "id": "needs_recharge_02",
-    "category": "needs",
-    "question": "如果可以立刻“充电”，你会选择哪种方式？",
-    "options": [
-      { "id": "deep_sleep", "label": "不受打扰地睡饱一觉" },
-      { "id": "delicious_meal", "label": "好好吃一顿喜欢的食物" },
-      { "id": "heartfelt_talk", "label": "和懂你的人聊聊天" },
-      { "id": "solo_trip", "label": "开启一段一个人的旅程" }
-    ]
-  },
-  {
-    "id": "needs_self_gift_03",
-    "category": "needs",
-    "question": "如果送自己一份礼物，你希望它是什么？",
-    "options": [
-      { "id": "time", "label": "一段完全属于自己的时间" },
-      { "id": "courage", "label": "做出改变的勇气" },
-      { "id": "permission", "label": "“偶尔犯错也没关系”的许可" },
-      { "id": "patience", "label": "对过程多一点点的耐心" }
-    ]
-  },
-  {
-    "id": "needs_let_go_04",
-    "category": "needs",
-    "question": "你眼下最想从自己身上卸下的是什么？",
-    "options": [
-      { "id": "heavy_past", "label": "一段沉重的过往" },
-      { "id": "others_expectations", "label": "来自他人的期待" },
-      { "id": "perfectionism", "label": "“必须做到最好”的执念" },
-      { "id": "the_need_to_be_strong", "label": "时刻保持坚强的伪装" }
-    ]
-  },
-  {
-    "id": "needs_magic_pill_05",
-    "category": "needs",
-    "question": "如果有一颗魔法药丸，你希望它有什么功效？",
-    "options": [
-      { "id": "focus", "label": "能立刻专注，效率加倍" },
-      { "id": "eloquence", "label": "能流利顺畅地表达自己" },
-      { "id": "forgetfulness", "label": "能忘记所有不愉快的记忆" },
-      { "id": "relaxation", "label": "能让紧绷的神经彻底放松" }
-    ]
-  },
-  {
-    "id": "needs_hear_from_others_06",
-    "category": "needs",
-    "question": "你现在最想从别人那里听到的一句话是？",
-    "options": [
-      { "id": "i_am_here_for_you", "label": "“有我陪着你。”" },
-      { "id": "you_did_great", "label": "“你已经做得很好了。”" },
-      { "id": "take_a_rest", "label": "“别太累了，休息一下吧。”" },
-      { "id": "i_understand_you", "label": "“我能理解你的感受。”" }
-    ]
-  },
-  {
-    "id": "action_tendency_01",
-    "category": "action",
-    "question": "面对思绪混乱时，你更倾向于？",
-    "options": [
-      { "id": "organize", "label": "立刻开始整理和计划" },
-      { "id": "distract", "label": "做点别的事分散注意力" },
-      { "id": "express", "label": "找人倾诉或写下来" },
-      { "id": "let_it_be", "label": "什么都不做，让它自然平息" }
-    ]
-  },
-  {
-    "id": "action_energy_02",
-    "category": "action",
-    "question": "接下来的一小时，你最想把精力用在？",
-    "options": [
-      { "id": "create", "label": "创造一些具体的东西" },
-      { "id": "learn", "label": "学习一个新知识" },
-      { "id": "connect", "label": "与在乎的人建立连接" },
-      { "id": "rest", "label": "彻底放空，什么也不想" }
-    ]
-  },
-  {
-    "id": "action_first_step_03",
-    "category": "action",
-    "question": "当你想做一件事时，通常会如何开始？",
-    "options": [
-      { "id": "perfect_plan", "label": "制定一个完美的计划" },
-      { "id": "small_step", "label": "先完成一个微不足道的小步骤" },
-      { "id": "get_inspired", "label": "寻找灵感和动力" },
-      { "id": "just_do_it", "label": "先不管三七二十一，做起来再说" }
-    ]
-  },
-  {
-    "id": "action_pace_04",
-    "category": "action",
-    "question": "你希望自己接下来以什么样的节奏前进？",
-    "options": [
-      { "id": "sprint", "label": "像短跑冲刺，快点到达终点" },
-      { "id": "jog", "label": "像慢跑，保持自己的步调" },
-      { "id": "wander", "label": "像散步，随心所欲地探索" },
-      { "id": "pause", "label": "像中场休息，先停下来缓缓" }
-    ]
-  },
-  {
-    "id": "action_decision_making_05",
-    "category": "action",
-    "question": "当需要做决定时，你更信赖？",
-    "options": [
-      { "id": "logic", "label": "严密的逻辑和数据分析" },
-      { "id": "intuition", "label": "内心的直觉和第一反应" },
-      { "id": "advice", "label": "朋友或家人的建议" },
-      { "id": "experience", "label": "自己过往的成功经验" }
-    ]
-  },
-  {
-    "id": "action_comfort_zone_06",
-    "category": "action",
-    "question": "感到疲惫时，你会下意识地做什么？",
-    "options": [
-      { "id": "binge_watch", "label": "刷剧、看视频" },
-      { "id": "tidy_up", "label": "整理房间或办公桌" },
-      { "id": "snack", "label": "吃点零食或喝点什么" },
-      { "id": "browse_social_media", "label": "漫无目的地刷社交网络" }
-    ]
-  },
-  {
-    "id": "future_expectation_01",
-    "category": "future",
-    "question": "对于明天，你抱着怎样的期待？",
-    "options": [
-      { "id": "surprise", "label": "期待一些意料之外的惊喜" },
-      { "id": "calm", "label": "希望是平稳顺利的一天" },
-      { "id": "progress", "label": "能比今天进步一点点就好" },
-      { "id": "as_it_comes", "label": "顺其自然，不预设太多" }
-    ]
-  },
-  {
-    "id": "future_focus_02",
-    "category": "future",
-    "question": "你希望未来一段时间的生活焦点是什么？",
-    "options": [
-      { "id": "growth", "label": "个人的成长与蜕变" },
-      { "id": "stability", "label": "安稳和有秩序的生活" },
-      { "id": "love", "label": "与他人的情感连接" },
-      { "id": "health", "label": "身心回归健康与平衡" }
-    ]
-  },
-  {
-    "id": "future_wish_03",
-    "category": "future",
-    "question": "如果能向宇宙下一个订单，你想要什么？",
-    "options": [
-      { "id": "clarity", "label": "一个清晰明确的方向" },
-      { "id": "opportunity", "label": "一个梦寐以求的机会" },
-      { "id": "companion", "label": "一位能并肩同行的伙伴" },
-      { "id": "luck", "label": "多一点点的好运气" }
-    ]
-  },
-  {
-    "id": "future_door_04",
-    "category": "future",
-    "question": "如果面前有扇门，你希望它通向哪里？",
-    "options": [
-      { "id": "adventure", "label": "通向一场未知的冒险" },
-      { "id": "sanctuary", "label": "通向一个宁静的避风港" },
-      { "id": "past", "label": "通向过去，修正某个遗憾" },
-      { "id": "knowledge", "label": "通向智慧，解答心中疑惑" }
-    ]
-  },
-  {
-    "id": "future_skill_05",
-    "category": "future",
-    "question": "你最想为未来的自己解锁一项什么技能？",
-    "options": [
-      { "id": "saying_no", "label": "“温柔但坚定地说不”的技能" },
-      { "id": "being_alone", "label": "“高质量独处”的技能" },
-      { "id": "letting_go", "label": "“坦然放下过去”的技能" },
-      { "id": "finding_joy", "label": "“在小事中发现乐趣”的技能" }
-    ]
-  },
-  {
-    "id": "future_message_06",
-    "category": "future",
-    "question": "想给一年后的自己留一句什么话？",
-    "options": [
-      { "id": "thank_you", "label": "“谢谢你，没有放弃。”" },
-      { "id": "are_you_happy", "label": "“嘿，你现在过得开心吗？”" },
-      { "id": "remember_today", "label": "“别忘了今天为何出发。”" },
-      { "id": "it_was_worth_it", "label": "“希望你觉得一切都值得。”" }
-    ]
-  }
-]
+  "questions": [
+    {
+      "id": "mood_weather_01",
+      "category": "mood",
+      "question": "如果用心绪描绘今天的天气，它会是？",
+      "weight": 1.0,
+      "options": [
+        { "id": "sunny", "label": "一望无际的晴空" },
+        { "id": "breeze", "label": "有微风拂过的午后" },
+        { "id": "overcast", "label": "云层有点厚的阴天" },
+        { "id": "storm", "label": "一场突如其来的阵雨" }
+      ]
+    },
+    {
+      "id": "mood_color_02",
+      "category": "mood",
+      "question": "此刻，哪种颜色更能代表你的心情？",
+      "weight": 1.0,
+      "options": [
+        { "id": "warm_orange", "label": "温暖的橘黄" },
+        { "id": "calm_blue", "label": "平静的浅蓝" },
+        { "id": "deep_purple", "label": "深邃的暗紫" },
+        { "id": "fresh_green", "label": "有生机的草绿" }
+      ]
+    },
+    {
+      "id": "mood_sound_03",
+      "category": "mood",
+      "question": "假如情绪能发出声音，你听到的是什么？",
+      "weight": 1.0,
+      "options": [
+        { "id": "stream", "label": "潺潺的流水声" },
+        { "id": "wind_chime", "label": "清脆的风铃声" },
+        { "id": "static", "label": "收音机的白噪音" },
+        { "id": "distant_thunder", "label": "远方的隐隐雷声" }
+      ]
+    },
+    {
+      "id": "mood_plant_04",
+      "category": "mood",
+      "question": "你感觉自己当下的状态，更像哪种植物？",
+      "weight": 1.0,
+      "options": [
+        { "id": "sprout", "label": "正在努力破土的新芽" },
+        { "id": "succulent", "label": "默默储蓄能量的多肉" },
+        { "id": "vine", "label": "需要一些支撑的藤蔓" },
+        { "id": "autumn_leaf", "label": "准备静静飘落的秋叶" }
+      ]
+    },
+    {
+      "id": "mood_temperature_05",
+      "category": "mood",
+      "question": "如果心情有温度，你现在大约是多少度？",
+      "weight": 1.0,
+      "options": [
+        { "id": "warm", "label": "像阳光晒在背上，暖暖的" },
+        { "id": "tepid", "label": "像一杯温水，不冷不热" },
+        { "id": "cool", "label": "像雨后的空气，凉爽的" },
+        { "id": "icy", "label": "像指尖碰到冰块，冰冷的" }
+      ]
+    },
+    {
+      "id": "mood_container_06",
+      "category": "mood",
+      "question": "你的心像一个容器，它现在的状态是？",
+      "weight": 1.0,
+      "options": [
+        { "id": "overflowing", "label": "装得满满的，快溢出来了" },
+        { "id": "half_full", "label": "半满，还有容纳的空间" },
+        { "id": "leaking", "label": "好像有个缺口，存不住东西" },
+        { "id": "empty", "label": "空空荡荡，等待被填满" }
+      ]
+    },
+    {
+      "id": "mood_texture_07",
+      "category": "mood", 
+      "question": "如果用手触摸你现在的心情，它的质感是什么？",
+      "weight": 0.9,
+      "options": [
+        { "id": "silk", "label": "如丝绸般顺滑柔软" },
+        { "id": "rough", "label": "像砂纸一样粗糙扎手" },
+        { "id": "cotton", "label": "像棉花糖般蓬松轻盈" },
+        { "id": "stone", "label": "如鹅卵石般光滑厚重" }
+      ]
+    },
+    {
+      "id": "mood_season_08",
+      "category": "mood",
+      "question": "你的内心现在正经历着哪个季节？",
+      "weight": 0.8,
+      "options": [
+        { "id": "spring", "label": "万物复苏的春天" },
+        { "id": "summer", "label": "热情洋溢的夏天" },
+        { "id": "autumn", "label": "收获沉淀的秋天" },
+        { "id": "winter", "label": "宁静内敛的冬天" }
+      ]
+    },
+
+    {
+      "id": "pressure_source_01",
+      "category": "pressure",
+      "question": "最近，让你感到最有压力的是？",
+      "weight": 1.0,
+      "options": [
+        { "id": "work", "label": "工作或学业上的任务" },
+        { "id": "relationship", "label": "人际关系中的纠葛" },
+        { "id": "self_expectation", "label": "对自己的高要求" },
+        { "id": "uncertainty", "label": "对未来的迷茫感" }
+      ]
+    },
+    {
+      "id": "pressure_body_02",
+      "category": "pressure",
+      "question": "如果压力有重量，它正落在你的哪个部位？",
+      "weight": 1.0,
+      "options": [
+        { "id": "shoulders", "label": "沉甸甸的肩膀" },
+        { "id": "head", "label": "胀痛的太阳穴" },
+        { "id": "chest", "label": "有点发闷的胸口" },
+        { "id": "stomach", "label": "隐隐作痛的胃" }
+      ]
+    },
+    {
+      "id": "pressure_metaphor_03",
+      "category": "pressure",
+      "question": "你觉得眼前的挑战更像什么？",
+      "weight": 1.0,
+      "options": [
+        { "id": "mountain", "label": "一座需要翻越的高山" },
+        { "id": "fog", "label": "一片看不清方向的迷雾" },
+        { "id": "knot", "label": "一个错综复杂的绳结" },
+        { "id": "race", "label": "一场停不下来的赛跑" }
+      ]
+    },
+    {
+      "id": "pressure_time_04",
+      "category": "pressure",
+      "question": "你感觉最近的时间过得怎么样？",
+      "weight": 1.0,
+      "options": [
+        { "id": "too_fast", "label": "像按了快进键，不够用" },
+        { "id": "too_slow", "label": "像静止了一样，很煎熬" },
+        { "id": "disordered", "label": "时快时慢，节奏是乱的" },
+        { "id": "just_right", "label": "刚刚好，一切都在掌控中" }
+      ]
+    },
+    {
+      "id": "pressure_voice_05",
+      "category": "pressure",
+      "question": "当你感到焦虑时，脑海里更常出现哪种声音？",
+      "weight": 1.0,
+      "options": [
+        { "id": "critic", "label": "一个严厉的批评者" },
+        { "id": "worrier", "label": "一个过分担忧的提醒者" },
+        { "id": "cheerleader", "label": "一个为你加油的鼓励者" },
+        { "id": "silence", "label": "一片空白，什么声音都没有" }
+      ]
+    },
+    {
+      "id": "pressure_room_06",
+      "category": "pressure",
+      "question": "如果把烦心事比作一个房间，你希望如何处理它？",
+      "weight": 1.0,
+      "options": [
+        { "id": "clean_up", "label": "立刻打扫，整理得井井有条" },
+        { "id": "redecorate", "label": "重新装修，换个风格" },
+        { "id": "open_window", "label": "打开窗户，让空气流通" },
+        { "id": "lock_door", "label": "关上门，暂时不去想它" }
+      ]
+    },
+    {
+      "id": "pressure_anchor_07",
+      "category": "pressure",
+      "question": "面对压力时，什么能让你感到最安稳？",
+      "weight": 0.9,
+      "options": [
+        { "id": "routine", "label": "熟悉的日常规律" },
+        { "id": "nature", "label": "亲近大自然的时刻" },
+        { "id": "creation", "label": "专注于创造一些东西" },
+        { "id": "solitude", "label": "独自一人的静谧时光" }
+      ]
+    },
+    {
+      "id": "pressure_wave_08",
+      "category": "pressure",
+      "question": "如果压力是海浪，你现在的感受是？",
+      "weight": 0.8,
+      "options": [
+        { "id": "diving", "label": "潜入深处，等待风平浪静" },
+        { "id": "surfing", "label": "乘风破浪，享受刺激" },
+        { "id": "floating", "label": "随波逐流，顺其自然" },
+        { "id": "drowning", "label": "被浪花吞没，急需救援" }
+      ]
+    },
+
+    {
+      "id": "needs_space_01",
+      "category": "needs",
+      "question": "你现在最渴望拥有一个怎样的空间？",
+      "weight": 1.0,
+      "options": [
+        { "id": "quiet_corner", "label": "一个无人打扰的角落" },
+        { "id": "open_field", "label": "一片可以尽情奔跑的原野" },
+        { "id": "warm_hug", "label": "一个温暖且安心的怀抱" },
+        { "id": "lively_gathering", "label": "一个充满欢声笑语的聚会" }
+      ]
+    },
+    {
+      "id": "needs_recharge_02",
+      "category": "needs",
+      "question": "如果可以立刻"充电"，你会选择哪种方式？",
+      "weight": 1.0,
+      "options": [
+        { "id": "deep_sleep", "label": "不受打扰地睡饱一觉" },
+        { "id": "delicious_meal", "label": "好好吃一顿喜欢的食物" },
+        { "id": "heartfelt_talk", "label": "和懂你的人聊聊天" },
+        { "id": "solo_trip", "label": "开启一段一个人的旅程" }
+      ]
+    },
+    {
+      "id": "needs_self_gift_03",
+      "category": "needs",
+      "question": "如果送自己一份礼物，你希望它是什么？",
+      "weight": 1.0,
+      "options": [
+        { "id": "time", "label": "一段完全属于自己的时间" },
+        { "id": "courage", "label": "做出改变的勇气" },
+        { "id": "permission", "label": ""偶尔犯错也没关系"的许可" },
+        { "id": "patience", "label": "对过程多一点点的耐心" }
+      ]
+    },
+    {
+      "id": "needs_let_go_04",
+      "category": "needs",
+      "question": "你眼下最想从自己身上卸下的是什么？",
+      "weight": 1.0,
+      "options": [
+        { "id": "heavy_past", "label": "一段沉重的过往" },
+        { "id": "others_expectations", "label": "来自他人的期待" },
+        { "id": "perfectionism", "label": ""必须做到最好"的执念" },
+        { "id": "the_need_to_be_strong", "label": "时刻保持坚强的伪装" }
+      ]
+    },
+    {
+      "id": "needs_magic_pill_05",
+      "category": "needs",
+      "question": "如果有一颗魔法药丸，你希望它有什么功效？",
+      "weight": 1.0,
+      "options": [
+        { "id": "focus", "label": "能立刻专注，效率加倍" },
+        { "id": "eloquence", "label": "能流利顺畅地表达自己" },
+        { "id": "forgetfulness", "label": "能忘记所有不愉快的记忆" },
+        { "id": "relaxation", "label": "能让紧绷的神经彻底放松" }
+      ]
+    },
+    {
+      "id": "needs_hear_from_others_06",
+      "category": "needs",
+      "question": "你现在最想从别人那里听到的一句话是？",
+      "weight": 1.0,
+      "options": [
+        { "id": "i_am_here_for_you", "label": ""有我陪着你。"" },
+        { "id": "you_did_great", "label": ""你已经做得很好了。"" },
+        { "id": "take_a_rest", "label": ""别太累了，休息一下吧。"" },
+        { "id": "i_understand_you", "label": ""我能理解你的感受。"" }
+      ]
+    },
+    {
+      "id": "needs_sanctuary_07",
+      "category": "needs",
+      "question": "你的心灵避风港应该是什么样的？",
+      "weight": 0.9,
+      "options": [
+        { "id": "library", "label": "安静的图书馆，书香环绕" },
+        { "id": "garden", "label": "私人花园，鸟语花香" },
+        { "id": "cabin", "label": "山间小屋，与世隔绝" },
+        { "id": "beach", "label": "海边沙滩，浪声阵阵" }
+      ]
+    },
+    {
+      "id": "needs_healing_08",
+      "category": "needs",
+      "question": "什么能让你感到最深层的治愈？",
+      "weight": 0.8,
+      "options": [
+        { "id": "music", "label": "一首打动心灵的音乐" },
+        { "id": "story", "label": "一个引发共鸣的故事" },
+        { "id": "touch", "label": "一个温暖真诚的拥抱" },
+        { "id": "recognition", "label": "被完全理解和接纳的感觉" }
+      ]
+    },
+
+    {
+      "id": "action_tendency_01",
+      "category": "action",
+      "question": "面对思绪混乱时，你更倾向于？",
+      "weight": 1.0,
+      "options": [
+        { "id": "organize", "label": "立刻开始整理和计划" },
+        { "id": "distract", "label": "做点别的事分散注意力" },
+        { "id": "express", "label": "找人倾诉或写下来" },
+        { "id": "let_it_be", "label": "什么都不做，让它自然平息" }
+      ]
+    },
+    {
+      "id": "action_energy_02",
+      "category": "action",
+      "question": "接下来的一小时，你最想把精力用在？",
+      "weight": 1.0,
+      "options": [
+        { "id": "create", "label": "创造一些具体的东西" },
+        { "id": "learn", "label": "学习一个新知识" },
+        { "id": "connect", "label": "与在乎的人建立连接" },
+        { "id": "rest", "label": "彻底放空，什么也不想" }
+      ]
+    },
+    {
+      "id": "action_first_step_03",
+      "category": "action",
+      "question": "当你想做一件事时，通常会如何开始？",
+      "weight": 1.0,
+      "options": [
+        { "id": "perfect_plan", "label": "制定一个完美的计划" },
+        { "id": "small_step", "label": "先完成一个微不足道的小步骤" },
+        { "id": "get_inspired", "label": "寻找灵感和动力" },
+        { "id": "just_do_it", "label": "先不管三七二十一，做起来再说" }
+      ]
+    },
+    {
+      "id": "action_pace_04",
+      "category": "action",
+      "question": "你希望自己接下来以什么样的节奏前进？",
+      "weight": 1.0,
+      "options": [
+        { "id": "sprint", "label": "像短跑冲刺，快点到达终点" },
+        { "id": "jog", "label": "像慢跑，保持自己的步调" },
+        { "id": "wander", "label": "像散步，随心所欲地探索" },
+        { "id": "pause", "label": "像中场休息，先停下来缓缓" }
+      ]
+    },
+    {
+      "id": "action_decision_making_05",
+      "category": "action",
+      "question": "当需要做决定时，你更信赖？",
+      "weight": 1.0,
+      "options": [
+        { "id": "logic", "label": "严密的逻辑和数据分析" },
+        { "id": "intuition", "label": "内心的直觉和第一反应" },
+        { "id": "advice", "label": "朋友或家人的建议" },
+        { "id": "experience", "label": "自己过往的成功经验" }
+      ]
+    },
+    {
+      "id": "action_comfort_zone_06",
+      "category": "action",
+      "question": "感到疲惫时，你会下意识地做什么？",
+      "weight": 1.0,
+      "options": [
+        { "id": "binge_watch", "label": "刷剧、看视频" },
+        { "id": "tidy_up", "label": "整理房间或办公桌" },
+        { "id": "snack", "label": "吃点零食或喝点什么" },
+        { "id": "browse_social_media", "label": "漫无目的地刷社交网络" }
+      ]
+    },
+    {
+      "id": "action_obstacle_07",
+      "category": "action",
+      "question": "遇到阻碍时，你的第一反应通常是？",
+      "weight": 0.9,
+      "options": [
+        { "id": "analyze", "label": "停下来分析问题根源" },
+        { "id": "persist", "label": "咬牙坚持，继续硬冲" },
+        { "id": "seek_help", "label": "主动寻求他人帮助" },
+        { "id": "detour", "label": "寻找其他路径绕道而行" }
+      ]
+    },
+    {
+      "id": "action_momentum_08",
+      "category": "action",
+      "question": "什么能让你最快地进入专注状态？",
+      "weight": 0.8,
+      "options": [
+        { "id": "ritual", "label": "一套固定的仪式感流程" },
+        { "id": "deadline", "label": "紧迫的时间压力" },
+        { "id": "environment", "label": "特定的环境氛围" },
+        { "id": "passion", "label": "对结果的强烈渴望" }
+      ]
+    },
+
+    {
+      "id": "future_expectation_01",
+      "category": "future",
+      "question": "对于明天，你抱着怎样的期待？",
+      "weight": 1.0,
+      "options": [
+        { "id": "surprise", "label": "期待一些意料之外的惊喜" },
+        { "id": "calm", "label": "希望是平稳顺利的一天" },
+        { "id": "progress", "label": "能比今天进步一点点就好" },
+        { "id": "as_it_comes", "label": "顺其自然，不预设太多" }
+      ]
+    },
+    {
+      "id": "future_focus_02",
+      "category": "future",
+      "question": "你希望未来一段时间的生活焦点是什么？",
+      "weight": 1.0,
+      "options": [
+        { "id": "growth", "label": "个人的成长与蜕变" },
+        { "id": "stability", "label": "安稳和有秩序的生活" },
+        { "id": "love", "label": "与他人的情感连接" },
+        { "id": "health", "label": "身心回归健康与平衡" }
+      ]
+    },
+    {
+      "id": "future_wish_03",
+      "category": "future",
+      "question": "如果能向宇宙下一个订单，你想要什么？",
+      "weight": 1.0,
+      "options": [
+        { "id": "clarity", "label": "一个清晰明确的方向" },
+        { "id": "opportunity", "label": "一个梦寐以求的机会" },
+        { "id": "companion", "label": "一位能并肩同行的伙伴" },
+        { "id": "luck", "label": "多一点点的好运气" }
+      ]
+    },
+    {
+      "id": "future_door_04",
+      "category": "future",
+      "question": "如果面前有扇门，你希望它通向哪里？",
+      "weight": 1.0,
+      "options": [
+        { "id": "adventure", "label": "通向一场未知的冒险" },
+        { "id": "sanctuary", "label": "通向一个宁静的避风港" },
+        { "id": "past", "label": "通向过去，修正某个遗憾" },
+        { "id": "knowledge", "label": "通向智慧，解答心中疑惑" }
+      ]
+    },
+    {
+      "id": "future_skill_05",
+      "category": "future",
+      "question": "你最想为未来的自己解锁一项什么技能？",
+      "weight": 1.0,
+      "options": [
+        { "id": "saying_no", "label": ""温柔但坚定地说不"的技能" },
+        { "id": "being_alone", "label": ""高质量独处"的技能" },
+        { "id": "letting_go", "label": ""坦然放下过去"的技能" },
+        { "id": "finding_joy", "label": ""在小事中发现乐趣"的技能" }
+      ]
+    },
+    {
+      "id": "future_message_06",
+      "category": "future",
+      "question": "想给一年后的自己留一句什么话？",
+      "weight": 1.0,
+      "options": [
+        { "id": "thank_you", "label": ""谢谢你，没有放弃。"" },
+        { "id": "are_you_happy", "label": ""嘿，你现在过得开心吗？"" },
+        { "id": "remember_today", "label": ""别忘了今天为何出发。"" },
+        { "id": "it_was_worth_it", "label": ""希望你觉得一切都值得。"" }
+      ]
+    },
+    {
+      "id": "future_legacy_07",
+      "category": "future",
+      "question": "你希望在这个世界留下什么痕迹？",
+      "weight": 0.9,
+      "options": [
+        { "id": "kindness", "label": "温柔善意的人际回响" },
+        { "id": "creation", "label": "有价值的作品或创造" },
+        { "id": "wisdom", "label": "能启发他人的智慧分享" },
+        { "id": "love", "label": "深深爱过和被爱过的记忆" }
+      ]
+    },
+    {
+      "id": "future_timeline_08",
+      "category": "future",
+      "question": "如果可以调节人生的时间流速，你会？",
+      "weight": 0.8,
+      "options": [
+        { "id": "slow_down", "label": "让美好时光慢一点" },
+        { "id": "fast_forward", "label": "快进过去困难阶段" },
+        { "id": "pause", "label": "在完美瞬间暂停时间" },
+        { "id": "natural_flow", "label": "保持自然节奏，不做改变" }
+      ]
+    },
+
+    {
+      "id": "relationship_trust_01",
+      "category": "relationship",
+      "question": "在人际关系中，你最看重什么？",
+      "weight": 1.0,
+      "options": [
+        { "id": "honesty", "label": "彼此间的坦诚相待" },
+        { "id": "understanding", "label": "深层次的相互理解" },
+        { "id": "respect", "label": "边界感和尊重" },
+        { "id": "support", "label": "困难时的相互支撑" }
+      ]
+    },
+    {
+      "id": "relationship_energy_02",
+      "category": "relationship",
+      "question": "与人相处时，什么会让你感到最消耗？",
+      "weight": 1.0,
+      "options": [
+        { "id": "pretending", "label": "必须戴上面具伪装自己" },
+        { "id": "conflict", "label": "无法避免的争执和冲突" },
+        { "id": "misunderstanding", "label": "被误解却无法解释清楚" },
+        { "id": "emotional_labor", "label": "单方面的情感付出" }
+      ]
+    },
+    {
+      "id": "relationship_distance_03",
+      "category": "relationship",
+      "question": "你更喜欢与朋友保持怎样的距离？",
+      "weight": 1.0,
+      "options": [
+        { "id": "close", "label": "无话不谈的亲密无间" },
+        { "id": "comfortable", "label": "舒适自然的适度距离" },
+        { "id": "flexible", "label": "根据心情随时调节远近" },
+        { "id": "independent", "label": "各自独立偶尔交集" }
+      ]
+    },
+    {
+      "id": "relationship_conflict_04",
+      "category": "relationship",
+      "question": "当与重要的人产生分歧时，你倾向于？",
+      "weight": 1.0,
+      "options": [
+        { "id": "communicate", "label": "立刻开诚布公地沟通" },
+        { "id": "compromise", "label": "寻找双方都能接受的平衡点" },
+        { "id": "give_space", "label": "给彼此一些冷静的时间" },
+        { "id": "seek_harmony", "label": "为了和谐选择让步" }
+      ]
+    },
+    {
+      "id": "relationship_expression_05",
+      "category": "relationship",
+      "question": "你习惯用什么方式表达对别人的关心？",
+      "weight": 1.0,
+      "options": [
+        { "id": "words", "label": "直接用语言表达关怀" },
+        { "id": "actions", "label": "通过实际行动来体现" },
+        { "id": "presence", "label": "默默陪伴在对方身边" },
+        { "id": "gifts", "label": "精心准备贴心的小惊喜" }
+      ]
+    },
+    {
+      "id": "relationship_social_battery_06",
+      "category": "relationship",
+      "question": "社交过后，你的感受通常是？",
+      "weight": 1.0,
+      "options": [
+        { "id": "energized", "label": "充满活力，意犹未尽" },
+        { "id": "satisfied", "label": "心满意足，收获颇丰" },
+        { "id": "drained", "label": "有些疲惫，需要独处恢复" },
+        { "id": "anxious", "label": "忍不住反思自己的表现" }
+      ]
+    },
+    {
+      "id": "relationship_ideal_friend_07",
+      "category": "relationship",
+      "question": "你理想中的朋友是什么样的？",
+      "weight": 0.9,
+      "options": [
+        { "id": "loyal", "label": "忠诚可靠，永远站在你这边" },
+        { "id": "inspiring", "label": "有趣幽默，总能带来新鲜感" },
+        { "id": "empathetic", "label": "善解人意，能准确感知你的情绪" },
+        { "id": "growth_oriented", "label": "共同成长，互相激励进步" }
+      ]
+    },
+    {
+      "id": "relationship_boundary_08",
+      "category": "relationship",
+      "question": "别人跨越你的边界时，你的反应是？",
+      "weight": 0.8,
+      "options": [
+        { "id": "direct_confrontation", "label": "直接明确地表达不满" },
+        { "id": "subtle_signals", "label": "用暗示的方式表达不适" },
+        { "id": "withdrawal", "label": "默默后退，减少接触" },
+        { "id": "tolerance", "label": "为了和谐选择忍耐" }
+      ]
+    },
+    {
+      "id": "relationship_connection_depth_09",
+      "category": "relationship",
+      "question": "你更珍视哪种类型的人际连接？",
+      "weight": 0.7,
+      "options": [
+        { "id": "soul_connection", "label": "灵魂层面的深度共鸣" },
+        { "id": "intellectual", "label": "思想碰撞的智识交流" },
+        { "id": "emotional", "label": "情感支持的温暖陪伴" },
+        { "id": "shared_experience", "label": "共同经历积淀的默契" }
+      ]
+    },
+    {
+      "id": "relationship_social_role_10",
+      "category": "relationship",
+      "question": "在群体中，你通常扮演什么角色？",
+      "weight": 0.6,
+      "options": [
+        { "id": "leader", "label": "组织者，引领大家前进" },
+        { "id": "mediator", "label": "调解者，维持群体和谐" },
+        { "id": "supporter", "label": "支持者，默默做好后援工作" },
+        { "id": "observer", "label": "观察者，静静感受群体动态" }
+      ]
+    }
+  ]
+}

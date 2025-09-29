@@ -2702,8 +2702,22 @@ ${trendingTopics ? `• 当地热点：${trendingTopics}` : ''}
         });
         
         if (response.statusCode === 200 && response.data) {
-          questions = response.data;
-          envConfig.log('✅ 远程题库加载成功，题目数量:', questions.length);
+          // 支持新的题库结构
+          const responseData = response.data;
+          if (responseData.questions && Array.isArray(responseData.questions)) {
+            // 新格式：包含config和questions的对象
+            questions = responseData.questions;
+            this.quizConfig = responseData.config || {};
+            envConfig.log('✅ 远程题库加载成功（新格式），题目数量:', questions.length);
+            envConfig.log('📋 题库配置:', this.quizConfig);
+          } else if (Array.isArray(responseData)) {
+            // 旧格式：直接是题目数组
+            questions = responseData;
+            this.quizConfig = {}; // 默认配置
+            envConfig.log('✅ 远程题库加载成功（旧格式），题目数量:', questions.length);
+          } else {
+            throw new Error('无效的题库数据格式');
+          }
         } else {
           throw new Error(`HTTP ${response.statusCode}`);
         }
@@ -2713,8 +2727,8 @@ ${trendingTopics ? `• 当地热点：${trendingTopics}` : ''}
         questions = this.getDefaultQuizQuestions();
       }
       
-      // 从5个分类中各选1题，共3题（智能选择）
-      const selectedQuestions = this.selectQuizQuestions(questions);
+      // 智能选择题目（支持配置化抽题）
+      const selectedQuestions = this.selectQuizQuestions(questions, this.quizConfig);
       
       this.setData({
         quizQuestions: selectedQuestions,
@@ -2819,9 +2833,9 @@ ${trendingTopics ? `• 当地热点：${trendingTopics}` : ''}
   /**
    * 智能选择3道问答题（从不同分类中选择）
    */
-  selectQuizQuestions(allQuestions) {
+  selectQuizQuestions(allQuestions, config = {}) {
     try {
-      // 按分类分组
+      // 按分类分组并支持权重过滤
       const categories = {};
       allQuestions.forEach(q => {
         if (!categories[q.category]) {
@@ -2833,43 +2847,96 @@ ${trendingTopics ? `• 当地热点：${trendingTopics}` : ''}
       const selectedQuestions = [];
       const availableCategories = Object.keys(categories);
       
-      // 优先选择的分类顺序
-      const preferredOrder = ['mood', 'pressure', 'needs', 'action', 'future'];
+      // 使用配置化的抽题策略
+      const questionsPerSession = config.questionsPerSession || 15;
+      const questionsPerCategory = config.questionsPerCategory || {};
+      const shouldRandomizeOptions = config.randomizeOptions || false;
       
-      // 确保选择3个不同分类的问题
-      for (let i = 0; i < 3 && i < preferredOrder.length; i++) {
-        const category = preferredOrder[i];
-        if (categories[category] && categories[category].length > 0) {
-          // 从该分类中随机选择一题
-          const randomIndex = Math.floor(Math.random() * categories[category].length);
-          selectedQuestions.push(categories[category][randomIndex]);
+      // 优先选择的分类顺序（新增relationship分类）
+      const preferredOrder = ['mood', 'pressure', 'needs', 'action', 'future', 'relationship'];
+      
+      // 根据配置确定每个分类的抽题数量
+      for (const category of preferredOrder) {
+        if (!categories[category] || categories[category].length === 0) continue;
+        
+        const categoryConfig = questionsPerCategory[category] || {};
+        const selectMin = categoryConfig.selectMin || 1;
+        const selectMax = categoryConfig.selectMax || 1;
+        
+        // 在min和max之间随机选择抽题数量
+        const selectCount = Math.floor(Math.random() * (selectMax - selectMin + 1)) + selectMin;
+        
+        // 从该分类中随机选择指定数量的题目
+        const categoryQuestions = [...categories[category]];
+        for (let i = 0; i < selectCount && categoryQuestions.length > 0 && selectedQuestions.length < questionsPerSession; i++) {
+          const randomIndex = Math.floor(Math.random() * categoryQuestions.length);
+          const selectedQuestion = categoryQuestions.splice(randomIndex, 1)[0];
+          
+          // 如果启用选项随机化，打乱选项顺序
+          if (shouldRandomizeOptions && selectedQuestion.options) {
+            selectedQuestion.options = this.shuffleArray([...selectedQuestion.options]);
+          }
+          
+          selectedQuestions.push(selectedQuestion);
         }
       }
       
-      // 如果不足3题，从剩余分类中补充
-      while (selectedQuestions.length < 3 && availableCategories.length > 0) {
+      // 如果题目数量不足，从剩余分类中补充
+      while (selectedQuestions.length < Math.min(questionsPerSession, 5) && availableCategories.length > 0) {
         for (const category of availableCategories) {
-          if (selectedQuestions.length >= 3) break;
+          if (selectedQuestions.length >= questionsPerSession) break;
           if (categories[category] && categories[category].length > 0) {
-            // 检查是否已选择过该分类
-            const alreadySelected = selectedQuestions.some(q => q.category === category);
-            if (!alreadySelected) {
-              const randomIndex = Math.floor(Math.random() * categories[category].length);
-              selectedQuestions.push(categories[category][randomIndex]);
+            // 检查该分类是否还有未选择的题目
+            const unusedQuestions = categories[category].filter(q => 
+              !selectedQuestions.some(sq => sq.id === q.id)
+            );
+            if (unusedQuestions.length > 0) {
+              const randomIndex = Math.floor(Math.random() * unusedQuestions.length);
+              const selectedQuestion = unusedQuestions[randomIndex];
+              
+              if (shouldRandomizeOptions && selectedQuestion.options) {
+                selectedQuestion.options = this.shuffleArray([...selectedQuestion.options]);
+              }
+              
+              selectedQuestions.push(selectedQuestion);
             }
           }
         }
         break; // 防止无限循环
       }
       
-      envConfig.log('智能选择的问题:', selectedQuestions.map(q => `${q.category}: ${q.question}`));
+      envConfig.log('🎯 智能选择的问题:', selectedQuestions.map(q => `${q.category}: ${q.question.substring(0, 20)}...`));
+      envConfig.log('📊 各分类题目分布:', this.getCategoryDistribution(selectedQuestions));
+      
       return selectedQuestions;
       
     } catch (error) {
       envConfig.error('智能选择问题失败:', error);
       // 降级：直接返回前3题
-      return allQuestions.slice(0, 3);
+      return allQuestions.slice(0, Math.min(3, allQuestions.length));
     }
+  },
+  
+  /**
+   * 打乱数组顺序（Fisher-Yates洗牌算法）
+   */
+  shuffleArray(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+  },
+  
+  /**
+   * 获取分类分布统计
+   */
+  getCategoryDistribution(questions) {
+    const distribution = {};
+    questions.forEach(q => {
+      distribution[q.category] = (distribution[q.category] || 0) + 1;
+    });
+    return distribution;
   },
 
   /**

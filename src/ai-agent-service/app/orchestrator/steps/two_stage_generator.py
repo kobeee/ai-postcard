@@ -16,7 +16,7 @@ class TwoStageGenerator:
         self.logger = logging.getLogger(self.__class__.__name__)
         
         # 加载签体配置
-        self.charm_configs = self._loadharm_configs()
+        self.charm_configs = self._load_charm_configs()
         
         # 重试配置
         self.max_retries = 3
