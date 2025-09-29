@@ -511,17 +511,6 @@ Page({
       const parseResult = parseCardData(cardData);
       const structuredData = parseResult.structuredData;
       
-      // 🔮 调试：检查解析后的心象签关键字段
-      envConfig.log('🔮 解析结果调试:', {
-        hasStructuredData: parseResult.hasStructuredData,
-        dataSource: parseResult.debugInfo?.dataSource,
-        ai_selected_charm_id: structuredData?.ai_selected_charm_id,
-        ai_selected_charm_name: structuredData?.ai_selected_charm_name,
-        oracle_title: structuredData?.oracle_title,
-        oracle_affirmation: structuredData?.oracle_affirmation,
-        parsedKeys: Object.keys(structuredData || {}).slice(0, 20) // 只显示前20个键
-      });
-      
       // 初始化基础数据，从解析结果中提取
       let mainText = '每一天都值得被温柔记录';
       let englishQuote = 'Every day deserves to be gently remembered';

@@ -1,6 +1,7 @@
 // utils/card-data-manager.js - 卡片数据管理和缓存工具
 
 const { parseCardData } = require('./data-parser.js');
+const { TimeFormatter } = require('./time-formatter.js');
 const envConfig = require('../config/env.js');
 
 /**
@@ -31,18 +32,15 @@ class CardDataManager {
       // 使用统一的数据解析逻辑
       const parseResult = parseCardData(rawCardData);
       
-      // 格式化创建时间
+      // 格式化创建时间 - 使用统一的时间处理工具
+      // 保存原始UTC时间用于业务逻辑，同时提供格式化时间用于显示
       const formattedCard = {
         ...rawCardData,
+        // 保存原始UTC时间（用于逻辑判断）
+        created_at_utc: rawCardData.created_at,
+        // 格式化后的时间（用于显示）
         created_at: rawCardData.created_at ? 
-          new Date(rawCardData.created_at).toLocaleString('zh-CN', {
-            year: 'numeric',
-            month: 'long', 
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-          }) : rawCardData.created_at
+          TimeFormatter.formatToChineseLocal(rawCardData.created_at) : rawCardData.created_at
       };
       
       // 构建完整的卡片数据对象
@@ -231,6 +229,33 @@ class CardDataManager {
       wx.setNavigationBarTitle({ title });
     } catch (error) {
       envConfig.error('设置页面标题失败:', error);
+    }
+  }
+
+  /**
+   * 检查卡片是否为今日创建
+   * @param {Object} cardData - 卡片数据 
+   * @returns {boolean} 是否为今日创建
+   */
+  static isCardToday(cardData) {
+    if (!cardData || !cardData.created_at) {
+      return false;
+    }
+    
+    try {
+      // 优先使用原始UTC时间数据
+      let timeToCheck = cardData.created_at_utc || cardData.created_at;
+      
+      // 如果是已经格式化的时间（包含中文），则无法准确判断
+      if (typeof timeToCheck === 'string' && timeToCheck.includes('年')) {
+        envConfig.warn('仅有格式化的时间数据，无法准确进行今日判断:', timeToCheck);
+        return false;
+      }
+      
+      return TimeFormatter.isToday(timeToCheck);
+    } catch (error) {
+      envConfig.error('判断是否为今日卡片失败:', error);
+      return false;
     }
   }
 }

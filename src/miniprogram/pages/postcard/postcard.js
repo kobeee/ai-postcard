@@ -335,13 +335,29 @@ Page({
       try {
         app.globalData = app.globalData || {};
         
-        // 检查是否为今日卡片
+        // 检查是否为今日卡片 - 使用统一的时间处理工具
         const pc = this.data.postcard;
         let isToday = true;
         if (pc && pc.created_at) {
-          const todayStr = new Date().toDateString();
-          const cardDayStr = new Date(pc.created_at).toDateString();
-          isToday = (todayStr === cardDayStr);
+          // 尝试从缓存获取原始数据，如果没有则重新获取
+          try {
+            let originalCardData = null;
+            const cachedData = CardDataManager.getCachedCard(this.postcardId);
+            if (cachedData && cachedData.originalCard) {
+              // 使用缓存中的原始数据（包含未格式化的created_at）
+              originalCardData = cachedData.originalCard;
+            } else {
+              // 如果缓存中也没有原始数据，尝试从API重新获取
+              envConfig.log('缓存中没有原始时间数据，将使用格式化后的数据进行近似判断');
+              originalCardData = pc;
+            }
+            
+            isToday = CardDataManager.isCardToday(originalCardData);
+          } catch (error) {
+            envConfig.error('今日判断失败，使用默认值:', error);
+            // 降级处理：假设是今日卡片
+            isToday = true;
+          }
         }
         
         // 若删除的是今日生成的卡片，首页需重置到画布初始状态
