@@ -2835,7 +2835,7 @@ ${trendingTopics ? `• 当地热点：${trendingTopics}` : ''}
    */
   selectQuizQuestions(allQuestions, config = {}) {
     try {
-      // 按分类分组并支持权重过滤
+      // 按分类分组
       const categories = {};
       allQuestions.forEach(q => {
         if (!categories[q.category]) {
@@ -2843,73 +2843,49 @@ ${trendingTopics ? `• 当地热点：${trendingTopics}` : ''}
         }
         categories[q.category].push(q);
       });
-      
+
       const selectedQuestions = [];
-      const availableCategories = Object.keys(categories);
-      
-      // 使用配置化的抽题策略
-      const questionsPerSession = config.questionsPerSession || 15;
-      const questionsPerCategory = config.questionsPerCategory || {};
       const shouldRandomizeOptions = config.randomizeOptions || false;
-      
-      // 优先选择的分类顺序（新增relationship分类）
-      const preferredOrder = ['mood', 'pressure', 'needs', 'action', 'future', 'relationship'];
-      
-      // 根据配置确定每个分类的抽题数量
-      for (const category of preferredOrder) {
-        if (!categories[category] || categories[category].length === 0) continue;
-        
-        const categoryConfig = questionsPerCategory[category] || {};
-        const selectMin = categoryConfig.selectMin || 1;
-        const selectMax = categoryConfig.selectMax || 1;
-        
-        // 在min和max之间随机选择抽题数量
-        const selectCount = Math.floor(Math.random() * (selectMax - selectMin + 1)) + selectMin;
-        
-        // 从该分类中随机选择指定数量的题目
-        const categoryQuestions = [...categories[category]];
-        for (let i = 0; i < selectCount && categoryQuestions.length > 0 && selectedQuestions.length < questionsPerSession; i++) {
+
+      // 🔥 固定抽题策略：每次5题，尽可能覆盖多类别
+      const TOTAL_QUESTIONS = 5;
+      const ALL_CATEGORIES = ['mood', 'pressure', 'needs', 'action', 'future', 'relationship'];
+
+      // 过滤出有题目的类别
+      const availableCategories = ALL_CATEGORIES.filter(cat =>
+        categories[cat] && categories[cat].length > 0
+      );
+
+      if (availableCategories.length === 0) {
+        envConfig.warn('⚠️ 没有可用的题目类别');
+        return [];
+      }
+
+      // 随机选择5个类别（如果类别不足5个，就全选）
+      const selectedCategories = this.shuffleArray([...availableCategories]).slice(0, TOTAL_QUESTIONS);
+
+      // 从每个选中的类别中随机抽1题
+      selectedCategories.forEach(category => {
+        const categoryQuestions = categories[category];
+        if (categoryQuestions && categoryQuestions.length > 0) {
+          // 随机选择一题
           const randomIndex = Math.floor(Math.random() * categoryQuestions.length);
-          const selectedQuestion = categoryQuestions.splice(randomIndex, 1)[0];
-          
+          const selectedQuestion = { ...categoryQuestions[randomIndex] };
+
           // 如果启用选项随机化，打乱选项顺序
           if (shouldRandomizeOptions && selectedQuestion.options) {
             selectedQuestion.options = this.shuffleArray([...selectedQuestion.options]);
           }
-          
+
           selectedQuestions.push(selectedQuestion);
         }
-      }
-      
-      // 如果题目数量不足，从剩余分类中补充
-      while (selectedQuestions.length < Math.min(questionsPerSession, 5) && availableCategories.length > 0) {
-        for (const category of availableCategories) {
-          if (selectedQuestions.length >= questionsPerSession) break;
-          if (categories[category] && categories[category].length > 0) {
-            // 检查该分类是否还有未选择的题目
-            const unusedQuestions = categories[category].filter(q => 
-              !selectedQuestions.some(sq => sq.id === q.id)
-            );
-            if (unusedQuestions.length > 0) {
-              const randomIndex = Math.floor(Math.random() * unusedQuestions.length);
-              const selectedQuestion = unusedQuestions[randomIndex];
-              
-              if (shouldRandomizeOptions && selectedQuestion.options) {
-                selectedQuestion.options = this.shuffleArray([...selectedQuestion.options]);
-              }
-              
-              selectedQuestions.push(selectedQuestion);
-            }
-          }
-        }
-        break; // 防止无限循环
-      }
-      
+      });
+
       envConfig.log('🎯 智能选择的问题:', selectedQuestions.map(q => `${q.category}: ${q.question.substring(0, 20)}...`));
       envConfig.log('📊 各分类题目分布:', this.getCategoryDistribution(selectedQuestions));
-      
+
       return selectedQuestions;
-      
+
     } catch (error) {
       envConfig.error('智能选择问题失败:', error);
       // 降级：直接返回前3题

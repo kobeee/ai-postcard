@@ -689,7 +689,11 @@ class ConceptGenerator:
                 summary_parts.append("对未来有期待")
                 emotion_vector['hope'] = 0.8
                 action_focus.append("未来规划")
-            
+            if 'relationship' in categories:
+                summary_parts.append("人际关系敏感")
+                emotion_vector['connection'] = 0.7
+                action_focus.append("情感互动")
+
             return {
                 "summary": "，".join(summary_parts) if summary_parts else "心境平和，内心安宁",
                 "emotion_vector": emotion_vector if emotion_vector else {"calm": 0.7},
