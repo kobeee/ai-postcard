@@ -1,0 +1,338 @@
+{
+  "version": "1.0.0",
+  "description": "18款签体的10维心理文化特征向量，用于AI推荐算法的加权余弦相似度匹配",
+  "dimensions": {
+    "emotion_calm": "平静情绪亲和度 (0.0-1.0)，适合内省、沉思、平和的心境",
+    "emotion_energetic": "活力情绪亲和度 (0.0-1.0)，适合兴奋、积极、行动力强的状态",
+    "emotion_anxious": "焦虑情绪亲和度 (0.0-1.0)，适合不安、紧张、寻求安慰的心境",
+    "emotion_thoughtful": "深思情绪亲和度 (0.0-1.0)，适合理性分析、智慧探索的状态",
+    "element_wood": "木行能量 (0.0-1.0)，成长、创新、生机",
+    "element_fire": "火行能量 (0.0-1.0)，热情、表达、光明",
+    "element_earth": "土行能量 (0.0-1.0)，稳定、包容、平衡",
+    "element_metal": "金行能量 (0.0-1.0)，坚韧、精进、收敛",
+    "element_water": "水行能量 (0.0-1.0)，智慧、柔和、流动",
+    "cultural_depth": "文化底蕴深度 (0.0-1.0)，传统符号感与仪式感"
+  },
+  "charms": [
+    {
+      "id": "bagua-jinnang",
+      "name": "八角锦囊 (神秘守护)",
+      "features": {
+        "emotion_calm": 0.65,
+        "emotion_energetic": 0.30,
+        "emotion_anxious": 0.75,
+        "emotion_thoughtful": 0.80,
+        "element_wood": 0.20,
+        "element_fire": 0.15,
+        "element_earth": 0.40,
+        "element_metal": 0.85,
+        "element_water": 0.70,
+        "cultural_depth": 0.90
+      },
+      "notes": "八卦符号强调神秘保护，适合寻求安全感、理性思考的用户；金属性与水属性较强，文化底蕴深厚"
+    },
+    {
+      "id": "liujiao-denglong",
+      "name": "六角灯笼面 (光明指引)",
+      "features": {
+        "emotion_calm": 0.50,
+        "emotion_energetic": 0.85,
+        "emotion_anxious": 0.40,
+        "emotion_thoughtful": 0.55,
+        "element_wood": 0.30,
+        "element_fire": 0.95,
+        "element_earth": 0.25,
+        "element_metal": 0.20,
+        "element_water": 0.15,
+        "cultural_depth": 0.75
+      },
+      "notes": "灯笼象征光明希望，火属性极强，适合活力充沛、寻求方向的用户"
+    },
+    {
+      "id": "juanzhou-huakuang",
+      "name": "卷轴画框 (徐徐展开)",
+      "features": {
+        "emotion_calm": 0.80,
+        "emotion_energetic": 0.40,
+        "emotion_anxious": 0.20,
+        "emotion_thoughtful": 0.85,
+        "element_wood": 0.60,
+        "element_fire": 0.25,
+        "element_earth": 0.50,
+        "element_metal": 0.40,
+        "element_water": 0.75,
+        "cultural_depth": 0.95
+      },
+      "notes": "卷轴强调渐进展开，适合平静深思、追求文化意境的用户；水木属性强"
+    },
+    {
+      "id": "shuangyu-jinnang",
+      "name": "双鱼锦囊 (年年有余)",
+      "features": {
+        "emotion_calm": 0.70,
+        "emotion_energetic": 0.60,
+        "emotion_anxious": 0.25,
+        "emotion_thoughtful": 0.65,
+        "element_wood": 0.40,
+        "element_fire": 0.30,
+        "element_earth": 0.45,
+        "element_metal": 0.35,
+        "element_water": 0.90,
+        "cultural_depth": 0.85
+      },
+      "notes": "双鱼代表丰盈流动，水属性极强，适合平和智慧型用户"
+    },
+    {
+      "id": "siyue-jinjie",
+      "name": "四叶锦结 (幸运相伴)",
+      "features": {
+        "emotion_calm": 0.55,
+        "emotion_energetic": 0.80,
+        "emotion_anxious": 0.35,
+        "emotion_thoughtful": 0.50,
+        "element_wood": 0.85,
+        "element_fire": 0.60,
+        "element_earth": 0.40,
+        "element_metal": 0.25,
+        "element_water": 0.30,
+        "cultural_depth": 0.60
+      },
+      "notes": "四叶草象征幸运生机，木火属性强，适合乐观积极的用户"
+    },
+    {
+      "id": "ruyi-jie",
+      "name": "如意结 (万事如意)",
+      "features": {
+        "emotion_calm": 0.75,
+        "emotion_energetic": 0.50,
+        "emotion_anxious": 0.50,
+        "emotion_thoughtful": 0.60,
+        "element_wood": 0.35,
+        "element_fire": 0.40,
+        "element_earth": 0.70,
+        "element_metal": 0.65,
+        "element_water": 0.55,
+        "cultural_depth": 0.88
+      },
+      "notes": "如意结寓意心想事成，土金属性强，五行平衡，适合追求稳定和谐的用户"
+    },
+    {
+      "id": "fangsheng-jie",
+      "name": "方胜结 (同心永结)",
+      "features": {
+        "emotion_calm": 0.85,
+        "emotion_energetic": 0.35,
+        "emotion_anxious": 0.30,
+        "emotion_thoughtful": 0.75,
+        "element_wood": 0.25,
+        "element_fire": 0.20,
+        "element_earth": 0.80,
+        "element_metal": 0.70,
+        "element_water": 0.60,
+        "cultural_depth": 0.92
+      },
+      "notes": "方胜寓意同心，土金属性强，适合追求稳定关系和内心平和的用户"
+    },
+    {
+      "id": "zhuchi-changpai",
+      "name": "朱漆长牌 (言简意赅)",
+      "features": {
+        "emotion_calm": 0.60,
+        "emotion_energetic": 0.75,
+        "emotion_anxious": 0.40,
+        "emotion_thoughtful": 0.70,
+        "element_wood": 0.30,
+        "element_fire": 0.88,
+        "element_earth": 0.35,
+        "element_metal": 0.60,
+        "element_water": 0.25,
+        "cultural_depth": 0.85
+      },
+      "notes": "朱漆代表庄重热烈，火属性极强，适合目标明确、行动力强的用户"
+    },
+    {
+      "id": "haitang-muchuang",
+      "name": "海棠木窗 (古典窗格)",
+      "features": {
+        "emotion_calm": 0.88,
+        "emotion_energetic": 0.30,
+        "emotion_anxious": 0.20,
+        "emotion_thoughtful": 0.90,
+        "element_wood": 0.75,
+        "element_fire": 0.15,
+        "element_earth": 0.65,
+        "element_metal": 0.50,
+        "element_water": 0.70,
+        "cultural_depth": 0.98
+      },
+      "notes": "海棠窗格极具古典美学，木土水属性强，文化底蕴最深，适合追求雅致意境的用户"
+    },
+    {
+      "id": "xiangyun-liucai",
+      "name": "祥云流彩 (梦幻意境)",
+      "features": {
+        "emotion_calm": 0.65,
+        "emotion_energetic": 0.70,
+        "emotion_anxious": 0.35,
+        "emotion_thoughtful": 0.75,
+        "element_wood": 0.45,
+        "element_fire": 0.80,
+        "element_earth": 0.40,
+        "element_metal": 0.35,
+        "element_water": 0.85,
+        "cultural_depth": 0.80
+      },
+      "notes": "祥云意境流动，火水属性强，适合想象力丰富、追求浪漫的用户"
+    },
+    {
+      "id": "xiangyun-hulu",
+      "name": "祥云葫芦 (福禄绵延)",
+      "features": {
+        "emotion_calm": 0.70,
+        "emotion_energetic": 0.65,
+        "emotion_anxious": 0.40,
+        "emotion_thoughtful": 0.60,
+        "element_wood": 0.55,
+        "element_fire": 0.70,
+        "element_earth": 0.75,
+        "element_metal": 0.40,
+        "element_water": 0.50,
+        "cultural_depth": 0.82
+      },
+      "notes": "葫芦寓意福禄，土火属性强，适合追求安稳富足的用户"
+    },
+    {
+      "id": "zhujie-changtiao",
+      "name": "竹节长条 (虚心有节)",
+      "features": {
+        "emotion_calm": 0.92,
+        "emotion_energetic": 0.25,
+        "emotion_anxious": 0.15,
+        "emotion_thoughtful": 0.88,
+        "element_wood": 0.95,
+        "element_fire": 0.10,
+        "element_earth": 0.45,
+        "element_metal": 0.60,
+        "element_water": 0.75,
+        "cultural_depth": 0.93
+      },
+      "notes": "竹节象征高洁，木属性极强，适合追求内在修养、平静自省的用户"
+    },
+    {
+      "id": "lianhua-yuanpai",
+      "name": "莲花圆牌 (平和雅致)",
+      "features": {
+        "emotion_calm": 0.95,
+        "emotion_energetic": 0.20,
+        "emotion_anxious": 0.10,
+        "emotion_thoughtful": 0.85,
+        "element_wood": 0.70,
+        "element_fire": 0.15,
+        "element_earth": 0.60,
+        "element_metal": 0.45,
+        "element_water": 0.90,
+        "cultural_depth": 0.90
+      },
+      "notes": "莲花寓意纯净，平静情绪与水属性最强，适合追求心灵宁静的用户"
+    },
+    {
+      "id": "jinbian-moyu",
+      "name": "金边墨玉璧 (沉稳庄重)",
+      "features": {
+        "emotion_calm": 0.90,
+        "emotion_energetic": 0.25,
+        "emotion_anxious": 0.25,
+        "emotion_thoughtful": 0.92,
+        "element_wood": 0.20,
+        "element_fire": 0.15,
+        "element_earth": 0.75,
+        "element_metal": 0.95,
+        "element_water": 0.80,
+        "cultural_depth": 0.96
+      },
+      "notes": "墨玉璧极具分量，金属性最强，适合理性深沉、追求稳重的用户"
+    },
+    {
+      "id": "yinxing-ye",
+      "name": "银杏叶 (坚韧与永恒)",
+      "features": {
+        "emotion_calm": 0.75,
+        "emotion_energetic": 0.55,
+        "emotion_anxious": 0.30,
+        "emotion_thoughtful": 0.80,
+        "element_wood": 0.88,
+        "element_fire": 0.35,
+        "element_earth": 0.50,
+        "element_metal": 0.70,
+        "element_water": 0.55,
+        "cultural_depth": 0.78
+      },
+      "notes": "银杏象征坚韧，木金属性强，适合追求长久价值、稳步成长的用户"
+    },
+    {
+      "id": "zhangming-suo",
+      "name": "长命锁 (富贵安康)",
+      "features": {
+        "emotion_calm": 0.68,
+        "emotion_energetic": 0.60,
+        "emotion_anxious": 0.55,
+        "emotion_thoughtful": 0.50,
+        "element_wood": 0.35,
+        "element_fire": 0.50,
+        "element_earth": 0.85,
+        "element_metal": 0.75,
+        "element_water": 0.40,
+        "cultural_depth": 0.88
+      },
+      "notes": "长命锁寓意守护，土金属性强，适合寻求安全感、追求平安的用户"
+    },
+    {
+      "id": "qingyu-tuanshan",
+      "name": "青玉团扇 (清风徐来)",
+      "features": {
+        "emotion_calm": 0.85,
+        "emotion_energetic": 0.45,
+        "emotion_anxious": 0.25,
+        "emotion_thoughtful": 0.78,
+        "element_wood": 0.50,
+        "element_fire": 0.25,
+        "element_earth": 0.45,
+        "element_metal": 0.60,
+        "element_water": 0.88,
+        "cultural_depth": 0.87
+      },
+      "notes": "团扇意境清雅，水属性极强，适合追求淡然从容、清净心境的用户"
+    },
+    {
+      "id": "qinghua-cishan",
+      "name": "青花瓷扇 (文化底蕴)",
+      "features": {
+        "emotion_calm": 0.82,
+        "emotion_energetic": 0.40,
+        "emotion_anxious": 0.28,
+        "emotion_thoughtful": 0.90,
+        "element_wood": 0.45,
+        "element_fire": 0.30,
+        "element_earth": 0.55,
+        "element_metal": 0.65,
+        "element_water": 0.85,
+        "cultural_depth": 0.97
+      },
+      "notes": "青花瓷极具文化美感，水金属性强，文化底蕴仅次于海棠窗，适合追求艺术品味的用户"
+    }
+  ],
+  "usage_notes": [
+    "1. 特征向量用于与用户心理档案进行加权余弦相似度计算",
+    "2. 权重配置见 two_stage_generator.py 中的 DIMENSION_WEIGHTS",
+    "3. 所有数值范围 [0.0, 1.0]，数值越高表示该维度特征越强",
+    "4. cultural_depth 维度用于平衡传统文化偏好",
+    "5. 该矩阵由产品团队基于签体文化内涵与心理学研究标定",
+    "6. 版本更新时需同步修改 version 字段并记录变更日志"
+  ],
+  "calibration_references": [
+    "五行理论：《黄帝内经》《周易》",
+    "色彩心理学：Max Lüscher 色彩心理测试",
+    "符号心理学：Carl Jung 集体无意识理论",
+    "传统文化符号：《中国吉祥图案》《中国传统装饰艺术》"
+  ]
+}

@@ -23,7 +23,13 @@ class PostcardWorkflow:
     async def execute(self, task_data: Dict[str, Any]):
         """执行完整的明信片生成工作流 - 支持新旧版本切换"""
         task_id = task_data.get("task_id")
-        context = {"task": task_data, "results": {}}
+        user_id = task_data.get("user_id")  # 🆕 提取user_id
+
+        context = {
+            "task": task_data,
+            "results": {},
+            "user_id": user_id  # 🆕 注入到context中
+        }
         
         # 获取工作流版本配置
         workflow_version = os.getenv("WORKFLOW_VERSION", "two_stage")  # "legacy" | "unified" | "two_stage"
