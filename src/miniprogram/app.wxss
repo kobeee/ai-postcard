@@ -1,3 +1,52 @@
+/**app.wxss - 全局样式增强 v2.0**/
+
+/* ==================== 全局CSS变量 ==================== */
+page {
+  /* Safe Area 安全区域 (支持iOS 11.2+ 和所有Android) */
+  --safe-area-inset-top: constant(safe-area-inset-top);
+  --safe-area-inset-right: constant(safe-area-inset-right);
+  --safe-area-inset-bottom: constant(safe-area-inset-bottom);
+  --safe-area-inset-left: constant(safe-area-inset-left);
+
+  /* iOS 11.2+ 新语法 */
+  --safe-area-inset-top: env(safe-area-inset-top);
+  --safe-area-inset-right: env(safe-area-inset-right);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom);
+  --safe-area-inset-left: env(safe-area-inset-left);
+
+  /* 统一字体栈 - 解决字体渲染差异 */
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "PingFang SC",
+    "Helvetica Neue",
+    "Microsoft YaHei",
+    Arial,
+    sans-serif;
+
+  /* 字体平滑渲染 - 关键：解决模糊问题 */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* 禁用iOS横屏时字体自动放大 */
+  -webkit-text-size-adjust: 100%;
+}
+
+/* 楷体/书法字体专用栈 */
+.font-kaiti,
+.oracle-text,
+.name-char,
+.oracle-char-back {
+  font-family:
+    "STKaiti",
+    "KaiTi",
+    "STXihei",
+    "Microsoft YaHei",
+    serif;
+  font-weight: normal; /* 楷体避免加粗 */
+  letter-spacing: 0.05em;
+}
+
 /**app.wxss**/
 .container {
   height: 100%;

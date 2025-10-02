@@ -208,20 +208,59 @@ Page({
    */
   initCanvas() {
     try {
-      // 获取并缓存Canvas上下文，避免反复创建
-      const ctx = wx.createCanvasContext('emotionCanvas');
-      this.ctx = ctx;
-      
-      // 设置Canvas背景
-      ctx.setFillStyle('#fafafa');
-      ctx.fillRect(0, 0, 400, 300);
-      ctx.draw();
-      
-      // 初始化绘制状态
-      this.emotionPath = null;
-      this.emotionAnalysis = null;
-      
-      envConfig.log('Canvas初始化成功');
+      // 使用 this 指向当前页面实例
+      const query = wx.createSelectorQuery().in(this);
+      query.select('#emotionCanvas')
+        .fields({ node: true, size: true })
+        .exec((res) => {
+          if (!res || !res[0]) {
+            console.error('Canvas节点查询失败，可能Canvas还未渲染到DOM');
+            // 延迟重试一次
+            setTimeout(() => {
+              envConfig.log('延迟重试Canvas初始化');
+              this.initCanvas();
+            }, 300);
+            return;
+          }
+
+          const canvas = res[0].node;
+          if (!canvas) {
+            console.error('Canvas节点对象为空');
+            return;
+          }
+
+          const ctx = canvas.getContext('2d');
+
+          // 设置Canvas实际渲染尺寸（根据设备像素比）
+          const dpr = wx.getSystemInfoSync().pixelRatio;
+          canvas.width = res[0].width * dpr;
+          canvas.height = res[0].height * dpr;
+          ctx.scale(dpr, dpr);
+
+          // 设置绘图样式（与旧版保持一致）
+          ctx.lineWidth = 2;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.strokeStyle = '#333';
+
+          // 设置Canvas背景
+          ctx.fillStyle = '#fafafa';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+          // 保存canvas和ctx到实例
+          this.canvas = canvas;
+          this.ctx = ctx;
+
+          // 初始化绘制状态
+          this.emotionPath = null;
+          this.emotionAnalysis = null;
+
+          envConfig.log('Canvas初始化成功', {
+            width: canvas.width,
+            height: canvas.height,
+            dpr: dpr
+          });
+        });
     } catch (error) {
       envConfig.error('Canvas初始化失败:', error);
     }
@@ -911,38 +950,50 @@ Page({
   onInkStart(e) {
     // 防止事件穿透
     e.preventDefault && e.preventDefault();
-    
+
     if (!e.touches || e.touches.length === 0) {
       return;
     }
-    
+
+    // 检查Canvas是否已初始化，如果未初始化则尝试重新初始化
+    if (!this.ctx || !this.canvas) {
+      console.warn('Canvas未初始化或已失效，尝试重新初始化');
+      this.initCanvas();
+
+      // 提示用户稍后再试
+      wx.showToast({
+        title: 'Canvas初始化中，请稍后再试',
+        icon: 'none',
+        duration: 2000
+      });
+      return;
+    }
+
     this.setData({ isDrawing: true });
-    
-    const ctx = this.ctx || wx.createCanvasContext('emotionCanvas');
-    this.ctx = ctx; // 缓存context以便后续使用
+
+    const ctx = this.ctx;
     const point = e.touches[0];
-    
-    // 使用黑色画笔，提升对比度并符合"黑色笔画"的需求
-    ctx.setStrokeStyle('#000000');
-    ctx.setLineWidth(4);
-    ctx.setLineCap('round');
-    ctx.setLineJoin('round');
-    
+
+    // 设置绘图样式
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
     // 开始新的路径并移动到起始点
     ctx.beginPath();
     ctx.moveTo(point.x, point.y);
-    
+
     this.emotionPath = [{
       x: point.x,
       y: point.y,
       time: Date.now()
     }];
-    
+
     // 绘制起始点
     ctx.arc(point.x, point.y, 2, 0, 2 * Math.PI);
     ctx.fill();
-    ctx.draw(true);
-    
+
     envConfig.log('开始绘制情绪墨迹:', point);
   },
 
@@ -950,38 +1001,28 @@ Page({
    * 情绪墨迹 - 绘制中
    */
   onInkMove(e) {
-    if (!this.data.isDrawing) return;
-    
+    if (!this.data.isDrawing || !this.ctx) return;
+
     // 防止事件穿透
     e.preventDefault && e.preventDefault();
-    
+
     if (!e.touches || e.touches.length === 0) {
       return;
     }
-    
-    if (!this.ctx) {
-      this.ctx = wx.createCanvasContext('emotionCanvas');
-      // 重新设置画笔属性
-      this.ctx.setStrokeStyle('#000000');
-      this.ctx.setLineWidth(4);
-      this.ctx.setLineCap('round');
-      this.ctx.setLineJoin('round');
-    }
-    
+
     const ctx = this.ctx;
     const point = e.touches[0];
-    
+
     // 连续绘制：画线到当前点
     if (this.emotionPath && this.emotionPath.length > 0) {
       ctx.lineTo(point.x, point.y);
       ctx.stroke();
-      ctx.draw(true);
-      
+
       // 重新开始路径以便继续绘制
       ctx.beginPath();
       ctx.moveTo(point.x, point.y);
     }
-    
+
     // 记录路径数据
     if (this.emotionPath) {
       this.emotionPath.push({
@@ -996,17 +1037,18 @@ Page({
    * 情绪墨迹 - 结束绘制
    */
   onInkEnd(e) {
-    if (this.data.isDrawing && this.ctx) {
+    if (!this.ctx) return;
+
+    if (this.data.isDrawing) {
       // 完成最后的绘制
       this.ctx.stroke();
-      this.ctx.draw(true);
     }
-    
+
     this.setData({ isDrawing: false });
-    
+
     // 分析情绪墨迹
     this.analyzeEmotion();
-    
+
     envConfig.log('结束绘制情绪墨迹，路径点数:', this.emotionPath ? this.emotionPath.length : 0);
   },
 
@@ -1050,10 +1092,19 @@ Page({
    * 清空墨迹
    */
   clearInk() {
-    const ctx = wx.createCanvasContext('emotionCanvas');
-    ctx.clearRect(0, 0, 400, 300);
-    ctx.draw();
-    
+    if (!this.ctx || !this.canvas) {
+      console.error('Canvas未初始化');
+      return;
+    }
+
+    const ctx = this.ctx;
+    const canvas = this.canvas;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // 重新设置背景色
+    ctx.fillStyle = '#fafafa';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
     this.emotionPath = null;
     this.emotionAnalysis = null;
     this.emotionImagePath = null;
@@ -1069,7 +1120,7 @@ Page({
       
       return new Promise((resolve, reject) => {
         wx.canvasToTempFilePath({
-          canvasId: 'emotionCanvas',
+          canvas: this.canvas,
           success: (res) => {
             const tempFilePath = res.tempFilePath;
             envConfig.log('Canvas转临时文件成功:', tempFilePath);
@@ -3102,17 +3153,23 @@ ${trendingTopics ? `• 当地热点：${trendingTopics}` : ''}
   completeQuiz() {
     try {
       envConfig.log('心境速测完成，答案:', this.data.quizAnswers);
-      
+
       this.setData({
         quizCompleted: true
       });
-      
+
       // 延迟关闭弹窗，给用户看到完成状态
       setTimeout(() => {
         this.setData({
           showQuizModal: false
         });
-        
+
+        // 答题完成后重新初始化Canvas（解决Canvas 2D节点可能失效的问题）
+        setTimeout(() => {
+          envConfig.log('答题完成，重新初始化Canvas');
+          this.initCanvas();
+        }, 100);
+
         // 提示用户可以开始绘制 - 使用Modal确保完整显示
         wx.showModal({
           title: '✨ 测试完成',
@@ -3120,9 +3177,9 @@ ${trendingTopics ? `• 当地热点：${trendingTopics}` : ''}
           showCancel: false,
           confirmText: '开始绘制'
         });
-        
+
       }, 1500);
-      
+
     } catch (error) {
       envConfig.error('完成心境速测失败:', error);
       // 强制关闭弹窗

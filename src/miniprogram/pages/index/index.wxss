@@ -31,9 +31,13 @@
 .compass-container {
   position: relative;
   min-height: 100vh;
-  padding: 40rpx 30rpx;
-  padding-bottom: calc(200rpx + env(safe-area-inset-bottom));
-  padding-bottom: calc(200rpx + constant(safe-area-inset-bottom));
+
+  /* 🔧 修改: 使用CSS变量统一管理 */
+  padding-top: calc(40rpx + var(--safe-area-inset-top, 0rpx));
+  padding-right: calc(30rpx + var(--safe-area-inset-right, 0rpx));
+  padding-bottom: calc(200rpx + var(--safe-area-inset-bottom, 0rpx));
+  padding-left: calc(30rpx + var(--safe-area-inset-left, 0rpx));
+
   box-sizing: border-box;
   z-index: 1;
 }
@@ -137,7 +141,7 @@
 
 .greeting-text {
   font-size: 36rpx;
-  font-weight: 600;
+  font-weight: bold;
   color: #fff;
   margin-bottom: 12rpx;
   /* 增强文字阴影效果 */
@@ -175,7 +179,7 @@
 .profile-title {
   display: block;
   font-size: 36rpx;
-  font-weight: 600;
+  font-weight: bold;
   color: #fff;
   margin-bottom: 12rpx;
 }
@@ -195,7 +199,7 @@
   font-size: 28rpx;
   color: #fff;
   margin-bottom: 20rpx;
-  font-weight: 500;
+  font-weight: normal;
 }
 
 .avatar-btn {
@@ -313,7 +317,7 @@
 
 .complete-text {
   font-size: 30rpx;
-  font-weight: 600;
+  font-weight: bold;
   color: #fff;
 }
 
@@ -426,7 +430,7 @@
 .brand-title {
   display: block;
   font-size: 64rpx;
-  font-weight: 700;
+  font-weight: bold;
   color: #fff;
   margin-bottom: 24rpx;
   /* 增强标题效果 */
@@ -517,7 +521,7 @@
 .login-text {
   font-size: 30rpx;
   color: #fff;
-  font-weight: 600;
+  font-weight: bold;
   letter-spacing: 2rpx;
   text-align: center;
   white-space: nowrap;
@@ -544,7 +548,7 @@
   display: block;
   color: rgba(255, 255, 255, 0.95);
   font-size: 36rpx;
-  font-weight: 700;
+  font-weight: bold;
   margin-bottom: 16rpx;
 }
 
@@ -644,7 +648,7 @@
 .complete-text {
   color: white;
   font-size: 32rpx;
-  font-weight: 600;
+  font-weight: bold;
 }
 
 .complete-btn.disabled .complete-text {
@@ -676,7 +680,7 @@
 .setup-text {
   color: rgba(255, 255, 255, 0.9);
   font-size: 28rpx;
-  font-weight: 500;
+  font-weight: normal;
 }
 
 /* 卡片容器 */
@@ -736,7 +740,7 @@
   border-radius: 40rpx;
   font-size: 24rpx;
   backdrop-filter: blur(20rpx);
-  font-weight: 500;
+  font-weight: normal;
   border: 1rpx solid rgba(255, 255, 255, 0.2);
   box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.3);
 }
@@ -775,18 +779,26 @@
 /* 情绪墨迹区域 */
 .emotion-ink {
   /* 升级墨迹区域背景效果 */
-  background: linear-gradient(135deg, 
-    rgba(255, 255, 255, 0.95) 0%, 
+  background: linear-gradient(135deg,
+    rgba(255, 255, 255, 0.95) 0%,
     rgba(255, 255, 255, 0.9) 100%);
   border-radius: 32rpx;
   padding: 30rpx;
   backdrop-filter: blur(25rpx);
   border: 2rpx solid rgba(255, 255, 255, 0.4);
-  box-shadow: 
+  box-shadow:
     0 20rpx 60rpx rgba(0, 0, 0, 0.15),
     inset 0 1rpx 0 rgba(255, 255, 255, 0.8);
   position: relative;
-  overflow: hidden;
+  /* 🔧 修复: 移除overflow:hidden，避免Canvas在开发者工具中被裁剪 */
+  /* overflow: hidden; */
+
+  /* 🔧 修复: 降低z-index确保不遮挡弹窗，Canvas 2D同层渲染会自动处理层级 */
+  z-index: 0;
+
+  /* 🔧 新增: 左右外边距 + Safe Area */
+  margin-left: calc(16rpx + var(--safe-area-inset-left, 0rpx));
+  margin-right: calc(16rpx + var(--safe-area-inset-right, 0rpx));
 }
 
 /* 添加墨迹区域装饰效果 */
@@ -813,7 +825,7 @@
 .title-main {
   display: block;
   font-size: 36rpx;
-  font-weight: 600;
+  font-weight: bold;
   /* 升级标题渐变效果 */
   background: linear-gradient(135deg, #333 0%, #667eea 100%);
   -webkit-background-clip: text;
@@ -839,6 +851,10 @@
   margin: 0 20rpx 32rpx 20rpx;
   box-shadow: inset 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
   transition: all 0.3s ease;
+
+  /* Canvas 2D同层渲染：不设置z-index，避免与父容器层叠上下文冲突 */
+  /* 真机上Canvas 2D会自动参与全局层级竞争，不受父容器限制 */
+  /* 开发者工具中可能仍有遮挡，但这是工具渲染引擎的局限性 */
 }
 
 .ink-canvas:active {
@@ -866,7 +882,7 @@
   padding: 24rpx 48rpx;
   border-radius: 48rpx;
   font-size: 28rpx;
-  font-weight: 600;
+  font-weight: bold;
   border: none;
   transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   white-space: nowrap;
@@ -922,10 +938,15 @@
   }
 }
 
-/* 记忆回廊 - 修复与画布重叠问题 */
+/* 记忆回廊 - 修复与画布重叠问题 + Safe Area适配 */
 .memory-gallery {
-  margin-top: 40rpx; /* 改为正值，增加与上方内容的间距 */
+  margin-top: 60rpx; /* 增大间距避免重叠 */
   margin-bottom: 60rpx;
+
+  /* 左右边距 + Safe Area补偿 */
+  padding-left: calc(16rpx + var(--safe-area-inset-left, 0rpx));
+  padding-right: calc(16rpx + var(--safe-area-inset-right, 0rpx));
+
   z-index: 1;
   position: relative;
 }
@@ -940,7 +961,7 @@
 
 .gallery-title {
   font-size: 32rpx;
-  font-weight: 600;
+  font-weight: bold;
   color: #fff;
   /* 升级标题效果 */
   text-shadow: 
@@ -964,6 +985,9 @@
 
 .gallery-scroll {
   white-space: nowrap;
+  /* 确保首张卡片有留白 */
+  padding-left: 16rpx;
+  padding-right: 16rpx;
 }
 
 .memory-card {
@@ -1043,7 +1067,7 @@
 
 .memory-title {
   font-size: 28rpx;
-  font-weight: 600;
+  font-weight: bold;
   color: #333;
   text-align: center;
   margin-bottom: 16rpx;
@@ -1081,7 +1105,7 @@
   font-size: 18rpx;
   color: #8b5cf6;
   text-align: center;
-  font-weight: 500;
+  font-weight: normal;
   background: rgba(139, 92, 246, 0.2);
   padding: 6rpx 12rpx;
   border-radius: 12rpx;
@@ -1136,7 +1160,7 @@
 
 .empty-title {
   font-size: 32rpx;
-  font-weight: 600;
+  font-weight: bold;
   color: #fff;
   margin-bottom: 16rpx;
   text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.2);
@@ -1407,7 +1431,7 @@
   display: block;
   font-size: 26rpx;
   color: #8b5cf6;
-  font-weight: 500;
+  font-weight: normal;
   margin-bottom: 20rpx;
   letter-spacing: 2rpx;
 }
@@ -1444,7 +1468,7 @@
   font-size: 30rpx;
   line-height: 1.6;
   color: #2d3748;
-  font-weight: 400;
+  font-weight: normal;
   text-align: center;
   padding: 0 20rpx;
 }
@@ -1497,7 +1521,7 @@
 .rec-title-text {
   font-size: 24rpx;
   color: #8b5cf6;
-  font-weight: 600;
+  font-weight: bold;
   letter-spacing: 1rpx;
 }
 
@@ -1528,7 +1552,7 @@
 .rec-name {
   font-size: 26rpx;
   color: #374151;
-  font-weight: 500;
+  font-weight: normal;
   margin-bottom: 4rpx;
   line-height: 1.3;
 }
@@ -1536,7 +1560,7 @@
 .rec-author {
   font-size: 22rpx;
   color: #6b7280;
-  font-weight: 300;
+  font-weight: lighter;
 }
 
 .postcard-footer {
@@ -1564,7 +1588,7 @@
 .signature-text {
   font-size: 22rpx;
   color: #9ca3af;
-  font-weight: 300;
+  font-weight: lighter;
   letter-spacing: 1rpx;
 }
 
@@ -1582,7 +1606,7 @@
 
 .ai-text {
   font-size: 20rpx;
-  font-weight: 500;
+  font-weight: normal;
 }
 
 /* 卡片动画效果 */
@@ -1617,11 +1641,17 @@
   height: 100%;
   background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(8rpx);
-  z-index: 1000;
+  z-index: 2000; /* 提高到2000，确保高于loading-overlay(1000) */
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 40rpx;
+
+  /* 🔧 修改: 四周padding + Safe Area */
+  padding-top: calc(40rpx + var(--safe-area-inset-top, 0rpx));
+  padding-right: calc(40rpx + var(--safe-area-inset-right, 0rpx));
+  padding-bottom: calc(40rpx + var(--safe-area-inset-bottom, 0rpx));
+  padding-left: calc(40rpx + var(--safe-area-inset-left, 0rpx));
+
   box-sizing: border-box;
   animation: overlayFadeIn 0.3s ease-out;
 }
@@ -1637,18 +1667,20 @@
 
 /* 弹窗主体 */
 .quiz-modal {
+  position: relative;
   width: 100%;
   max-width: 640rpx;
   min-height: 500rpx;
   background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
   border-radius: 32rpx;
-  box-shadow: 
+  box-shadow:
     0 24rpx 64rpx rgba(0, 0, 0, 0.15),
     0 8rpx 32rpx rgba(0, 0, 0, 0.1);
   overflow: hidden;
   animation: modalSlideIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   display: flex;
   flex-direction: column;
+  z-index: 2001; /* 确保在遮罩层(2000)之上 */
 }
 
 @keyframes modalSlideIn {
@@ -1672,7 +1704,7 @@
 
 .quiz-title {
   font-size: 36rpx;
-  font-weight: 600;
+  font-weight: bold;
   text-align: center;
   margin-bottom: 20rpx;
   letter-spacing: 1rpx;
@@ -1686,7 +1718,7 @@
 
 .progress-text {
   font-size: 24rpx;
-  font-weight: 500;
+  font-weight: normal;
   opacity: 0.9;
   min-width: 80rpx;
 }
@@ -1746,7 +1778,7 @@
 
 .question-text {
   font-size: 32rpx;
-  font-weight: 500;
+  font-weight: normal;
   color: #1f2937;
   line-height: 1.5;
   margin-bottom: 40rpx;
@@ -1788,7 +1820,7 @@
 .option-label {
   font-size: 28rpx;
   color: #374151;
-  font-weight: 400;
+  font-weight: normal;
   line-height: 1.4;
   flex: 1;
 }
@@ -1796,7 +1828,7 @@
 .option-icon {
   font-size: 28rpx;
   color: #667eea;
-  font-weight: 600;
+  font-weight: bold;
   margin-left: 16rpx;
   transition: transform 0.2s ease;
 }
@@ -1837,7 +1869,7 @@
 
 .complete-text {
   font-size: 36rpx;
-  font-weight: 600;
+  font-weight: bold;
   color: #1f2937;
   margin-bottom: 8rpx;
 }
@@ -1845,7 +1877,7 @@
 .complete-subtitle {
   font-size: 26rpx;
   color: #6b7280;
-  font-weight: 400;
+  font-weight: normal;
   line-height: 1.4;
 }
 
@@ -1863,7 +1895,7 @@
   border-radius: 24rpx;
   color: #6b7280;
   font-size: 26rpx;
-  font-weight: 500;
+  font-weight: normal;
   transition: all 0.2s ease;
 }
 
@@ -1881,7 +1913,7 @@
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
-  font-weight: 600;
+  font-weight: bold;
   font-size: 28rpx;
   transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   box-shadow: 
@@ -1908,7 +1940,7 @@
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
-  font-weight: 600;
+  font-weight: bold;
   font-size: 28rpx;
   transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   box-shadow: 
@@ -1943,7 +1975,7 @@
   background: linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%);
   color: white;
   border: none;
-  font-weight: 500;
+  font-weight: normal;
   transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   box-shadow: 0 4rpx 16rpx rgba(139, 92, 246, 0.3);
 }

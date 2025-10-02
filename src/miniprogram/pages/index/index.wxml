@@ -29,7 +29,7 @@
     </view>
     <view class="brand-text">
       <text class="brand-title">心象签</text>
-      <text class="brand-subtitle">将心情映射为自然意象，\n感受生活的诗意</text>
+      <text class="brand-subtitle" decode="{{true}}">将心情映射为自然意象，&#10;感受生活的诗意</text>
     </view>
     
     <!-- 简化登录按钮 -->
@@ -100,9 +100,10 @@
         <text class="title-sub">用直觉绘出内心的自然意象，让AI感知你的心境</text>
       </view>
       
-      <canvas 
-        class="ink-canvas" 
-        canvas-id="emotionCanvas"
+      <canvas
+        type="2d"
+        id="emotionCanvas"
+        class="ink-canvas"
         hidden="{{isGenerating}}"
         bind:touchstart="onInkStart"
         bind:touchmove="onInkMove"
