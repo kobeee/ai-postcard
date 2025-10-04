@@ -104,7 +104,7 @@
         type="2d"
         id="emotionCanvas"
         class="ink-canvas"
-        hidden="{{isGenerating}}"
+        hidden="{{isGenerating || quizModalVisible}}"
         bind:touchstart="onInkStart"
         bind:touchmove="onInkMove"
         bind:touchend="onInkEnd"

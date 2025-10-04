@@ -14,15 +14,13 @@ page {
   --safe-area-inset-bottom: env(safe-area-inset-bottom);
   --safe-area-inset-left: env(safe-area-inset-left);
 
-  /* 统一字体栈 - 解决字体渲染差异 */
+  /* 🔥 全局字体栈 - CDN字体优先 */
   font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    "PingFang SC",
-    "Helvetica Neue",
-    "Microsoft YaHei",
-    Arial,
-    sans-serif;
+    "AlibabaPuHuiTi-Regular",  /* CDN字体优先 */
+    -apple-system,              /* iOS系统字体备用 */
+    "PingFang SC",              /* iOS苹方备用 */
+    "Microsoft YaHei",          /* Windows备用 */
+    sans-serif;                 /* 最终回退 */
 
   /* 字体平滑渲染 - 关键：解决模糊问题 */
   -webkit-font-smoothing: antialiased;
@@ -30,6 +28,23 @@ page {
 
   /* 禁用iOS横屏时字体自动放大 */
   -webkit-text-size-adjust: 100%;
+}
+
+/* 🔥 粗体文本专用类 - 使用Bold字体而非font-weight */
+.font-bold,
+.title-main,
+.brand-title,
+.quiz-title,
+.option-item.selected .option-label,
+.complete-title,
+.memory-card-title,
+button {
+  font-family:
+    "AlibabaPuHuiTi-Bold",      /* 🔥 关键：使用Bold字体文件 */
+    "AlibabaPuHuiTi-Regular",   /* 降级到Regular */
+    -apple-system,
+    sans-serif;
+  font-weight: normal;  /* 🔥 不使用font-weight，依赖字体本身粗细 */
 }
 
 /* 楷体/书法字体专用栈 */

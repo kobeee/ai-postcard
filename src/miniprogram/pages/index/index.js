@@ -52,6 +52,7 @@ Page({
     
     // 🔮 心境速测问答系统
     showQuizModal: false,
+    quizModalVisible: false,  // 🔥 新增：答题卡弹窗可见性（控制Canvas隐藏）
     currentQuestionIndex: 0,
     quizQuestions: [],
     quizAnswers: [],
@@ -3068,6 +3069,7 @@ ${trendingTopics ? `• 当地热点：${trendingTopics}` : ''}
       // 重置问答状态
       this.setData({
         showQuizModal: true,
+        quizModalVisible: true,  // 🔥 同步设置Canvas隐藏标志
         currentQuestionIndex: 0,
         quizAnswers: [],
         quizCompleted: false
@@ -3161,7 +3163,8 @@ ${trendingTopics ? `• 当地热点：${trendingTopics}` : ''}
       // 延迟关闭弹窗，给用户看到完成状态
       setTimeout(() => {
         this.setData({
-          showQuizModal: false
+          showQuizModal: false,
+          quizModalVisible: false  // 🔥 恢复Canvas显示
         });
 
         // 答题完成后重新初始化Canvas（解决Canvas 2D节点可能失效的问题）
@@ -3193,6 +3196,7 @@ ${trendingTopics ? `• 当地热点：${trendingTopics}` : ''}
   closeQuizModal() {
     this.setData({
       showQuizModal: false,
+      quizModalVisible: false,  // 🔥 恢复Canvas显示
       currentQuestionIndex: 0,
       quizCompleted: false
     });
