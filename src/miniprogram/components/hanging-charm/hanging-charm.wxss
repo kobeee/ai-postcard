@@ -586,20 +586,30 @@
   position: relative;
 }
 
-/* 添加列分隔线 */
+/* 列分隔线：放宽宽度避免 1rpx 被取整，利用缩放保持细度 */
 .oracle-column:not(:last-child)::after {
   content: '';
   position: absolute;
   right: -16rpx;
   top: 10%;
   bottom: 10%;
-  width: 1rpx;
-  background: linear-gradient(180deg, 
-    transparent 0%, 
-    rgba(139, 69, 19, 0.3) 20%, 
-    rgba(139, 69, 19, 0.5) 50%, 
-    rgba(139, 69, 19, 0.3) 80%, 
+  width: 2rpx;
+  transform: scaleX(0.5);
+  -webkit-transform: scaleX(0.5);
+  transform-origin: center;
+  -webkit-transform-origin: center;
+  border-radius: 1rpx;
+  background: linear-gradient(180deg,
+    transparent 0%,
+    rgba(139, 69, 19, 0.25) 18%,
+    rgba(139, 69, 19, 0.55) 50%,
+    rgba(139, 69, 19, 0.25) 82%,
     transparent 100%);
+  box-shadow:
+    2rpx 2rpx 6rpx rgba(139, 69, 19, 0.2),
+    0 0 10rpx rgba(255, 255, 255, 0.45),
+    inset 1rpx 1rpx 3rpx rgba(212, 175, 140, 0.35),
+    inset -1rpx -1rpx 2rpx rgba(90, 62, 43, 0.2);
 }
 
 /* 文字样式 - 优化版 */
