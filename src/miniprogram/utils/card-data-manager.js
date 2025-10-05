@@ -175,6 +175,180 @@ class CardDataManager {
   }
   
   /**
+   * 从候选列表中挑选首个可用资源URL
+   */
+  static pickAssetUrl(candidates) {
+    if (!candidates || !candidates.length) {
+      return '';
+    }
+    for (let i = 0; i < candidates.length; i++) {
+      const value = candidates[i];
+      if (value) {
+        return value;
+      }
+    }
+    return '';
+  }
+
+  /**
+   * 将来源中存在的资源字段补回到目标对象
+   */
+  static mergeAssetFields(target, source, fields) {
+    if (!target || !source || !fields) {
+      return;
+    }
+    fields.forEach((field) => {
+      if (!target[field] && source[field]) {
+        target[field] = source[field];
+      }
+    });
+  }
+
+  /**
+   * 统一原始卡片上的资源字段，确保别名一致
+   */
+  static normalizeOriginalCardAssets(card) {
+    if (!card) {
+      return;
+    }
+    const primary = this.pickAssetUrl([
+      card.card_image_url,
+      card.image_url,
+      card.image,
+      card.visual_background_image
+    ]);
+
+    if (primary) {
+      if (!card.card_image_url) card.card_image_url = primary;
+      if (!card.image_url) card.image_url = primary;
+      if (!card.image) card.image = primary;
+      if (!card.visual_background_image) card.visual_background_image = primary;
+    }
+  }
+
+  /**
+   * 统一结构化数据中的背景资源字段
+   */
+  static normalizeStructuredAssets(structured, fallback) {
+    if (!structured || typeof structured !== 'object') {
+      return;
+    }
+
+    if (!structured.visual) {
+      structured.visual = {};
+    }
+
+    const visual = structured.visual;
+    const primary = this.pickAssetUrl([
+      visual.background_image_url,
+      structured.visual_background_image,
+      structured.image_url,
+      fallback
+    ]);
+
+    if (primary) {
+      if (!visual.background_image_url) {
+        visual.background_image_url = primary;
+      }
+      if (!structured.visual_background_image) {
+        structured.visual_background_image = primary;
+      }
+    }
+  }
+
+  /**
+   * 在缓存前补齐缺失的资源字段，避免覆盖已有图片
+   */
+  static preserveExistingAssets(processedData, existingData) {
+    if (!processedData) {
+      return;
+    }
+
+    const originalCard = processedData.originalCard || {};
+    const existingOriginal = existingData && existingData.originalCard ? existingData.originalCard : null;
+
+    if (existingOriginal) {
+      this.mergeAssetFields(originalCard, existingOriginal, [
+        'card_image_url',
+        'image_url',
+        'image',
+        'visual_background_image'
+      ]);
+    }
+
+    let structured = processedData.structuredData;
+    let structuredIsObject = structured && typeof structured === 'object';
+
+    if (structuredIsObject) {
+      if (existingData && existingData.structuredData) {
+        const existingStructured = existingData.structuredData;
+        const existingStructuredIsObject = existingStructured && typeof existingStructured === 'object';
+        const existingBackground = this.pickAssetUrl([
+          existingStructuredIsObject && existingStructured.visual ? existingStructured.visual.background_image_url : '',
+          existingStructuredIsObject ? existingStructured.visual_background_image : '',
+          existingOriginal ? existingOriginal.card_image_url : '',
+          existingOriginal ? existingOriginal.image_url : ''
+        ]);
+
+        if (existingBackground) {
+          if (!structured.visual) {
+            structured.visual = {};
+          }
+          if (!structured.visual.background_image_url) {
+            structured.visual.background_image_url = existingBackground;
+          }
+          if (!structured.visual_background_image) {
+            structured.visual_background_image = existingBackground;
+          }
+        }
+      }
+
+      const fallbackBackground = this.pickAssetUrl([
+        structured.visual ? structured.visual.background_image_url : '',
+        structured.visual_background_image,
+        originalCard.card_image_url,
+        originalCard.image_url,
+        originalCard.image,
+        originalCard.visual_background_image
+      ]);
+
+      this.normalizeStructuredAssets(structured, fallbackBackground);
+
+      const syncedBackground = this.pickAssetUrl([
+        structured.visual ? structured.visual.background_image_url : '',
+        structured.visual_background_image,
+        fallbackBackground
+      ]);
+
+      if (syncedBackground) {
+        if (!originalCard.card_image_url) originalCard.card_image_url = syncedBackground;
+        if (!originalCard.image_url) originalCard.image_url = syncedBackground;
+        if (!originalCard.image) originalCard.image = syncedBackground;
+        if (!originalCard.visual_background_image) originalCard.visual_background_image = syncedBackground;
+      }
+    } else if (existingData && existingData.structuredData && typeof existingData.structuredData === 'object') {
+      processedData.structuredData = existingData.structuredData;
+      processedData.hasStructuredData = processedData.hasStructuredData || existingData.hasStructuredData;
+      structured = processedData.structuredData;
+      structuredIsObject = structured && typeof structured === 'object';
+
+      if (structuredIsObject) {
+        const fallback = this.pickAssetUrl([
+          structured.visual ? structured.visual.background_image_url : '',
+          structured.visual_background_image,
+          existingOriginal ? existingOriginal.card_image_url : '',
+          existingOriginal ? existingOriginal.image_url : ''
+        ]);
+
+        this.normalizeStructuredAssets(structured, fallback);
+      }
+    }
+
+    this.normalizeOriginalCardAssets(originalCard);
+    processedData.originalCard = originalCard;
+  }
+
+  /**
    * 处理并缓存卡片数据（一站式服务）
    */
   static processAndCacheCard(rawCardData) {
@@ -184,7 +358,11 @@ class CardDataManager {
     }
     
     // 处理数据
+    const existingData = this.getCachedCard(rawCardData.id);
     const processedData = this.processCardData(rawCardData);
+
+    // 在写入前保留已有资源，避免覆盖已生成的图片
+    this.preserveExistingAssets(processedData, existingData);
     
     // 缓存数据
     this.cacheCard(rawCardData.id, processedData);

@@ -556,10 +556,10 @@
 /* 竖排文字容器 - 优化版 */
 .oracle-content-vertical {
   position: absolute;
-  top: 120rpx;
+  top: 160rpx;
   left: 120rpx;
-  right: 50rpx;
-  bottom: 240rpx;
+  right: 40rpx;
+  bottom: 277rpx;
   writing-mode: vertical-lr;
   text-orientation: upright;
   display: flex;
