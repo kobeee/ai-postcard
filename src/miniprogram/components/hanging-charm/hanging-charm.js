@@ -1,5 +1,6 @@
 // hanging-charm.js - 🔮 挂件式心象签组件
 const { resourceCache } = require('../../utils/resource-cache.js');
+const { loadCharmFontsOnce } = require('../../utils/charm-font-loader.js');
 
 Component({
   /**
@@ -102,6 +103,9 @@ Component({
    */
   lifetimes: {
     attached() {
+      loadCharmFontsOnce().catch(() => {
+        // 字体加载失败时降级为系统字体即可，不阻断组件初始化
+      });
       this.loadCharmConfig();
       this.setupStyles();
     },

@@ -1,5 +1,6 @@
 // detail-oracle-card.js - 🔮 详情页心象签组件（拷贝自首页挂件）
 const { resourceCache } = require('../../utils/resource-cache.js');
+const { loadCharmFontsOnce } = require('../../utils/charm-font-loader.js');
 
 Component({
   /**
@@ -102,6 +103,9 @@ Component({
    */
   lifetimes: {
     attached() {
+      loadCharmFontsOnce().catch(() => {
+        // 字体加载失败时降级为系统字体
+      });
       this.loadCharmConfig();
       this.setupStyles();
     },

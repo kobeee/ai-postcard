@@ -16,7 +16,6 @@ App({
     try {
       await this.initCoreSystem();
       await this.initEnhancedFeatures();
-      this.loadGlobalFonts();  // 🔥 加载全局字体
       this.getSystemInfo();
       this.checkForUpdate();
       this.prefetchEnvironment();
@@ -198,39 +197,6 @@ App({
   },
 
   /**
-   * 🔥 加载全局字体（CDN自托管）
-   */
-  loadGlobalFonts() {
-    // 注意：需要先上传字体文件到CDN，并替换下方URL为实际CDN地址
-
-    // 加载阿里巴巴普惠体 Regular
-    wx.loadFontFace({
-      global: true,  // 全局生效
-      family: 'AlibabaPuHuiTi-Regular',
-      source: 'url("https://your-cdn.com/fonts/alibaba-puhuiti-regular.ttf")',  // 🚨 需替换为实际CDN地址
-      success: () => {
-        envConfig.log('✅ 阿里巴巴普惠体 Regular 加载成功');
-      },
-      fail: (err) => {
-        envConfig.error('❌ 阿里巴巴普惠体 Regular 加载失败:', err);
-      }
-    });
-
-    // 加载阿里巴巴普惠体 Bold
-    wx.loadFontFace({
-      global: true,
-      family: 'AlibabaPuHuiTi-Bold',
-      source: 'url("https://your-cdn.com/fonts/alibaba-puhuiti-bold.ttf")',  // 🚨 需替换为实际CDN地址
-      success: () => {
-        envConfig.log('✅ 阿里巴巴普惠体 Bold 加载成功');
-      },
-      fail: (err) => {
-        envConfig.error('❌ 阿里巴巴普惠体 Bold 加载失败:', err);
-      }
-    });
-  },
-
-  /**
    * 环境预取
    */
   prefetchEnvironment() {
@@ -331,4 +297,3 @@ App({
     throttle: (func, delay) => { let last=0; return function(...args){ const now=Date.now(); if (now-last>=delay){ func.apply(this,args); last=now; } } }
   }
 });
-

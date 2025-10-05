@@ -52,7 +52,7 @@
   top: 12%;  /* 往下调整 */
   left: 20%; /* 往右调整，更靠近挂件 */
   z-index: 20;
-  font-family: 'STKaiti', 'KaiTi', serif;
+  font-family: 'ZhiMangXing', 'STKaiti', 'KaiTi', serif;
   pointer-events: none;
   /* 🔑 关键：简单的竖排布局 */
   display: flex;
@@ -72,6 +72,7 @@
   font-size: 48rpx;
   font-weight: 600;
   line-height: 1;
+  font-family: inherit;
   /* 🔑 关键：移除冲突的样式 */
   margin-bottom: 4rpx;
   /* 🎨 文字效果 */
@@ -105,6 +106,7 @@
   font-size: 28rpx;  /* 稍微缩小 */
   font-weight: 400;
   text-align: center;
+  font-family: 'LongCang', 'STKaiti', 'KaiTi', serif;
   opacity: 0.85;
   text-shadow: 2rpx 2rpx 4rpx rgba(0, 0, 0, 0.2);
   max-width: 80%;
@@ -320,7 +322,7 @@
   font-size: 40rpx;  /* 稍微减小，避免过于突兀 */
   font-weight: 700;
   color: #5a3e2b;    /* 更深的颜色增强层次 */
-  font-family: 'STKaiti', 'STXihei', 'KaiTi', 'Microsoft YaHei', serif;
+  font-family: 'LongCang', 'MaShanZheng', 'STKaiti', 'STXihei', 'KaiTi', 'Microsoft YaHei', serif;
   line-height: 1.1;
   margin-bottom: 8rpx;
   writing-mode: vertical-rl;
@@ -620,11 +622,10 @@
   opacity: 0.95;
   display: block;
   margin-bottom: 10rpx;  /* 稍微增加段间距 */
-  font-family: 'STKaiti', 'KaiTi', 'Microsoft YaHei', serif;
+  font-family: 'MaShanZheng', 'STKaiti', 'KaiTi', 'Microsoft YaHei', serif;
   writing-mode: vertical-lr;
   text-orientation: upright;
   font-weight: 500;
   /* 添加文字阴影增强可读性 */
   text-shadow: 0 1rpx 2rpx rgba(255, 255, 255, 0.8);
 }
-
