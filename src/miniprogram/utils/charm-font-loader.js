@@ -8,8 +8,49 @@ const CHARM_FONT_MANIFEST = [
   { family: 'LongCang', file: 'long-cang-6500.woff', weight: '400' }
 ];
 
-const loadedFontFamilies = new Set();
-let loadPromise = null;
+const GLOBAL_CONTEXT_ID = 'global';
+const loadedFontContexts = new Map(); // Map<string, Set<string>>: family -> contexts
+let globalLoadPromise = null;
+const scopedLoadPromises = new Map(); // Map<string, Promise>
+let supportsGlobalFontFace = null;
+
+const canUseGlobalFontFace = () => {
+  if (supportsGlobalFontFace === null) {
+    try {
+      supportsGlobalFontFace = wx && typeof wx.canIUse === 'function' && wx.canIUse('loadFontFace.global');
+    } catch (_) {
+      supportsGlobalFontFace = false;
+    }
+  }
+  return supportsGlobalFontFace;
+};
+
+const markFamilyLoadedInContext = (family, contextId) => {
+  if (!family) return;
+  if (!loadedFontContexts.has(family)) {
+    loadedFontContexts.set(family, new Set());
+  }
+  loadedFontContexts.get(family).add(contextId);
+};
+
+const hasFamilyLoadedInContext = (family, contextId) => {
+  const contextSet = loadedFontContexts.get(family);
+  return contextSet ? contextSet.has(contextId) : false;
+};
+
+const deriveContextId = (preferredContextId) => {
+  if (preferredContextId) return preferredContextId;
+  try {
+    const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : [];
+    if (!pages.length) return 'context:unknown';
+    const currentPage = pages[pages.length - 1] || {};
+    const route = currentPage.route || currentPage.__route__ || 'unknown';
+    const webviewId = (currentPage.__wxWebviewId__ !== undefined ? currentPage.__wxWebviewId__ : (currentPage.__wxExparserNodeId__ !== undefined ? currentPage.__wxExparserNodeId__ : '0'));
+    return `page:${route}#${webviewId}`;
+  } catch (_) {
+    return 'context:unknown';
+  }
+};
 
 const normalizeBaseUrl = (url) => {
   if (!url || typeof url !== 'string') {
@@ -48,8 +89,10 @@ const buildFontSource = async (cachedPath, remoteUrl) => {
   }
 };
 
-const loadSingleFont = async (fontMeta) => {
-  if (loadedFontFamilies.has(fontMeta.family)) {
+const loadSingleFont = async (fontMeta, contextId, useGlobal) => {
+  const effectiveContext = useGlobal ? GLOBAL_CONTEXT_ID : contextId;
+
+  if (hasFamilyLoadedInContext(fontMeta.family, effectiveContext)) {
     return { font: fontMeta.family, status: 'cached' };
   }
 
@@ -61,22 +104,29 @@ const loadSingleFont = async (fontMeta) => {
     const fontSource = await buildFontSource(cachedPath, fontUrl);
 
     await new Promise((resolve, reject) => {
-      wx.loadFontFace({
+      const fontFaceOptions = {
         family: fontMeta.family,
         source: fontSource,
-        global: false,
-        scopes: ['webview', 'native'],
         desc: { style: 'normal', weight: fontMeta.weight || '400' },
         success: (res) => {
-          loadedFontFamilies.add(fontMeta.family);
-          envConfig.log(`✅ 挂件字体 ${fontMeta.family} 加载成功`, res.status);
+          markFamilyLoadedInContext(fontMeta.family, effectiveContext);
+          envConfig.log(`✅ 挂件字体 ${fontMeta.family} 加载成功`, { status: res.status, context: effectiveContext });
           resolve(res);
         },
         fail: (err) => {
           envConfig.error(`❌ 挂件字体 ${fontMeta.family} 加载失败`, err);
           reject(err);
         }
-      });
+      };
+
+      if (useGlobal) {
+        fontFaceOptions.global = true;
+      } else {
+        fontFaceOptions.global = false;
+        fontFaceOptions.scopes = ['webview', 'native'];
+      }
+
+      wx.loadFontFace(fontFaceOptions);
     });
 
     return { font: fontMeta.family, status: 'loaded' };
@@ -86,27 +136,45 @@ const loadSingleFont = async (fontMeta) => {
   }
 };
 
-const loadFontSet = async () => {
-  const results = await Promise.all(CHARM_FONT_MANIFEST.map(loadSingleFont));
+const loadFontSet = async (contextId, useGlobal) => {
+  const results = await Promise.all(CHARM_FONT_MANIFEST.map((fontMeta) => loadSingleFont(fontMeta, contextId, useGlobal)));
   const hasFailure = results.some(result => result.status === 'failed');
 
   if (hasFailure) {
-    // 允许后续视情况重新尝试加载失败的字体
-    loadPromise = null;
+    if (useGlobal) {
+      globalLoadPromise = null;
+    } else {
+      scopedLoadPromises.delete(contextId);
+    }
   }
 
   return results;
 };
 
-const loadCharmFontsOnce = () => {
-  if (!loadPromise) {
-    loadPromise = loadFontSet().catch((error) => {
-      // 如果整体失败，允许后续再次尝试
-      loadPromise = null;
+const loadCharmFontsOnce = (options = {}) => {
+  const prefersGlobal = canUseGlobalFontFace();
+
+  if (prefersGlobal) {
+    if (!globalLoadPromise) {
+      globalLoadPromise = loadFontSet(GLOBAL_CONTEXT_ID, true).catch((error) => {
+        globalLoadPromise = null;
+        throw error;
+      });
+    }
+    return globalLoadPromise;
+  }
+
+  const contextId = deriveContextId(options.scopeId);
+
+  if (!scopedLoadPromises.has(contextId)) {
+    const scopedPromise = loadFontSet(contextId, false).catch((error) => {
+      scopedLoadPromises.delete(contextId);
       throw error;
     });
+    scopedLoadPromises.set(contextId, scopedPromise);
   }
-  return loadPromise;
+
+  return scopedLoadPromises.get(contextId);
 };
 
 module.exports = {

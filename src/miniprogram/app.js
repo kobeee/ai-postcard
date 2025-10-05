@@ -9,6 +9,7 @@ const { enhancedAuthManager } = require('./utils/enhanced-auth.js');
 const { errorHandler } = require('./utils/error-handler.js');
 const { compatibilityManager } = require('./utils/compatibility-manager.js');
 const { enhancedRequestManager } = require('./utils/enhanced-request.js');
+const { loadCharmFontsOnce } = require('./utils/charm-font-loader.js');
 
 App({
   async onLaunch(options) {
@@ -110,6 +111,7 @@ App({
     this.recordPerformanceMetric?.('app_launch_time', launchTime);
 
     envConfig.log('✅ 增强功能初始化完成');
+    this.preloadCharmFonts();
   },
 
   /**
@@ -232,6 +234,23 @@ App({
     } catch (_) {}
   },
 
+  /**
+   * 预加载挂件字体，保证首屏和详情一致
+   */
+  preloadCharmFonts() {
+    try {
+      const preloadPromise = loadCharmFontsOnce({ scopeId: 'app-init' });
+      this.globalData.fontPreloadPromise = preloadPromise;
+      if (preloadPromise && typeof preloadPromise.catch === 'function') {
+        preloadPromise.catch((error) => {
+          envConfig.warn('挂件字体预加载失败，将在组件级别重试', error);
+        });
+      }
+    } catch (error) {
+      envConfig.warn('挂件字体预加载发生异常，将等待组件内部兜底', error);
+    }
+  },
+
   // 预留钩子
   onNetworkRecover() {},
   handleMemoryWarning() {},
@@ -259,6 +278,7 @@ App({
     sharedPostcardId: null,
     inviteCode: null,
     qrData: null,
+    fontPreloadPromise: null,
     lastShowTime: null,
     lastMessage: null,
     config: {
