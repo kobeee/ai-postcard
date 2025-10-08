@@ -56,8 +56,10 @@ Component({
     animationData: {},
     // 是否正在动画中
     isAnimating: false,
-    // 挂件图片路径
+    // 挂件图片路径（本地缓存路径，用于渲染）
     charmImagePath: '',
+    // 挂件图片原始URL（HTTPS网络路径，用于分享）
+    charmImageUrl: '',
     // 背景光圈样式
     glowStyle: '',
     // 标题样式
@@ -154,25 +156,29 @@ Component({
           if (originalUrl) {
             try {
               const cachedImagePath = await resourceCache.getCachedResourceUrl(originalUrl);
-              
+
+              // 🔧 同时保存本地缓存路径和原始HTTPS URL
               this.setData({
                 charmConfig: charmConfig,
-                charmImagePath: cachedImagePath
+                charmImagePath: cachedImagePath,    // 用于组件渲染
+                charmImageUrl: originalUrl           // 用于分享接口
               });
               this.setupDynamicStyles();
-              
+
             } catch (error) {
               console.warn('资源缓存获取失败，使用默认形状:', error);
               this.setData({
                 charmConfig: charmConfig,
-                charmImagePath: '' // 清空路径，使用默认形状
+                charmImagePath: '',   // 清空路径，使用默认形状
+                charmImageUrl: ''
               });
               this.setupDynamicStyles();
             }
           } else {
             this.setData({
               charmConfig: charmConfig,
-              charmImagePath: ''
+              charmImagePath: '',
+              charmImageUrl: ''
             });
             this.setupDynamicStyles();
           }
@@ -1319,149 +1325,240 @@ Component({
     },
 
     /**
-     * 获取当前面的分享图（直接返回已缓存资源）
-     * @returns {string} 图片URL（本地临时路径或网络URL）
+     * 获取当前面的分享图（返回HTTPS URL供分享接口使用）
+     * @returns {string} 图片HTTPS URL
      */
     getShareImage() {
       const face = this.data.isFlipped ? 'back' : 'front';
 
       if (face === 'front') {
-        // 正面：直接返回签体图
-        const frontImage = this.data.charmImagePath || '';
+        // 正面：返回签体的HTTPS URL（而非本地缓存路径）
+        const frontImage = this.data.charmImageUrl || '';
         if (!frontImage) {
-          console.warn('[分享] 正面签体图片路径为空，将使用默认分享图');
+          console.warn('[分享] 正面签体图片URL为空，将使用默认分享图');
         }
         return frontImage;
       } else {
-        // 背面：按优先级返回背景图
-        const backImage = this.data.backgroundImage ||
-                          this.data.oracleData?.visual_background_image ||
+        // 背面：按优先级返回背景图HTTPS URL
+        const backImage = this.data.oracleData?.visual_background_image ||
                           this.data.oracleData?.background_image_url ||
                           this.data.oracleData?.image_url ||
-                          this.data.oracleData?.card_image_url || '';
+                          this.data.oracleData?.card_image_url ||
+                          this.data.backgroundImage || '';
         if (!backImage) {
-          console.warn('[分享] 背面背景图片路径为空，将使用默认分享图');
+          console.warn('[分享] 背面背景图片URL为空，将使用默认分享图');
         }
         return backImage;
       }
     },
 
     /**
-     * 生成朋友圈拼接图（唯一需要Canvas的地方）
-     * @returns {Promise<string>} 临时文件路径
+     * 生成朋友圈拼接图（Canvas拼接 + 保存为永久文件）
+     * @returns {Promise<string>} 永久文件路径（可用于分享）
      */
     async generateTimelineImage() {
       try {
-        // 获取正面和背面图片URL
-        const frontImg = this.data.charmImagePath;
-        const backImg = this.data.backgroundImage ||
-                        this.data.oracleData?.visual_background_image ||
-                        this.data.oracleData?.background_image_url ||
-                        this.data.oracleData?.image_url ||
-                        this.data.oracleData?.card_image_url;
+        // 🔧 使用本地缓存路径进行Canvas拼接（速度快）
+        const frontImgLocal = this.data.charmImagePath;
+        const backImgLocal = this.data.backgroundImage ||
+                            this.data.oracleData?.visual_background_image ||
+                            this.data.oracleData?.background_image_url ||
+                            this.data.oracleData?.image_url ||
+                            this.data.oracleData?.card_image_url;
 
         // 检查资源是否齐全
-        if (!frontImg && !backImg) {
-          console.warn('[朋友圈分享] 正反面图片均为空，使用空字符串降级');
-          return '';
+        if (!frontImgLocal && !backImgLocal) {
+          console.warn('[朋友圈分享] 正反面图片均为空，降级使用HTTPS URL');
+          return this.data.charmImageUrl || '';
         }
 
-        if (!frontImg || !backImg) {
+        if (!frontImgLocal || !backImgLocal) {
           console.warn('[朋友圈分享] 缺少一面的图片，使用单张图降级');
-          return frontImg || backImg || '';
+          // 🔧 降级返回HTTPS URL而非本地路径
+          return this.data.charmImageUrl ||
+                 this.data.oracleData?.visual_background_image ||
+                 this.data.oracleData?.background_image_url || '';
         }
 
-        // 简单的左右拼接
-        console.log('[朋友圈分享] 开始生成拼接图');
-        const mergedImage = await this.mergeImages(frontImg, backImg);
-        console.log('[朋友圈分享] 拼接图生成成功:', mergedImage);
-        return mergedImage;
+        // Canvas拼接（使用本地缓存路径，速度快）
+        console.log('[朋友圈分享] 开始Canvas拼接');
+        const tempMergedPath = await this.mergeImages(frontImgLocal, backImgLocal);
+        console.log('[朋友圈分享] Canvas拼接成功:', tempMergedPath);
+
+        // 🔧 关键：将临时文件保存为永久文件，供分享接口使用
+        const savedFilePath = await this.saveTempFileAsPermanent(tempMergedPath);
+        console.log('[朋友圈分享] 永久文件保存成功:', savedFilePath);
+
+        return savedFilePath;
 
       } catch (error) {
         console.error('[朋友圈分享] 生成拼接图失败:', error);
-        // 降级：返回正面图或背面图
-        return this.data.charmImagePath ||
-               this.data.backgroundImage ||
-               this.data.oracleData?.visual_background_image || '';
+        // 🔧 降级：返回HTTPS URL
+        return this.data.charmImageUrl ||
+               this.data.oracleData?.visual_background_image ||
+               this.data.oracleData?.background_image_url || '';
       }
     },
 
     /**
-     * 图片横向拼接（Canvas实现）
+     * 将临时文件保存为永久文件
+     * @param {string} tempFilePath - 临时文件路径
+     * @returns {Promise<string>} 永久文件路径
+     */
+    saveTempFileAsPermanent(tempFilePath) {
+      return new Promise((resolve, reject) => {
+        wx.saveFile({
+          tempFilePath: tempFilePath,
+          success: (res) => {
+            console.log('[文件保存] 临时文件已保存为永久文件:', res.savedFilePath);
+            resolve(res.savedFilePath);
+          },
+          fail: (err) => {
+            console.error('[文件保存] 保存失败:', err);
+            // 降级：即使保存失败，也尝试使用临时路径
+            console.warn('[文件保存] 降级使用临时路径（可能不稳定）');
+            resolve(tempFilePath);
+          }
+        });
+      });
+    },
+
+    /**
+     * 图片横向拼接（Canvas实现）- 修复版
      * @param {string} leftUrl - 左侧图片URL（正面）
      * @param {string} rightUrl - 右侧图片URL（背面）
      * @returns {Promise<string>} 临时文件路径
      */
     async mergeImages(leftUrl, rightUrl) {
+      console.log('[Canvas拼接] 开始拼接图片');
+      console.log('[Canvas拼接] 左图URL:', leftUrl);
+      console.log('[Canvas拼接] 右图URL:', rightUrl);
+
       return new Promise((resolve, reject) => {
-        // 使用组件作用域的 SelectorQuery
-        const query = wx.createSelectorQuery().in(this);
+        // 🔧 修复1：延迟查询，确保Canvas节点已渲染
+        setTimeout(() => {
+          // 使用组件作用域的 SelectorQuery
+          const query = wx.createSelectorQuery().in(this);
 
-        query.select('#share-merge-canvas')
-          .fields({ node: true, size: true })
-          .exec(async (res) => {
-            try {
-              // 检查Canvas节点是否存在
-              if (!res || !res[0] || !res[0].node) {
-                throw new Error('Canvas节点获取失败，请检查WXML中是否存在 id="share-merge-canvas" 的canvas元素');
-              }
+          query.select('#share-merge-canvas')
+            .fields({ node: true, size: true })
+            .exec(async (res) => {
+              try {
+                console.log('[Canvas拼接] 查询结果:', res);
 
-              const canvas = res[0].node;
-              const ctx = canvas.getContext('2d');
-              const dpr = wx.getSystemInfoSync().pixelRatio;
-
-              // 朋友圈推荐规格：1:1 或 16:9，这里使用 2:1 (1280x640)
-              // 注意：Canvas实际尺寸需乘以DPR以确保清晰度
-              canvas.width = 1280 * dpr;
-              canvas.height = 640 * dpr;
-              ctx.scale(dpr, dpr);
-
-              // 加载左图（正面）
-              const leftImage = canvas.createImage();
-              leftImage.src = leftUrl;
-              await new Promise((resolveImg, rejectImg) => {
-                leftImage.onload = resolveImg;
-                leftImage.onerror = () => rejectImg(new Error(`左图加载失败: ${leftUrl}`));
-                // 设置超时防止永久等待
-                setTimeout(() => rejectImg(new Error('左图加载超时')), 10000);
-              });
-
-              // 加载右图（背面）
-              const rightImage = canvas.createImage();
-              rightImage.src = rightUrl;
-              await new Promise((resolveImg, rejectImg) => {
-                rightImage.onload = resolveImg;
-                rightImage.onerror = () => rejectImg(new Error(`右图加载失败: ${rightUrl}`));
-                setTimeout(() => rejectImg(new Error('右图加载超时')), 10000);
-              });
-
-              // 绘制：左右各640px，等比缩放填充
-              // 使用drawImage的9参数版本确保图片居中裁剪
-              this._drawImageCover(ctx, leftImage, 0, 0, 640, 640);
-              this._drawImageCover(ctx, rightImage, 640, 0, 640, 640);
-
-              // 导出图片
-              wx.canvasToTempFilePath({
-                canvas: canvas,
-                destWidth: 1280,
-                destHeight: 640,
-                fileType: 'png',
-                quality: 1,
-                success: (res) => {
-                  console.log('[Canvas] 图片导出成功:', res.tempFilePath);
-                  resolve(res.tempFilePath);
-                },
-                fail: (err) => {
-                  console.error('[Canvas] 图片导出失败:', err);
-                  reject(new Error(`Canvas导出失败: ${err.errMsg}`));
+                // 检查Canvas节点是否存在
+                if (!res || !res[0] || !res[0].node) {
+                  throw new Error('Canvas节点获取失败，请检查WXML中是否存在 id="share-merge-canvas" 的canvas元素');
                 }
-              }, this);  // 传入组件实例作为上下文
 
-            } catch (error) {
-              console.error('[Canvas] 拼接过程失败:', error);
-              reject(error);
-            }
-          });
+                const canvas = res[0].node;
+                const ctx = canvas.getContext('2d');
+
+                console.log('[Canvas拼接] Canvas节点获取成功');
+
+                // 🔧 修复2：使用固定尺寸，避免DPR复杂度
+                // 朋友圈推荐规格：5:4 或 1:1，这里使用 2:1 (1200x600)
+                const canvasWidth = 1200;
+                const canvasHeight = 600;
+                const halfWidth = canvasWidth / 2;
+
+                canvas.width = canvasWidth;
+                canvas.height = canvasHeight;
+
+                console.log('[Canvas拼接] Canvas尺寸设置:', { width: canvas.width, height: canvas.height });
+
+                // 🔧 修复3：先清空画布，设置白色背景
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+                console.log('[Canvas拼接] 开始加载左图...');
+
+                // 加载左图（正面）
+                const leftImage = canvas.createImage();
+                await new Promise((resolveImg, rejectImg) => {
+                  leftImage.onload = () => {
+                    console.log('[Canvas拼接] 左图加载成功，尺寸:', leftImage.width, 'x', leftImage.height);
+                    resolveImg();
+                  };
+                  leftImage.onerror = (err) => {
+                    console.error('[Canvas拼接] 左图加载失败:', err);
+                    rejectImg(new Error(`左图加载失败: ${leftUrl}`));
+                  };
+
+                  // 设置超时防止永久等待
+                  const timeout = setTimeout(() => {
+                    console.error('[Canvas拼接] 左图加载超时');
+                    rejectImg(new Error('左图加载超时'));
+                  }, 10000);
+
+                  leftImage.onload = () => {
+                    clearTimeout(timeout);
+                    console.log('[Canvas拼接] 左图加载成功');
+                    resolveImg();
+                  };
+
+                  leftImage.src = leftUrl;
+                });
+
+                console.log('[Canvas拼接] 开始加载右图...');
+
+                // 加载右图（背面）
+                const rightImage = canvas.createImage();
+                await new Promise((resolveImg, rejectImg) => {
+                  rightImage.onerror = (err) => {
+                    console.error('[Canvas拼接] 右图加载失败:', err);
+                    rejectImg(new Error(`右图加载失败: ${rightUrl}`));
+                  };
+
+                  const timeout = setTimeout(() => {
+                    console.error('[Canvas拼接] 右图加载超时');
+                    rejectImg(new Error('右图加载超时'));
+                  }, 10000);
+
+                  rightImage.onload = () => {
+                    clearTimeout(timeout);
+                    console.log('[Canvas拼接] 右图加载成功，尺寸:', rightImage.width, 'x', rightImage.height);
+                    resolveImg();
+                  };
+
+                  rightImage.src = rightUrl;
+                });
+
+                console.log('[Canvas拼接] 两张图片加载完成，开始绘制');
+
+                // 🔧 修复4：使用简化的绘制逻辑，等比缩放居中裁剪
+                this._drawImageCover(ctx, leftImage, 0, 0, halfWidth, canvasHeight);
+                this._drawImageCover(ctx, rightImage, halfWidth, 0, halfWidth, canvasHeight);
+
+                console.log('[Canvas拼接] 绘制完成，开始导出图片');
+
+                // 🔧 修复5：导出参数与Canvas尺寸一致
+                wx.canvasToTempFilePath({
+                  canvas: canvas,
+                  x: 0,
+                  y: 0,
+                  width: canvasWidth,
+                  height: canvasHeight,
+                  destWidth: canvasWidth,
+                  destHeight: canvasHeight,
+                  fileType: 'png',
+                  quality: 1,
+                  success: (res) => {
+                    console.log('[Canvas拼接] ✅ 图片导出成功:', res.tempFilePath);
+                    resolve(res.tempFilePath);
+                  },
+                  fail: (err) => {
+                    console.error('[Canvas拼接] ❌ 图片导出失败:', err);
+                    reject(new Error(`Canvas导出失败: ${err.errMsg}`));
+                  }
+                }, this);  // 传入组件实例作为上下文
+
+              } catch (error) {
+                console.error('[Canvas拼接] ❌ 拼接过程失败:', error);
+                reject(error);
+              }
+            });
+        }, 200);  // 延迟200ms确保Canvas已渲染
       });
     },
 

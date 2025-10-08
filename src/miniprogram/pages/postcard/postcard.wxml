@@ -116,8 +116,8 @@
     <view class="actions-section">
       <view class="action-row">
         <button class="action-btn secondary" bindtap="saveCardScreenshot">
-          <text class="btn-icon">💾</text>
-          <text class="btn-text">保存卡片</text>
+          <text class="btn-icon">📷</text>
+          <text class="btn-text">保存拼接图</text>
         </button>
         <button class="action-btn danger" bindtap="handleDelete">
           <text class="btn-icon">🗑️</text>

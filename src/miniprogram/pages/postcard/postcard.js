@@ -580,7 +580,7 @@ Page({
         }
       }
       
-      app.utils.showLoading('保存中...');
+      app.utils.showLoading('正在生成拼接图...');
       await new Promise((resolve, reject) => {
         wx.saveImageToPhotosAlbum({
           filePath: localFilePath,
@@ -588,18 +588,32 @@ Page({
           fail: reject
         });
       });
-      
+
       app.utils.hideLoading();
-      app.utils.showSuccess('卡片已保存到相册');
+
+      // 保存成功后，提示用户可以发朋友圈
+      wx.showModal({
+        title: '拼接图已保存',
+        content: '正反面拼接图已保存到相册，可以直接发朋友圈啦～',
+        showCancel: false,
+        confirmText: '好的'
+      });
       
     } catch (error) {
       const app = getApp();
       app.utils.hideLoading();
-      
+
+      // 用户取消操作，不显示错误提示
+      if (error.errMsg && error.errMsg.includes('cancel')) {
+        envConfig.log('[保存卡片] 用户取消操作');
+        return;
+      }
+
+      // 权限被拒绝
       if (error.errMsg && error.errMsg.includes('auth deny')) {
         wx.showModal({
-          title: '需要授权',
-          content: '保存图片需要访问相册权限，请在设置中开启',
+          title: '需要相册权限',
+          content: '保存拼接图到相册需要相册访问权限，请在设置中开启',
           confirmText: '去设置',
           success: (res) => {
             if (res.confirm) {
@@ -607,11 +621,12 @@ Page({
             }
           }
         });
-      } else {
-        app.utils.showError('保存失败，请重试');
+        return;
       }
-      
-      envConfig.error('保存卡片截图失败:', error);
+
+      // 其他错误
+      app.utils.showError('保存失败，请重试');
+      envConfig.error('[保存卡片] 保存失败:', error);
     }
   },
 
@@ -649,88 +664,61 @@ Page({
   },
 
   /**
-   * 生成真实的卡片截图 - 调用组件的Canvas截图功能
+   * 生成真实的卡片截图 - 调用hanging-charm组件的Canvas拼接功能
    */
   async generateRealCardScreenshot() {
     try {
-      const { hasStructuredData, structuredData } = this.data;
-      envConfig.log('开始生成Canvas截图');
-      envConfig.log('hasStructuredData:', hasStructuredData);
-      envConfig.log('structuredData存在:', !!structuredData);
-      
+      const { hasStructuredData } = this.data;
+      envConfig.log('[保存卡片] 开始生成拼接图');
+      envConfig.log('[保存卡片] hasStructuredData:', hasStructuredData);
+
       // 如果没有结构化数据，直接失败
       if (!hasStructuredData) {
-        throw new Error('当前心象签没有结构化数据，无法生成Canvas截图');
+        throw new Error('当前心象签没有结构化数据，无法生成拼接图');
       }
-      
+
       // 等待一下确保组件已经渲染
       await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // 获取结构化心象签组件的引用 - 使用ID选择器
-      const structuredCard = this.selectComponent('#main-structured-postcard');
-      envConfig.log('通过ID获取组件结果:', !!structuredCard);
-      
-      if (!structuredCard) {
-        envConfig.error('无法通过ID获取组件，尝试class选择器');
-        // 尝试使用class选择器
-        const structuredCardByClass = this.selectComponent('.main-structured-postcard');
-        envConfig.log('通过class获取组件结果:', !!structuredCardByClass);
-        
-        if (!structuredCardByClass) {
-          // 尝试不使用选择器，直接查找组件
-          const allComponents = this.selectAllComponents('structured-postcard');
-          envConfig.log('所有structured-postcard组件:', allComponents.length);
-          
-          if (allComponents.length > 0) {
-            return await this.callComponentScreenshot(allComponents[0]);
-          }
-          
-          throw new Error('无法获取结构化心象签组件，请检查组件是否渲染。可能原因：1) hasStructuredData为false 2) 组件渲染条件不满足');
-        }
-        return await this.callComponentScreenshot(structuredCardByClass);
+
+      // 获取hanging-charm组件
+      const charm = this.selectComponent('#main-hanging-charm');
+      envConfig.log('[保存卡片] 获取hanging-charm组件:', !!charm);
+
+      if (!charm) {
+        throw new Error('无法获取挂件组件，请检查组件是否渲染');
       }
-      
-      return await this.callComponentScreenshot(structuredCard);
-      
+
+      // 调用组件的生成拼接图方法
+      envConfig.log('[保存卡片] 调用generateTimelineImage生成拼接图');
+      const mergedImagePath = await charm.generateTimelineImage();
+      envConfig.log('[保存卡片] 拼接图生成成功:', mergedImagePath);
+
+      return mergedImagePath;
+
     } catch (error) {
-      envConfig.error('生成Canvas截图失败:', error);
+      envConfig.error('[保存卡片] 生成拼接图失败:', error);
       throw error;
     }
   },
 
   /**
-   * 调用组件截图方法的封装
-   */
-  async callComponentScreenshot(component) {
-    try {
-      // 检查组件是否有截图方法
-      if (!component.generateCanvasScreenshot) {
-        throw new Error('组件不支持Canvas截图功能');
-      }
-      
-      // 调用组件的Canvas截图方法
-      const screenshotPath = await component.generateCanvasScreenshot();
-      
-      envConfig.log('Canvas截图生成成功:', screenshotPath);
-      return screenshotPath;
-      
-    } catch (error) {
-      envConfig.error('调用组件截图方法失败:', error);
-      throw error;
-    }
-  },
-
-  /**
-   * 降级方案：返回现有图片或提示
+   * 降级方案：返回背景图URL
    */
   async fallbackComponentScreenshot() {
     const { postcard } = this.data;
-    
-    if (postcard && (postcard.card_image_url || postcard.image_url)) {
-      return postcard.card_image_url || postcard.image_url;
+
+    // 降级使用背景图或卡片图
+    const fallbackImage = postcard?.visual_background_image ||
+                         postcard?.background_image_url ||
+                         postcard?.card_image_url ||
+                         postcard?.image_url;
+
+    if (fallbackImage) {
+      envConfig.log('[保存卡片] 使用降级方案，返回背景图:', fallbackImage);
+      return fallbackImage;
     }
-    
-    throw new Error('无法生成卡片截图');
+
+    throw new Error('无法生成卡片截图，也没有可用的降级图片');
   },
 
   /**

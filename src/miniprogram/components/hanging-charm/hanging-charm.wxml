@@ -126,10 +126,10 @@
 
   </view>
 
-  <!-- 隐藏Canvas用于朋友圈拼图 -->
+  <!-- 隐藏Canvas用于朋友圈拼图 - 修复尺寸为1200x600 -->
   <canvas
     id="share-merge-canvas"
     type="2d"
-    style="position: fixed; left: -9999px; top: 0; width: 640px; height: 640px;">
+    style="position: fixed; left: -9999px; top: 0; width: 1200px; height: 600px;">
   </canvas>
 </view>
