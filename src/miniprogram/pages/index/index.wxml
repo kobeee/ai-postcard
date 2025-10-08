@@ -40,14 +40,14 @@
 
   <!-- 🔮 心象签主显示区域 - 简化结构 -->
   <view class="charm-main-area" wx:if="{{hasUserInfo && todayCard && todayCard.structured_data}}">
-    <hanging-charm 
+    <hanging-charm
+      id="main-hanging-charm"
       oracle-data="{{todayCard}}"
       charm-type="{{selectedCharmType || 'lianhua-yuanpai'}}"
       background-image="{{todayCard.visual_background_image || todayCard.image_url || todayCard.image}}"
       show-animation="{{true}}"
       size-mode="large"
       bind:flip="onCharmFlip"
-      bind:share="onCharmShare"
     ></hanging-charm>
   </view>
 

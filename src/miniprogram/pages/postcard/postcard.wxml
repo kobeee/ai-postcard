@@ -18,14 +18,14 @@
     
     <!-- 🔮 心象签主显示区域 - 挂件式心象签（完全照搬首页实现） -->
     <view class="charm-main-area" wx:if="{{hasStructuredData && structuredData}}">
-      <hanging-charm 
+      <hanging-charm
+        id="main-hanging-charm"
         oracle-data="{{postcard}}"
         charm-type="{{structuredData.ai_selected_charm_id || selectedCharmType || 'lianhua-yuanpai'}}"
         background-image="{{structuredData.visual_background_image || structuredData.image_url || postcard.image_url || postcard.image}}"
         show-animation="{{true}}"
         size-mode="large"
         bind:flip="onCharmFlip"
-        bind:share="onCharmShare"
       ></hanging-charm>
     </view>
 

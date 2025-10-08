@@ -402,68 +402,76 @@ Page({
   },
 
   /**
-   * 分享心象签
+   * 好友分享（与首页逻辑一致）
    */
   onShareAppMessage() {
-    const { postcard, structuredData, hasStructuredData } = this.data;
-    
-    if (!postcard) {
+    const charm = this.selectComponent('#main-hanging-charm');
+
+    if (!charm) {
+      const { postcard } = this.data;
       return {
-        title: 'AI心象签 - 每一天，都值得被温柔记录',
-        path: '/pages/index/index'
+        title: 'AI心象签',
+        path: `/pages/postcard/postcard?id=${postcard?.id || ''}`,
+        imageUrl: postcard?.background_image_url || ''
       };
     }
-    
-    // 构建个性化分享标题
-    let shareTitle = '我用AI制作了一张心象签，快来看看！';
-    if (hasStructuredData && structuredData) {
-      const cardTitle = structuredData.title || structuredData.card_title;
-      const mood = structuredData.mood?.primary;
-      if (cardTitle) {
-        shareTitle = `${cardTitle} | 我的AI心象签`;
-      } else if (mood) {
-        shareTitle = `今天的心情是${mood} | 我的AI心象签`;
+
+    const shareImage = charm.getShareImage();
+    const { postcard, structuredData } = this.data;
+
+    let shareTitle = '我的AI心象签';
+    if (structuredData) {
+      const charmName = structuredData.charm_name ||
+                       structuredData.oracle_hexagram_name ||
+                       structuredData.keyword || '';
+      if (charmName) {
+        shareTitle = `${charmName} | 我的AI心象签`;
       }
     }
-    
+
     return {
       title: shareTitle,
-      path: `/pages/postcard/postcard?id=${postcard.id || this.postcardId}`,
-      imageUrl: postcard.card_image_url || postcard.image_url
+      path: `/pages/postcard/postcard?id=${postcard?.id || ''}`,
+      imageUrl: shareImage
     };
   },
 
   /**
-   * 分享到朋友圈
+   * 朋友圈分享（与首页逻辑一致）
    */
-  onShareTimeline() {
-    const { postcard, structuredData, hasStructuredData } = this.data;
-    
-    if (!postcard) {
+  async onShareTimeline() {
+    const charm = this.selectComponent('#main-hanging-charm');
+
+    if (!charm) {
+      const { postcard } = this.data;
       return {
-        title: 'AI心象签 - 每一天，都值得被温柔记录'
+        title: 'AI心象签',
+        imageUrl: postcard?.background_image_url || ''
       };
     }
-    
-    // 构建朋友圈分享标题 
-    let timelineTitle = 'AI心象签 - 每一天，都值得被温柔记录';
-    if (hasStructuredData && structuredData) {
-      const cardTitle = structuredData.title || structuredData.card_title;
-      const location = structuredData.context?.location;
-      const weather = structuredData.context?.weather;
-      
-      if (cardTitle && location) {
-        timelineTitle = `${cardTitle} | ${location}的AI心象签`;
-      } else if (cardTitle) {
-        timelineTitle = `${cardTitle} | AI心象签`;
-      } else if (location && weather) {
-        timelineTitle = `${location}，${weather} | AI心象签记录`;
+
+    let timelineImage = '';
+    try {
+      timelineImage = await charm.generateTimelineImage();
+    } catch (error) {
+      console.error('[朋友圈分享] 生成拼接图失败:', error);
+      timelineImage = charm.getShareImage();
+    }
+
+    const { structuredData } = this.data;
+    let timelineTitle = 'AI心象签';
+    if (structuredData) {
+      const charmName = structuredData.charm_name ||
+                       structuredData.oracle_hexagram_name ||
+                       structuredData.keyword || '';
+      if (charmName) {
+        timelineTitle = `${charmName} | AI心象签`;
       }
     }
-    
+
     return {
       title: timelineTitle,
-      imageUrl: postcard.card_image_url || postcard.image_url
+      imageUrl: timelineImage
     };
   },
 
@@ -841,24 +849,6 @@ Page({
     }
   },
 
-  /**
-   * 挂件分享事件处理（从首页完全照搬）
-   */
-  onCharmShare(e) {
-    const { oracleData, charmType } = e.detail;
-    envConfig.log('🔮 分享挂件:', { charmType, hasData: !!oracleData });
-    
-    // 触发小程序分享功能
-    wx.showShareMenu({
-      withShareTicket: true,
-      success: () => {
-        wx.showToast({
-          title: '分享成功',
-          icon: 'success'
-        });
-      }
-    });
-  },
 
   /**
    * 详情页卡片翻转事件（旧版兼容）

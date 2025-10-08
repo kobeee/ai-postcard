@@ -1016,15 +1016,6 @@ Component({
       });
     },
 
-    /**
-     * 分享挂件
-     */
-    onShareCharm() {
-      this.triggerEvent('share', {
-        oracleData: this.data.oracleData,
-        charmType: this.data.charmType
-      });
-    },
 
     /**
      * 监听oracle数据变化
@@ -1325,6 +1316,178 @@ Component({
      */
     stopPropagation() {
       // 阻止事件向上传播
+    },
+
+    /**
+     * 获取当前面的分享图（直接返回已缓存资源）
+     * @returns {string} 图片URL（本地临时路径或网络URL）
+     */
+    getShareImage() {
+      const face = this.data.isFlipped ? 'back' : 'front';
+
+      if (face === 'front') {
+        // 正面：直接返回签体图
+        const frontImage = this.data.charmImagePath || '';
+        if (!frontImage) {
+          console.warn('[分享] 正面签体图片路径为空，将使用默认分享图');
+        }
+        return frontImage;
+      } else {
+        // 背面：按优先级返回背景图
+        const backImage = this.data.backgroundImage ||
+                          this.data.oracleData?.visual_background_image ||
+                          this.data.oracleData?.background_image_url ||
+                          this.data.oracleData?.image_url ||
+                          this.data.oracleData?.card_image_url || '';
+        if (!backImage) {
+          console.warn('[分享] 背面背景图片路径为空，将使用默认分享图');
+        }
+        return backImage;
+      }
+    },
+
+    /**
+     * 生成朋友圈拼接图（唯一需要Canvas的地方）
+     * @returns {Promise<string>} 临时文件路径
+     */
+    async generateTimelineImage() {
+      try {
+        // 获取正面和背面图片URL
+        const frontImg = this.data.charmImagePath;
+        const backImg = this.data.backgroundImage ||
+                        this.data.oracleData?.visual_background_image ||
+                        this.data.oracleData?.background_image_url ||
+                        this.data.oracleData?.image_url ||
+                        this.data.oracleData?.card_image_url;
+
+        // 检查资源是否齐全
+        if (!frontImg && !backImg) {
+          console.warn('[朋友圈分享] 正反面图片均为空，使用空字符串降级');
+          return '';
+        }
+
+        if (!frontImg || !backImg) {
+          console.warn('[朋友圈分享] 缺少一面的图片，使用单张图降级');
+          return frontImg || backImg || '';
+        }
+
+        // 简单的左右拼接
+        console.log('[朋友圈分享] 开始生成拼接图');
+        const mergedImage = await this.mergeImages(frontImg, backImg);
+        console.log('[朋友圈分享] 拼接图生成成功:', mergedImage);
+        return mergedImage;
+
+      } catch (error) {
+        console.error('[朋友圈分享] 生成拼接图失败:', error);
+        // 降级：返回正面图或背面图
+        return this.data.charmImagePath ||
+               this.data.backgroundImage ||
+               this.data.oracleData?.visual_background_image || '';
+      }
+    },
+
+    /**
+     * 图片横向拼接（Canvas实现）
+     * @param {string} leftUrl - 左侧图片URL（正面）
+     * @param {string} rightUrl - 右侧图片URL（背面）
+     * @returns {Promise<string>} 临时文件路径
+     */
+    async mergeImages(leftUrl, rightUrl) {
+      return new Promise((resolve, reject) => {
+        // 使用组件作用域的 SelectorQuery
+        const query = wx.createSelectorQuery().in(this);
+
+        query.select('#share-merge-canvas')
+          .fields({ node: true, size: true })
+          .exec(async (res) => {
+            try {
+              // 检查Canvas节点是否存在
+              if (!res || !res[0] || !res[0].node) {
+                throw new Error('Canvas节点获取失败，请检查WXML中是否存在 id="share-merge-canvas" 的canvas元素');
+              }
+
+              const canvas = res[0].node;
+              const ctx = canvas.getContext('2d');
+              const dpr = wx.getSystemInfoSync().pixelRatio;
+
+              // 朋友圈推荐规格：1:1 或 16:9，这里使用 2:1 (1280x640)
+              // 注意：Canvas实际尺寸需乘以DPR以确保清晰度
+              canvas.width = 1280 * dpr;
+              canvas.height = 640 * dpr;
+              ctx.scale(dpr, dpr);
+
+              // 加载左图（正面）
+              const leftImage = canvas.createImage();
+              leftImage.src = leftUrl;
+              await new Promise((resolveImg, rejectImg) => {
+                leftImage.onload = resolveImg;
+                leftImage.onerror = () => rejectImg(new Error(`左图加载失败: ${leftUrl}`));
+                // 设置超时防止永久等待
+                setTimeout(() => rejectImg(new Error('左图加载超时')), 10000);
+              });
+
+              // 加载右图（背面）
+              const rightImage = canvas.createImage();
+              rightImage.src = rightUrl;
+              await new Promise((resolveImg, rejectImg) => {
+                rightImage.onload = resolveImg;
+                rightImage.onerror = () => rejectImg(new Error(`右图加载失败: ${rightUrl}`));
+                setTimeout(() => rejectImg(new Error('右图加载超时')), 10000);
+              });
+
+              // 绘制：左右各640px，等比缩放填充
+              // 使用drawImage的9参数版本确保图片居中裁剪
+              this._drawImageCover(ctx, leftImage, 0, 0, 640, 640);
+              this._drawImageCover(ctx, rightImage, 640, 0, 640, 640);
+
+              // 导出图片
+              wx.canvasToTempFilePath({
+                canvas: canvas,
+                destWidth: 1280,
+                destHeight: 640,
+                fileType: 'png',
+                quality: 1,
+                success: (res) => {
+                  console.log('[Canvas] 图片导出成功:', res.tempFilePath);
+                  resolve(res.tempFilePath);
+                },
+                fail: (err) => {
+                  console.error('[Canvas] 图片导出失败:', err);
+                  reject(new Error(`Canvas导出失败: ${err.errMsg}`));
+                }
+              }, this);  // 传入组件实例作为上下文
+
+            } catch (error) {
+              console.error('[Canvas] 拼接过程失败:', error);
+              reject(error);
+            }
+          });
+      });
+    },
+
+    /**
+     * 等比缩放并居中裁剪绘制图片（类似CSS的object-fit: cover）
+     * @private
+     */
+    _drawImageCover(ctx, image, dx, dy, dWidth, dHeight) {
+      const imgWidth = image.width;
+      const imgHeight = image.height;
+      const imgRatio = imgWidth / imgHeight;
+      const targetRatio = dWidth / dHeight;
+
+      let sx = 0, sy = 0, sWidth = imgWidth, sHeight = imgHeight;
+
+      if (imgRatio > targetRatio) {
+        // 图片更宽，裁剪左右
+        sWidth = imgHeight * targetRatio;
+        sx = (imgWidth - sWidth) / 2;
+      } else {
+        // 图片更高，裁剪上下
+        sHeight = imgWidth / targetRatio;
+        sy = (imgHeight - sHeight) / 2;
+      }
+
+      ctx.drawImage(image, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight);
     }
   }
 });

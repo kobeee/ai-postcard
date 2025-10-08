@@ -113,13 +113,7 @@
         
         <!-- 底部区域 - 简化版 -->
         <view class="scroll-footer-vertical">
-          
-          <!-- 分享按钮（保留） -->
-          <view class="share-button-vertical" catchtap="onShareCharm">
-            <text class="share-icon">🔮</text>
-            <text class="share-text">分享挂件</text>
-          </view>
-          
+
           <!-- 责任说明（底部显示） -->
           <view class="disclaimer-bottom">
             <text class="disclaimer-text-small">{{oracleData.oracle_culture_note || '灵感源自传统文化启迪，不作吉凶断言。'}}</text>
@@ -129,6 +123,13 @@
       </view>
       
     </view>
-    
+
   </view>
+
+  <!-- 隐藏Canvas用于朋友圈拼图 -->
+  <canvas
+    id="share-merge-canvas"
+    type="2d"
+    style="position: fixed; left: -9999px; top: 0; width: 640px; height: 640px;">
+  </canvas>
 </view>

@@ -2246,51 +2246,89 @@ Page({
   },
 
   /**
-   * 分享功能
+   * 好友分享：根据当前翻面状态分享
+   * 注意：此方法可以返回 Promise 以支持异步获取分享内容
    */
   onShareAppMessage() {
-    if (this.data.todayCard) {
-      const card = this.data.todayCard;
-      let shareTitle = '我创建了一张AI心象签';
-      
-      // 使用更丰富的分享标题
-      if (card.keyword && card.keyword !== '今日心境') {
-        shareTitle = `${card.keyword} | 我的AI心象签`;
-      } else if (card.quote && card.quote.length > 0) {
-        const shortQuote = card.quote.length > 20 ? card.quote.substring(0, 20) + '...' : card.quote;
-        shareTitle = `"${shortQuote}" | 我的AI心象签`;
-      }
-      
+    const charm = this.selectComponent('#main-hanging-charm');
+
+    // 降级处理：组件不存在时使用默认分享
+    if (!charm) {
+      console.warn('[分享] 挂件组件获取失败，使用默认分享配置');
       return {
-        title: shareTitle,
-        path: `/pages/postcard/postcard?id=${card.id}`,
-        imageUrl: card.image || ''
+        title: 'AI心象签 - 将心情映射为自然意象',
+        path: '/pages/index/index',
+        imageUrl: '' // 空字符串使用小程序默认图
       };
     }
-    
+
+    // 调用组件方法获取分享图
+    const shareImage = charm.getShareImage();
+    const card = this.data.todayCard;
+
+    // 构建分享标题
+    let shareTitle = '我创建了一张AI心象签';
+    if (card) {
+      const charmName = card.charm_name ||
+                       card.oracle_hexagram_name ||
+                       card.keyword || '';
+      if (charmName) {
+        shareTitle = `${charmName} | 我的AI心象签`;
+      }
+    }
+
+    console.log('[分享] 好友分享配置:', { title: shareTitle, imageUrl: shareImage });
+
     return {
-      title: 'AI心象签 - 将心情映射为自然意象',
-      path: '/pages/index/index'
+      title: shareTitle,
+      path: `/pages/postcard/postcard?id=${card?.id || ''}`,
+      imageUrl: shareImage  // 可以是本地路径或网络URL
     };
   },
 
   /**
-   * 分享到朋友圈
+   * 朋友圈分享：生成左右拼接图
+   * 注意：返回 Promise 以支持异步生成拼接图
    */
-  onShareTimeline() {
+  async onShareTimeline() {
+    const charm = this.selectComponent('#main-hanging-charm');
+
+    // 降级处理：组件不存在时使用默认分享
+    if (!charm) {
+      console.warn('[朋友圈分享] 挂件组件获取失败，使用默认分享配置');
+      return {
+        title: 'AI心象签',
+        imageUrl: ''
+      };
+    }
+
+    // 异步生成拼接图
+    let timelineImage = '';
+    try {
+      timelineImage = await charm.generateTimelineImage();
+    } catch (error) {
+      console.error('[朋友圈分享] 生成拼接图失败，降级使用当前面图片:', error);
+      // 降级：使用当前面的图片
+      timelineImage = charm.getShareImage();
+    }
+
+    // 构建分享标题
+    const card = this.data.todayCard;
     let timelineTitle = 'AI心象签 - 将心情映射为自然意象';
-    
-    // 简化朋友圈标题，仅基于卡片内容
-    if (this.data.todayCard) {
-      const card = this.data.todayCard;
-      if (card.keyword) {
-        timelineTitle = `${card.keyword} | AI心象签`;
+    if (card) {
+      const charmName = card.charm_name ||
+                       card.oracle_hexagram_name ||
+                       card.keyword || '';
+      if (charmName) {
+        timelineTitle = `${charmName} | AI心象签`;
       }
     }
-    
+
+    console.log('[朋友圈分享] 分享配置:', { title: timelineTitle, imageUrl: timelineImage });
+
     return {
       title: timelineTitle,
-      imageUrl: this.data.todayCard?.image || ''
+      imageUrl: timelineImage
     };
   },
 
@@ -3243,24 +3281,6 @@ ${trendingTopics ? `• 当地热点：${trendingTopics}` : ''}
     }
   },
 
-  /**
-   * 挂件分享事件处理
-   */
-  onCharmShare(e) {
-    const { oracleData, charmType } = e.detail;
-    envConfig.log('🔮 分享挂件:', { charmType, hasData: !!oracleData });
-    
-    // 触发小程序分享功能
-    wx.showShareMenu({
-      withShareTicket: true,
-      success: () => {
-        wx.showToast({
-          title: '分享成功',
-          icon: 'success'
-        });
-      }
-    });
-  },
 
 
   /**
