@@ -409,9 +409,12 @@ Page({
 
     if (!charm) {
       const { postcard } = this.data;
+      const defaultPath = postcard?.id
+        ? `/pages/index/index?source=share&postcardId=${postcard.id}`
+        : '/pages/index/index?source=share';
       return {
         title: 'AI心象签',
-        path: `/pages/postcard/postcard?id=${postcard?.id || ''}`,
+        path: defaultPath,
         imageUrl: postcard?.background_image_url || ''
       };
     }
@@ -429,9 +432,13 @@ Page({
       }
     }
 
+    const sharePath = postcard?.id
+      ? `/pages/index/index?source=share&postcardId=${postcard.id}`
+      : '/pages/index/index?source=share';
+
     return {
       title: shareTitle,
-      path: `/pages/postcard/postcard?id=${postcard?.id || ''}`,
+      path: sharePath,
       imageUrl: shareImage
     };
   },

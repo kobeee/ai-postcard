@@ -330,7 +330,9 @@ App({
     if (query) {
       this.globalData.shareParams = query;
       
-      if (query.postcardId) {
+      if (query.source === 'share') {
+        this.globalData.sharedPostcardId = null;
+      } else if (query.postcardId) {
         this.globalData.sharedPostcardId = query.postcardId;
         this.recordEvent('share_enter', { 
           type: 'postcard',

@@ -161,7 +161,11 @@ App({
   handleShareParams(options) {
     try {
       const query = options.query || {};
-      this.globalData.sharedPostcardId = query.postcardId || null;
+      if (query.source === 'share') {
+        this.globalData.sharedPostcardId = null;
+      } else {
+        this.globalData.sharedPostcardId = query.postcardId || null;
+      }
       this.globalData.inviteCode = query.invite || null;
     } catch (_) {}
   },

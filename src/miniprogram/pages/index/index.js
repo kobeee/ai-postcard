@@ -2279,9 +2279,13 @@ Page({
 
     console.log('[分享] 好友分享配置:', { title: shareTitle, imageUrl: shareImage });
 
+    const sharePath = card?.id
+      ? `/pages/index/index?source=share&postcardId=${card.id}`
+      : '/pages/index/index?source=share';
+
     return {
       title: shareTitle,
-      path: `/pages/postcard/postcard?id=${card?.id || ''}`,
+      path: sharePath,
       imageUrl: shareImage  // 可以是本地路径或网络URL
     };
   },
