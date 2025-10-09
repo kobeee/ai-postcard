@@ -405,21 +405,6 @@ Page({
    * 好友分享（与首页逻辑一致）
    */
   onShareAppMessage() {
-    const charm = this.selectComponent('#main-hanging-charm');
-
-    if (!charm) {
-      const { postcard } = this.data;
-      const defaultPath = postcard?.id
-        ? `/pages/index/index?source=share&postcardId=${postcard.id}`
-        : '/pages/index/index?source=share';
-      return {
-        title: 'AI心象签',
-        path: defaultPath,
-        imageUrl: postcard?.background_image_url || ''
-      };
-    }
-
-    const shareImage = charm.getShareImage();
     const { postcard, structuredData } = this.data;
 
     let shareTitle = '我的AI心象签';
@@ -436,11 +421,35 @@ Page({
       ? `/pages/index/index?source=share&postcardId=${postcard.id}`
       : '/pages/index/index?source=share';
 
-    return {
+    const finalizeShare = (imageUrl) => ({
       title: shareTitle,
       path: sharePath,
-      imageUrl: shareImage
-    };
+      imageUrl: imageUrl || ''
+    });
+
+    const charm = this.selectComponent('#main-hanging-charm');
+
+    if (!charm) {
+      return finalizeShare(postcard?.background_image_url || '');
+    }
+
+    const imageResult = typeof charm.getShareImageAsync === 'function'
+      ? charm.getShareImageAsync()
+      : charm.getShareImage();
+
+    if (imageResult && typeof imageResult.then === 'function') {
+      return imageResult
+        .then((imageUrl) => finalizeShare(imageUrl))
+        .catch((error) => {
+          console.warn('[分享] 详情页异步获取分享图失败，使用降级方案:', error);
+          const fallbackImage = typeof charm.getShareImage === 'function'
+            ? charm.getShareImage()
+            : postcard?.background_image_url || '';
+          return finalizeShare(fallbackImage || '');
+        });
+    }
+
+    return finalizeShare(imageResult || postcard?.background_image_url || '');
   },
 
   /**

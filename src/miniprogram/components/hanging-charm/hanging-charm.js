@@ -30,7 +30,8 @@ Component({
     // 背景图片URL
     backgroundImage: {
       type: String,
-      value: ''
+      value: '',
+      observer: 'onBackgroundImagePropChange'
     },
     // 是否显示动画
     showAnimation: {
@@ -60,6 +61,10 @@ Component({
     charmImagePath: '',
     // 挂件图片原始URL（HTTPS网络路径，用于分享）
     charmImageUrl: '',
+    // 解签笺背景图的本地缓存路径
+    backgroundImageResolved: '',
+    // 解签笺背景图的原始URL（用于记录与降级）
+    backgroundImageOriginal: '',
     // 背景光圈样式
     glowStyle: '',
     // 标题样式
@@ -842,8 +847,11 @@ Component({
      * 设置背景光圈样式
      */
     setupGlowStyle() {
-      const { charmConfig, backgroundImage } = this.data;
-      if (!charmConfig || !backgroundImage) return;
+      const { charmConfig, backgroundImageResolved, backgroundImageOriginal } = this.data;
+      if (!charmConfig) return;
+      
+      const backgroundImage = backgroundImageOriginal || backgroundImageResolved;
+      if (!backgroundImage) return;
       
       const glow = charmConfig.glow;
       const [radiusX, radiusY] = glow.radius;
@@ -1035,6 +1043,23 @@ Component({
     },
 
     /**
+     * 监听背景图属性变化
+     */
+    onBackgroundImagePropChange(newUrl) {
+      if (newUrl) {
+        this.ensureBackgroundImageCached(newUrl);
+      } else {
+        this._backgroundCacheTask = null;
+        this._backgroundCacheUrl = '';
+        this.setData({
+          backgroundImageOriginal: '',
+          backgroundImageResolved: ''
+        });
+        this.setupGlowStyle();
+      }
+    },
+
+    /**
      * 监听挂件类型变化
      */
     onCharmTypeChange(newType, oldType) {
@@ -1042,6 +1067,77 @@ Component({
         // 重新加载挂件配置
         this.loadCharmConfig();
       }
+    },
+
+    /**
+     * 确保背景图已经缓存并返回最佳可用路径
+     * @param {string} imageUrl
+     * @returns {Promise<string>}
+     */
+    ensureBackgroundImageCached(imageUrl) {
+      if (!imageUrl || typeof imageUrl !== 'string') {
+        this._backgroundCacheTask = null;
+        this._backgroundCacheUrl = '';
+        this.setData({
+          backgroundImageOriginal: '',
+          backgroundImageResolved: ''
+        });
+        this.setupGlowStyle();
+        return Promise.resolve('');
+      }
+
+      if (imageUrl === this.data.backgroundImageOriginal &&
+          this.data.backgroundImageResolved &&
+          this.data.backgroundImageResolved !== imageUrl) {
+        this.setupGlowStyle();
+        return Promise.resolve(this.data.backgroundImageResolved);
+      }
+
+      if (this._backgroundCacheTask && this._backgroundCacheUrl === imageUrl) {
+        return this._backgroundCacheTask;
+      }
+
+      this._backgroundCacheUrl = imageUrl;
+
+      // 先使用远程地址作为降级方案
+      this.setData({
+        backgroundImageOriginal: imageUrl,
+        backgroundImageResolved: imageUrl
+      });
+      this.setupGlowStyle();
+
+      const cachePromise = resourceCache.getCachedResourceUrl(imageUrl)
+        .then((localPath) => {
+          const resolvedPath = localPath || imageUrl;
+          if (this._backgroundCacheUrl === imageUrl &&
+              this.data.backgroundImageResolved !== resolvedPath) {
+            this.setData({
+              backgroundImageResolved: resolvedPath
+            });
+            this.setupGlowStyle();
+          }
+          return resolvedPath;
+        })
+        .catch((error) => {
+          console.warn('背景图片缓存失败, 使用原图:', error);
+          if (this._backgroundCacheUrl === imageUrl &&
+              this.data.backgroundImageResolved !== imageUrl) {
+            this.setData({
+              backgroundImageResolved: imageUrl
+            });
+            this.setupGlowStyle();
+          }
+          return imageUrl;
+        })
+        .finally(() => {
+          if (this._backgroundCacheUrl === imageUrl) {
+            this._backgroundCacheTask = null;
+            this._backgroundCacheUrl = '';
+          }
+        });
+
+      this._backgroundCacheTask = cachePromise;
+      return cachePromise;
     },
 
     /**
@@ -1086,11 +1182,16 @@ Component({
       const backgroundImg = oracleData.visual_background_image || 
                            oracleData.background_image_url ||
                            oracleData.image_url ||
-                           this.data.backgroundImage;
+                           this.data.backgroundImageOriginal ||
+                           this.data.backgroundImageResolved ||
+                           this.properties.backgroundImage;
       
-      if (backgroundImg && backgroundImg !== this.data.backgroundImage) {
+      if (backgroundImg) {
+        this.ensureBackgroundImageCached(backgroundImg);
+      } else if (this.data.backgroundImageResolved) {
         this.setData({
-          backgroundImage: backgroundImg
+          backgroundImageResolved: '',
+          backgroundImageOriginal: ''
         });
         this.setupGlowStyle();
       }
@@ -1332,23 +1433,74 @@ Component({
       const face = this.data.isFlipped ? 'back' : 'front';
 
       if (face === 'front') {
-        // 正面：返回签体的HTTPS URL（而非本地缓存路径）
-        const frontImage = this.data.charmImageUrl || '';
+        // 正面：优先返回缓存的本地路径，降级到原始HTTPS URL
+        const frontImage = this.data.charmImagePath ||
+                           this.data.charmImageUrl || '';
         if (!frontImage) {
           console.warn('[分享] 正面签体图片URL为空，将使用默认分享图');
         }
         return frontImage;
       } else {
-        // 背面：按优先级返回背景图HTTPS URL
-        const backImage = this.data.oracleData?.visual_background_image ||
+        // 背面：按优先级返回背景图缓存路径，降级到HTTPS URL
+        const backImage = this.data.backgroundImageResolved ||
+                          this.data.backgroundImageOriginal ||
+                          this.data.oracleData?.visual_background_image ||
                           this.data.oracleData?.background_image_url ||
                           this.data.oracleData?.image_url ||
                           this.data.oracleData?.card_image_url ||
-                          this.data.backgroundImage || '';
+                          this.properties.backgroundImage || '';
         if (!backImage) {
           console.warn('[分享] 背面背景图片URL为空，将使用默认分享图');
         }
         return backImage;
+      }
+    },
+
+    /**
+     * 获取分享图（异步版，确保返回缓存路径）
+     * @returns {Promise<string>}
+     */
+    async getShareImageAsync() {
+      const face = this.data.isFlipped ? 'back' : 'front';
+
+      if (face === 'front') {
+        if (this.data.charmImagePath) {
+          return this.data.charmImagePath;
+        }
+
+        if (this.data.charmImageUrl) {
+          try {
+            const cachedPath = await resourceCache.getCachedResourceUrl(this.data.charmImageUrl);
+            if (cachedPath && cachedPath !== this.data.charmImagePath) {
+              this.setData({ charmImagePath: cachedPath });
+              return cachedPath;
+            }
+          } catch (error) {
+            console.warn('[分享] 签体图片缓存失败，使用原始URL:', error);
+          }
+          return this.data.charmImageUrl;
+        }
+
+        return '';
+      } else {
+        if (this.data.backgroundImageResolved) {
+          return this.data.backgroundImageResolved;
+        }
+
+        const backgroundSource = this.data.backgroundImageOriginal ||
+                                 this.data.oracleData?.visual_background_image ||
+                                 this.data.oracleData?.background_image_url ||
+                                 this.data.oracleData?.image_url ||
+                                 this.data.oracleData?.card_image_url ||
+                                 this.properties.backgroundImage || '';
+
+        if (!backgroundSource) {
+          console.warn('[分享] 背面背景图片URL为空，将使用默认分享图');
+          return '';
+        }
+
+        const cachedPath = await this.ensureBackgroundImageCached(backgroundSource);
+        return cachedPath || backgroundSource;
       }
     },
 
@@ -1360,7 +1512,9 @@ Component({
       try {
         // 🔧 使用本地缓存路径进行Canvas拼接（速度快）
         const frontImgLocal = this.data.charmImagePath;
-        const backImgLocal = this.data.backgroundImage ||
+        const backImgLocal = this.data.backgroundImageResolved ||
+                            this.data.backgroundImageOriginal ||
+                            this.properties.backgroundImage ||
                             this.data.oracleData?.visual_background_image ||
                             this.data.oracleData?.background_image_url ||
                             this.data.oracleData?.image_url ||

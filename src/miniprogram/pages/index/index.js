@@ -2229,11 +2229,11 @@ Page({
    */
   handleShareOptions(options) {
     const app = getApp();
-    if (app.globalData.sharedPostcardId) {
-      // 处理分享进入的情况
-      wx.showModal({
-        title: '分享卡片',
-        content: '您通过分享链接进入，是否查看该卡片？',
+   if (app.globalData.sharedPostcardId) {
+     // 处理分享进入的情况
+     wx.showModal({
+       title: '分享卡片',
+       content: '您通过分享链接进入，是否查看该卡片？',
         success: (res) => {
           if (res.confirm) {
             wx.navigateTo({
@@ -2248,22 +2248,8 @@ Page({
   /**
    * 好友分享：根据当前翻面状态分享
    * 注意：此方法可以返回 Promise 以支持异步获取分享内容
-   */
+  */
   onShareAppMessage() {
-    const charm = this.selectComponent('#main-hanging-charm');
-
-    // 降级处理：组件不存在时使用默认分享
-    if (!charm) {
-      console.warn('[分享] 挂件组件获取失败，使用默认分享配置');
-      return {
-        title: 'AI心象签 - 将心情映射为自然意象',
-        path: '/pages/index/index',
-        imageUrl: '' // 空字符串使用小程序默认图
-      };
-    }
-
-    // 调用组件方法获取分享图
-    const shareImage = charm.getShareImage();
     const card = this.data.todayCard;
 
     // 构建分享标题
@@ -2277,17 +2263,46 @@ Page({
       }
     }
 
-    console.log('[分享] 好友分享配置:', { title: shareTitle, imageUrl: shareImage });
-
     const sharePath = card?.id
       ? `/pages/index/index?source=share&postcardId=${card.id}`
       : '/pages/index/index?source=share';
 
-    return {
-      title: shareTitle,
-      path: sharePath,
-      imageUrl: shareImage  // 可以是本地路径或网络URL
+    const finalizeShare = (imageUrl) => {
+      const payload = {
+        title: shareTitle,
+        path: sharePath,
+        imageUrl: imageUrl || ''
+      };
+      console.log('[分享] 好友分享配置:', payload);
+      return payload;
     };
+
+    const charm = this.selectComponent('#main-hanging-charm');
+
+    // 降级处理：组件不存在时使用默认分享
+    if (!charm) {
+      console.warn('[分享] 挂件组件获取失败，使用默认分享配置');
+      return finalizeShare('');
+    }
+
+    const imageResult = typeof charm.getShareImageAsync === 'function'
+      ? charm.getShareImageAsync()
+      : charm.getShareImage();
+
+    // 支持异步生成分享图，确保复用缓存
+    if (imageResult && typeof imageResult.then === 'function') {
+      return imageResult
+        .then((imageUrl) => finalizeShare(imageUrl))
+        .catch((error) => {
+          console.warn('[分享] 异步获取分享图失败，使用降级方案:', error);
+          const fallbackImage = typeof charm.getShareImage === 'function'
+            ? charm.getShareImage()
+            : '';
+          return finalizeShare(fallbackImage || '');
+        });
+    }
+
+    return finalizeShare(imageResult);
   },
 
   /**

@@ -73,8 +73,8 @@
         <!-- 背景图片层 -->
         <view 
           class="scroll-background-image" 
-          wx:if="{{backgroundImage || oracleData.visual_background_image || oracleData.image_url}}"
-          style="background-image: url({{backgroundImage || oracleData.visual_background_image || oracleData.image_url}});"
+          wx:if="{{backgroundImageOriginal || backgroundImage || backgroundImageResolved || oracleData.visual_background_image || oracleData.image_url}}"
+          style="background-image: url({{backgroundImageOriginal || backgroundImage || backgroundImageResolved || oracleData.visual_background_image || oracleData.image_url}});"
         ></view>
         
         <!-- 简化背面内容 - 只保留空白区域作为占位 -->
