@@ -817,6 +817,21 @@ Page({
    */
   async handleQuickLogin() {
     try {
+      // 🔥 检测是否为朋友圈单页模式（场景值1154）
+      const launchOptions = wx.getLaunchOptionsSync();
+      const scene = launchOptions.scene;
+
+      if (scene === 1154) {
+        // 朋友圈单页模式下，wx.login 不可用，友好提示用户
+        wx.showModal({
+          title: '提示',
+          content: '请点击右下角「前往小程序」以体验完整功能',
+          showCancel: false,
+          confirmText: '我知道了'
+        });
+        return;
+      }
+
       wx.showLoading({ title: '登录中...', mask: true });
 
       // 1. 获取微信登录code
